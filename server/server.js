@@ -24,6 +24,9 @@ const io = new Server(httpServer, {
 const activePlayers = new Map();
 const playerSockets = new Map(); // socketId -> playerId mapping
 
+// Traffic synchronization
+let trafficMaster = null; // socketId of the traffic master client
+
 // Health check endpoint for Cloud Run
 app.get('/', (req, res) => {
   res.json({ 
@@ -134,12 +137,22 @@ io.on('connection', (socket) => {
       playerId,
       sessionId,
       username,
-      lastUpdate: Date.now()
+      lastUpdate: Date.now(),
+      previousState: null
     });
     playerSockets.set(socket.id, playerId);
 
     // Join session room
     socket.join(`session-${sessionId}`);
+
+    // Assign traffic master if none exists
+    if (!trafficMaster) {
+      trafficMaster = socket.id;
+      socket.emit('traffic-master-assigned', true);
+      console.log(`Assigned traffic master to ${username} (${socket.id})`);
+    } else {
+      socket.emit('traffic-master-assigned', false);
+    }
 
     // Notify other players
     socket.to(`session-${sessionId}`).emit('player-joined', {
@@ -147,12 +160,12 @@ io.on('connection', (socket) => {
       username
     });
 
-    // Send current active players from in-memory storage
-    const sessionPlayers = Array.from(playerStates.entries())
-      .filter(([id, state]) => state.session_id === sessionId && state.is_active)
-      .map(([id, state]) => ({
+    // Send current active players from activePlayers (truly online players only)
+    const sessionPlayers = Array.from(activePlayers.entries())
+      .filter(([id, player]) => player.sessionId === sessionId && id !== playerId)
+      .map(([id, player]) => ({
         playerId: id,
-        username: players.get(id)?.username || 'Unknown'
+        username: player.username
       }));
     
     console.log(`Sending active players to ${username}:`, sessionPlayers);
@@ -172,6 +185,43 @@ io.on('connection', (socket) => {
     // Update in-memory state
     player.lastUpdate = Date.now();
     player.state = data;
+
+    // Check for new crash event
+    const wasCrashed = player.previousState?.isCrashed || false;
+    const isCrashed = data.isCrashed || false;
+    
+    if (isCrashed && !wasCrashed) {
+      // Player just crashed - broadcast crash event with details
+      console.log(`🚨 CRASH EVENT: Player ${player.username} crashed! Broadcasting to session ${player.sessionId}`);
+      socket.to(`session-${player.sessionId}`).emit('player-crash', {
+        playerId,
+        username: player.username,
+        position: data.position,
+        velocity: data.velocity || { x: 0, y: 0, z: 0 },
+        timestamp: Date.now()
+      });
+      console.log(`Player ${player.username} crashed at position (${data.position?.x?.toFixed(1)}, ${data.position?.z?.toFixed(1)})`);
+    }
+
+    // Check for death event  
+    const wasDead = player.previousState?.isDead || false;
+    const isDead = data.isDead || false;
+    
+    if (isDead && !wasDead) {
+      // Player just died - broadcast death event
+      console.log(`💀 DEATH EVENT: Player ${player.username} died! Broadcasting to session ${player.sessionId}`);
+      socket.to(`session-${player.sessionId}`).emit('player-death', {
+        playerId,
+        username: player.username,
+        position: data.position,
+        velocity: data.velocity || { x: 0, y: 0, z: 0 },
+        timestamp: Date.now()
+      });
+      console.log(`Player ${player.username} died at position (${data.position?.x?.toFixed(1)}, ${data.position?.z?.toFixed(1)})`);
+    }
+
+    // Store previous state for event detection
+    player.previousState = { ...data };
 
     // Log occasional updates to verify they're coming through
     if (Math.random() < 0.01) { // 1% of updates
@@ -223,6 +273,37 @@ io.on('connection', (socket) => {
     // Chat messages are only stored in memory for this session
   });
   
+  // Handle traffic synchronization events
+  socket.on('traffic-vehicle-spawn', (vehicleData) => {
+    const playerId = playerSockets.get(socket.id);
+    const player = activePlayers.get(playerId);
+    
+    if (player && socket.id === trafficMaster) {
+      // Broadcast to all other players in session
+      socket.to(`session-${player.sessionId}`).emit('traffic-vehicle-spawn', vehicleData);
+    }
+  });
+
+  socket.on('traffic-update', (trafficData) => {
+    const playerId = playerSockets.get(socket.id);
+    const player = activePlayers.get(playerId);
+    
+    if (player && socket.id === trafficMaster) {
+      // Broadcast to all other players in session
+      socket.to(`session-${player.sessionId}`).emit('traffic-update', trafficData);
+    }
+  });
+
+  socket.on('traffic-vehicle-remove', (vehicleId) => {
+    const playerId = playerSockets.get(socket.id);
+    const player = activePlayers.get(playerId);
+    
+    if (player && socket.id === trafficMaster) {
+      // Broadcast to all other players in session
+      socket.to(`session-${player.sessionId}`).emit('traffic-vehicle-remove', vehicleId);
+    }
+  });
+
   // Handle ping for latency testing
   socket.on('ping', (timestamp) => {
     socket.emit('pong', timestamp);
@@ -249,9 +330,30 @@ io.on('connection', (socket) => {
         }
       }
 
-      // Clean up
+      // Clean up all references to this player
       activePlayers.delete(playerId);
       playerSockets.delete(socket.id);
+      players.delete(playerId);
+      playerStates.delete(playerId);
+
+      // Reassign traffic master if this was the master
+      if (socket.id === trafficMaster) {
+        trafficMaster = null;
+        
+        // Find another player to be master
+        const remainingPlayers = Array.from(activePlayers.values());
+        if (remainingPlayers.length > 0) {
+          const newMaster = remainingPlayers[0];
+          trafficMaster = newMaster.socketId;
+          io.to(newMaster.socketId).emit('traffic-master-assigned', true);
+          console.log(`Reassigned traffic master to ${newMaster.username} (${newMaster.socketId})`);
+          
+          // Notify other players they are not master
+          remainingPlayers.slice(1).forEach(player => {
+            io.to(player.socketId).emit('traffic-master-assigned', false);
+          });
+        }
+      }
     }
   });
 });
@@ -265,6 +367,8 @@ setInterval(() => {
     if (now - player.lastUpdate > timeout) {
       console.log(`Removing inactive player: ${playerId}`);
       activePlayers.delete(playerId);
+      players.delete(playerId);
+      playerStates.delete(playerId);
     }
   }
 }, 10000); // Check every 10 seconds

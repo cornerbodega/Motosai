@@ -7,7 +7,9 @@ import { Highway101 } from './Highway101.js';
 import { TrafficSystem } from './TrafficSystem.js';
 import { BackgroundSystem } from './backgrounds/BackgroundSystem.js';
 import { DeathAnimation } from './DeathAnimation.js';
+import { BloodTrackSystem } from './BloodTrackSystem.js';
 import { MultiplayerManager } from '../multiplayer/MultiplayerManager.js';
+import { MotorcycleFactory } from './MotorcycleFactory.js';
 
 export class MotosaiGame {
   constructor(container, config = {}) {
@@ -56,14 +58,18 @@ export class MotosaiGame {
     this.initPhysics();
     this.initHighway();
     this.initBackgrounds();
-    this.initTraffic();
     this.initControls();
     this.initHUD();
     this.initDeathAnimation();
+    this.initBloodTrackSystem();
     
-    // Initialize multiplayer asynchronously
+    // Initialize multiplayer first, then traffic (for synchronization)
     if (this.isMultiplayerEnabled) {
-      this.initMultiplayer();
+      this.initMultiplayer().then(() => {
+        this.initTraffic();
+      });
+    } else {
+      this.initTraffic();
     }
     
     // Start game loop - delay slightly to ensure all materials are initialized
@@ -255,149 +261,17 @@ export class MotosaiGame {
   }
   
   createMotorcycle() {
-    this.motorcycle = new THREE.Group();
-    
-    // Body (simplified sportbike shape - shortened to prevent rear clipping)
-    const bodyGeo = new THREE.BoxGeometry(0.3, 0.4, 1.4, 2, 2, 4); // Added subdivisions for smoother shading
-    const bodyMat = new THREE.MeshStandardMaterial({ 
-      color: 0xff0000,
-      metalness: 0.6,
-      roughness: 0.3,
-      envMapIntensity: 1.2
+    // Use MotorcycleFactory to create the motorcycle with rider
+    this.motorcycle = MotorcycleFactory.createMotorcycle({
+      bikeColor: 0xff0000,
+      riderColor: this.config.riderColor,
+      includeRider: true
     });
-    const body = new THREE.Mesh(bodyGeo, bodyMat);
-    body.position.y = 0.4;
-    body.position.z = 0.05; // Shifted slightly forward
-    body.castShadow = true;
-    this.motorcycle.add(body);
     
-    // Tank
-    const tankGeo = new THREE.BoxGeometry(0.35, 0.3, 0.6);
-    const tank = new THREE.Mesh(tankGeo, bodyMat);
-    tank.position.set(0, 0.55, 0.2);
-    this.motorcycle.add(tank);
-    
-    // Seat (adjusted position to not extend past rear wheel) - soft leather material
-    const seatGeo = new THREE.BoxGeometry(0.25, 0.1, 0.4, 2, 1, 2); // Added subdivisions
-    const seatMat = new THREE.MeshStandardMaterial({ 
-      color: 0x1a1a1a,
-      roughness: 0.8,
-      metalness: 0
-    });
-    const seat = new THREE.Mesh(seatGeo, seatMat);
-    seat.position.set(0, 0.65, -0.25); // Moved forward from -0.3 to -0.25
-    this.motorcycle.add(seat);
-    
-    // Front wheel - rubber tire material
-    const wheelGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.15, 16);
-    const wheelMat = new THREE.MeshStandardMaterial({ 
-      color: 0x2a2a2a,
-      roughness: 0.9,
-      metalness: 0
-    });
-    this.frontWheel = new THREE.Mesh(wheelGeo, wheelMat);
-    this.frontWheel.rotation.z = Math.PI / 2;
-    this.frontWheel.position.set(0, 0.3, 0.7);
-    this.frontWheel.castShadow = true;
-    this.frontWheel.receiveShadow = true;
-    this.motorcycle.add(this.frontWheel);
-    
-    // Rear wheel
-    this.rearWheel = new THREE.Mesh(wheelGeo, wheelMat);
-    this.rearWheel.rotation.z = Math.PI / 2;
-    this.rearWheel.position.set(0, 0.32, -0.7);
-    this.rearWheel.castShadow = true;
-    this.rearWheel.receiveShadow = true;
-    this.motorcycle.add(this.rearWheel);
-    
-    // Fork - brushed metal
-    const forkGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.6, 8);
-    const forkMat = new THREE.MeshStandardMaterial({ 
-      color: 0x888888,
-      metalness: 0.9,
-      roughness: 0.4
-    });
-    const fork1 = new THREE.Mesh(forkGeo, forkMat);
-    fork1.position.set(0.08, 0.3, 0.7);
-    fork1.rotation.z = 0.1;
-    this.motorcycle.add(fork1);
-    
-    const fork2 = new THREE.Mesh(forkGeo, forkMat);
-    fork2.position.set(-0.08, 0.3, 0.7);
-    fork2.rotation.z = -0.1;
-    this.motorcycle.add(fork2);
-    
-    // Handlebars - rubber grips
-    const barGeo = new THREE.BoxGeometry(0.5, 0.02, 0.02);
-    const barMat = new THREE.MeshStandardMaterial({
-      color: 0x1a1a1a,
-      roughness: 0.9,
-      metalness: 0
-    });
-    const bars = new THREE.Mesh(barGeo, barMat);
-    bars.position.set(0, 0.7, 0.6);
-    this.motorcycle.add(bars);
-    
-    // Rider (improved but keeping two-part structure)
-    const riderGroup = new THREE.Group();
-    
-    // Helmet (even bigger) - glossy finish
-    const helmetGeo = new THREE.SphereGeometry(0.22, 12, 8); // Increased to 0.22 for even bigger helmet
-    const helmetMat = new THREE.MeshStandardMaterial({ 
-      color: this.config.riderColor, // Same color as gear
-      metalness: 0.4,
-      roughness: 0.15 // More glossy than gear
-    });
-    const helmet = new THREE.Mesh(helmetGeo, helmetMat);
-    helmet.position.set(0, 0.9, -0.1); // Lower position for smaller body
-    helmet.scale.set(1, 0.9, 1.1); // Slightly elongated for helmet shape
-    riderGroup.add(helmet);
-    
-    // Visor - glass-like material (scaled up to match bigger helmet)
-    const visorGeo = new THREE.BoxGeometry(0.18, 0.09, 0.11); // Scaled up for bigger helmet
-    const visorMat = new THREE.MeshStandardMaterial({ 
-      color: 0x000033,
-      metalness: 0.1,
-      roughness: 0,
-      opacity: 0.7,
-      transparent: true
-    });
-    const visor = new THREE.Mesh(visorGeo, visorMat);
-    visor.position.set(0, 0.9, 0);
-    riderGroup.add(visor);
-    
-    // Body (much smaller) - using configured rider color
-    const riderBodyGeo = new THREE.BoxGeometry(0.24, 0.3, 0.25, 2, 2, 2); // Even smaller body
-    const riderBodyMat = new THREE.MeshStandardMaterial({ 
-      color: this.config.riderColor, // Use configured color
-      roughness: 0.7,
-      metalness: 0
-    });
-    const riderBody = new THREE.Mesh(riderBodyGeo, riderBodyMat);
-    riderBody.position.set(0, 0.7, -0.2); // Lower position
-    riderGroup.add(riderBody);
-    
-    // Shoulders (proportionally smaller)
-    const shoulderGeo = new THREE.BoxGeometry(0.3, 0.1, 0.2); // Smaller shoulders
-    const shoulders = new THREE.Mesh(shoulderGeo, riderBodyMat);
-    shoulders.position.set(0, 0.78, -0.18); // Adjusted position
-    riderGroup.add(shoulders);
-    
-    // Arms (simplified, angled forward to handlebars) - same material as body
-    const armGeo = new THREE.BoxGeometry(0.06, 0.25, 0.06); // Even smaller arms
-    
-    const leftArm = new THREE.Mesh(armGeo, riderBodyMat); // Use same material as body
-    leftArm.position.set(0.14, 0.65, 0.05); // Adjusted for even smaller body
-    leftArm.rotation.x = -0.6; // Angle forward
-    riderGroup.add(leftArm);
-    
-    const rightArm = new THREE.Mesh(armGeo, riderBodyMat); // Use same material as body
-    rightArm.position.set(-0.14, 0.65, 0.05); // Adjusted for even smaller body
-    rightArm.rotation.x = -0.6; // Angle forward
-    riderGroup.add(rightArm);
-    
-    this.rider = riderGroup;
-    this.motorcycle.add(this.rider);
+    // Get references to wheels and rider for animation
+    this.frontWheel = this.motorcycle.userData.frontWheel;
+    this.rearWheel = this.motorcycle.userData.rearWheel;
+    this.rider = this.motorcycle.userData.rider;
     
     this.scene.add(this.motorcycle);
   }
@@ -428,8 +302,11 @@ export class MotosaiGame {
   }
   
   initTraffic() {
-    this.traffic = new TrafficSystem(this.scene, this.highway, this.camera);
-    this.traffic.spawn(20); // Start with 20 vehicles
+    this.trafficSystem = new TrafficSystem(this.scene, this.highway, this.camera, this.bloodTrackSystem, this.multiplayer);
+    this.trafficSystem.spawn(20); // Start with 20 vehicles
+    
+    // For backward compatibility
+    this.traffic = this.trafficSystem;
   }
   
   initControls() {
@@ -519,6 +396,10 @@ export class MotosaiGame {
     this.deathAnimation = new DeathAnimation(this.scene);
   }
   
+  initBloodTrackSystem() {
+    this.bloodTrackSystem = new BloodTrackSystem(this.scene);
+  }
+  
   async initMultiplayer() {
     if (!this.isMultiplayerEnabled) return;
     
@@ -563,6 +444,70 @@ export class MotosaiGame {
       <div style="font-size: 14px; margin-bottom: 5px;">🏍️ Online Players (${players.length})</div>
       ${playerListHTML}
     `;
+  }
+
+  showGameMessage(message, type = 'info') {
+    // Create game message container if it doesn't exist
+    if (!this.gameMessageContainer) {
+      this.gameMessageContainer = document.createElement('div');
+      this.gameMessageContainer.style.position = 'absolute';
+      this.gameMessageContainer.style.top = '50%';
+      this.gameMessageContainer.style.left = '50%';
+      this.gameMessageContainer.style.transform = 'translate(-50%, -50%)';
+      this.gameMessageContainer.style.pointerEvents = 'none';
+      this.gameMessageContainer.style.zIndex = '1000';
+      this.container.appendChild(this.gameMessageContainer);
+    }
+
+    // Create message element
+    const messageElement = document.createElement('div');
+    messageElement.style.cssText = `
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 10px 20px;
+      margin: 5px 0;
+      border-radius: 5px;
+      font-family: 'Arial', sans-serif;
+      font-size: 16px;
+      font-weight: bold;
+      text-align: center;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+      opacity: 0;
+      transition: opacity 0.3s ease-in-out;
+    `;
+
+    // Set color based on message type
+    switch (type) {
+      case 'crash':
+        messageElement.style.borderLeft = '5px solid #ff6600';
+        messageElement.style.color = '#ffaa66';
+        break;
+      case 'death':
+        messageElement.style.borderLeft = '5px solid #ff0000';
+        messageElement.style.color = '#ff6666';
+        break;
+      default:
+        messageElement.style.borderLeft = '5px solid #00ff00';
+        messageElement.style.color = '#66ff66';
+    }
+
+    messageElement.textContent = message;
+    this.gameMessageContainer.appendChild(messageElement);
+
+    // Animate in
+    setTimeout(() => {
+      messageElement.style.opacity = '1';
+    }, 50);
+
+    // Animate out and remove after 3 seconds
+    setTimeout(() => {
+      messageElement.style.opacity = '0';
+      setTimeout(() => {
+        if (messageElement.parentNode) {
+          messageElement.parentNode.removeChild(messageElement);
+        }
+      }, 300);
+    }, 3000);
   }
   
   displayChatMessage(data) {
@@ -861,6 +806,11 @@ export class MotosaiGame {
     
     this.deathAnimation.trigger(deathPosition, velocity);
     
+    // Register crash site with blood track system
+    if (this.bloodTrackSystem) {
+      this.bloodTrackSystem.registerCrashSite(deathPosition);
+    }
+    
     // Big screen shake for death
     this.screenShake.intensity = 30;
     this.screenShake.duration = 0.5;
@@ -1011,12 +961,22 @@ export class MotosaiGame {
         // Update other players
         this.multiplayer.update();
         
-        // Update multiplayer HUD
-        this.updateMultiplayerHUD();
+        // Update multiplayer HUD less frequently to prevent DOM thrashing
+        if (!this.multiplayerHUDUpdateTimer) this.multiplayerHUDUpdateTimer = 0;
+        this.multiplayerHUDUpdateTimer += deltaTime;
+        if (this.multiplayerHUDUpdateTimer >= 1.0) { // Update only once per second
+          this.updateMultiplayerHUD();
+          this.multiplayerHUDUpdateTimer = 0;
+        }
       }
       
       // ALWAYS update traffic regardless of death state
       this.traffic.update(deltaTime, state.position);
+      
+      // Update blood track system
+      if (this.bloodTrackSystem) {
+        this.bloodTrackSystem.update(deltaTime);
+      }
       
       // Update highway 
       this.highway.update(state.position.z, state.actualSpeed || state.speed);
@@ -1218,6 +1178,9 @@ export class MotosaiGame {
     if (this.deathAnimation) {
       this.deathAnimation.dispose();
     }
+    if (this.bloodTrackSystem) {
+      this.bloodTrackSystem.dispose();
+    }
     
     // Dispose of renderer
     if (this.renderer) {
@@ -1249,6 +1212,12 @@ export class MotosaiGame {
     }
     if (this.speedometer) {
       this.speedometer.remove();
+    }
+    if (this.multiplayerHUD) {
+      this.multiplayerHUD.remove();
+    }
+    if (this.gameMessageContainer) {
+      this.gameMessageContainer.remove();
     }
     
     // Remove event listeners

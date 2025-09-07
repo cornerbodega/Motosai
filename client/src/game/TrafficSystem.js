@@ -1,13 +1,20 @@
 import * as THREE from 'three';
 
 export class TrafficSystem {
-  constructor(scene, highway, camera) {
+  constructor(scene, highway, camera, bloodTrackSystem = null, multiplayerManager = null) {
     this.scene = scene;
     this.highway = highway;
     this.camera = camera;
+    this.bloodTrackSystem = bloodTrackSystem;
+    this.multiplayerManager = multiplayerManager;
     this.vehicles = [];
     this.maxVehicles = 30; // Reduced back to prevent memory issues
     this.spawnDistance = 400; // Reduced to limit vehicles
+    
+    // Synchronized traffic state
+    this.isMaster = false; // Whether this client controls traffic
+    this.syncedVehicles = new Map(); // vehicleId -> vehicle data
+    this.lastTrafficUpdate = 0;
     
     // Frustum culling
     this.frustum = new THREE.Frustum();
@@ -68,58 +75,87 @@ export class TrafficSystem {
     }
   }
   
-  spawnVehicle(playerZ = 0) {
+  spawnVehicle(playerZ = 0, vehicleData = null) {
     if (this.vehicles.length >= this.maxVehicles) return;
     
-    // Choose vehicle type
-    const type = this.selectVehicleType();
+    let vehicle;
     
-    // Choose lane (0-2, all same direction)
-    const lane = Math.floor(Math.random() * 3);
-    const isOncoming = false; // No oncoming traffic
-    
-    // Create vehicle object
-    const vehicle = {
-      id: Date.now() + Math.random(),
-      type: type.type,
-      mesh: this.createVehicleMesh(type),
-      lane: lane,
-      targetLane: lane,
-      laneChangeProgress: 0,
-      laneChangeSpeed: 1.5, // seconds to complete lane change
-      position: new THREE.Vector3(),
-      velocity: new THREE.Vector3(),
-      speed: type.speed + (Math.random() - 0.5) * 10, // MPH with variation
-      baseSpeed: type.speed,
-      length: type.length,
-      width: type.width,
-      isOncoming: isOncoming,
-      isBraking: false,
-      frontVehicle: null,
-      behavior: this.generateBehavior()
-    };
-    
-    // Set initial position relative to player
-    const laneX = this.highway.getLanePosition(lane);
-    // Spawn vehicles ahead and behind
-    const spawnAhead = Math.random() > 0.3; // 70% spawn ahead
-    let spawnOffset;
-    if (spawnAhead) {
-      spawnOffset = this.spawnDistance - Math.random() * 100;
+    if (vehicleData) {
+      // Spawning from synchronized data
+      const type = this.vehicleTypes.find(t => t.type === vehicleData.type) || this.vehicleTypes[0];
+      vehicle = {
+        id: vehicleData.id,
+        type: vehicleData.type,
+        mesh: this.createVehicleMesh(type),
+        lane: vehicleData.lane,
+        targetLane: vehicleData.targetLane,
+        laneChangeProgress: vehicleData.laneChangeProgress || 0,
+        laneChangeSpeed: 1.5,
+        position: new THREE.Vector3(vehicleData.position.x, vehicleData.position.y, vehicleData.position.z),
+        velocity: new THREE.Vector3(vehicleData.velocity.x, vehicleData.velocity.y, vehicleData.velocity.z),
+        speed: vehicleData.speed,
+        baseSpeed: vehicleData.baseSpeed,
+        length: type.length,
+        width: type.width,
+        isOncoming: false,
+        isBraking: vehicleData.isBraking || false,
+        frontVehicle: null,
+        behavior: vehicleData.behavior || this.generateBehavior()
+      };
     } else {
-      // Some spawn behind for variety
-      spawnOffset = -this.spawnDistance/2 + Math.random() * 100;
+      // Generate new vehicle (master client only)
+      if (!this.isMaster && this.multiplayerManager) return;
+      
+      const type = this.selectVehicleType();
+      const lane = Math.floor(Math.random() * 3);
+      
+      vehicle = {
+        id: `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        type: type.type,
+        mesh: this.createVehicleMesh(type),
+        lane: lane,
+        targetLane: lane,
+        laneChangeProgress: 0,
+        laneChangeSpeed: 1.5,
+        position: new THREE.Vector3(),
+        velocity: new THREE.Vector3(),
+        speed: type.speed + (Math.random() - 0.5) * 10,
+        baseSpeed: type.speed,
+        length: type.length,
+        width: type.width,
+        isOncoming: false,
+        isBraking: false,
+        frontVehicle: null,
+        behavior: this.generateBehavior()
+      };
     }
-    const spawnZ = playerZ + spawnOffset;
     
-    vehicle.position.set(laneX, 0.5, spawnZ);
+    // Set initial position
+    if (!vehicleData) {
+      // New vehicle - calculate spawn position
+      const laneX = this.highway.getLanePosition(vehicle.lane);
+      const spawnAhead = Math.random() > 0.3;
+      let spawnOffset;
+      if (spawnAhead) {
+        spawnOffset = this.spawnDistance - Math.random() * 100;
+      } else {
+        spawnOffset = -this.spawnDistance/2 + Math.random() * 100;
+      }
+      const spawnZ = playerZ + spawnOffset;
+      
+      vehicle.position.set(laneX, 0.5, spawnZ);
+      vehicle.velocity.z = vehicle.speed / 2.237;
+    }
+    
     vehicle.mesh.position.copy(vehicle.position);
-    
-    // Set direction (all vehicles go same direction)
-    vehicle.velocity.z = vehicle.speed / 2.237; // Convert MPH to m/s
     
     this.vehicles.push(vehicle);
     this.scene.add(vehicle.mesh);
+    
+    // If master client, broadcast new vehicle
+    if (this.isMaster && this.multiplayerManager && !vehicleData) {
+      this.broadcastVehicleSpawn(vehicle);
+    }
   }
   
   selectVehicleType() {
@@ -162,24 +198,24 @@ export class TrafficSystem {
     body.castShadow = false; // Disable shadows for performance
     vehicle.add(body);
     
-    // Cabin
+    // Cabin - solid roof structure
     const cabinGeo = new THREE.BoxGeometry(
       type.width * 0.9,
-      type.height * 0.4,
+      type.height * 0.35, // Slightly shorter to make room for windows
       type.length * 0.4
     );
     const cabin = new THREE.Mesh(cabinGeo, bodyMat);
-    cabin.position.set(0, type.height * 0.7, type.length * 0.1);
+    cabin.position.set(0, type.height * 0.68, type.length * 0.1); // Slightly lower
     vehicle.add(cabin);
     
-    // Windows
+    // Windows - flush with the top of cabin
     const windowGeo = new THREE.BoxGeometry(
-      type.width * 0.85,
-      type.height * 0.3,
-      type.length * 0.35
+      type.width * 0.85, // Match cabin width more closely
+      type.height * 0.32, // Taller windows
+      type.length * 0.38  // Match cabin depth more closely
     );
     const windows = new THREE.Mesh(windowGeo, this.vehicleMaterials.glass);
-    windows.position.set(0, type.height * 0.75, type.length * 0.1);
+    windows.position.set(0, type.height * 0.76, type.length * 0.1); // Flush with cabin top
     vehicle.add(windows);
     
     // Wheels - simplified to boxes for performance
@@ -224,6 +260,15 @@ export class TrafficSystem {
   update(deltaTime, playerPosition) {
     // Update frustum for culling
     this.updateFrustum();
+    
+    // Broadcast traffic updates if master
+    if (this.isMaster && this.multiplayerManager) {
+      this.lastTrafficUpdate += deltaTime * 1000;
+      if (this.lastTrafficUpdate >= 100) { // 10Hz traffic updates
+        this.broadcastTrafficUpdate();
+        this.lastTrafficUpdate = 0;
+      }
+    }
     
     // Update each vehicle with frustum culling
     this.vehicles.forEach(vehicle => {
@@ -280,9 +325,9 @@ export class TrafficSystem {
       return true;
     });
     
-    // Spawn new vehicles if needed (relative to player position)
-    if (this.vehicles.length < this.maxVehicles) {
-      if (Math.random() < 0.03) { // Increased to 3% to ensure traffic keeps flowing
+    // Spawn new vehicles if needed (only for master client)
+    if (this.vehicles.length < this.maxVehicles && (!this.multiplayerManager || this.isMaster)) {
+      if (Math.random() < 0.03) {
         this.spawnVehicle(playerPosition.z);
       }
     }
@@ -292,7 +337,7 @@ export class TrafficSystem {
       Math.abs(v.position.z - playerPosition.z) < 100
     ).length;
     
-    if (nearbyVehicles < 5 && this.vehicles.length < this.maxVehicles) {
+    if (nearbyVehicles < 5 && this.vehicles.length < this.maxVehicles && (!this.multiplayerManager || this.isMaster)) {
       // Force spawn if too few vehicles nearby
       this.spawnVehicle(playerPosition.z);
     }
@@ -332,6 +377,21 @@ export class TrafficSystem {
     
     // Update position
     vehicle.position.z += vehicle.velocity.z * deltaTime;
+    
+    // Check for blood contact and create tire tracks
+    if (this.bloodTrackSystem) {
+      const bloodContact = this.bloodTrackSystem.checkVehicleBloodContact(vehicle.position, vehicle.width);
+      if (bloodContact) {
+        // Create tire tracks when driving through blood
+        this.bloodTrackSystem.createTireTracks(vehicle.position, vehicle.velocity, vehicle.width);
+        
+        // Add some blood staining to the vehicle (optional visual effect)
+        if (!vehicle.hasBloodStains) {
+          vehicle.hasBloodStains = true;
+          vehicle.bloodStainTimer = 0;
+        }
+      }
+    }
     
     // Update mesh position
     vehicle.mesh.position.copy(vehicle.position);
@@ -529,6 +589,100 @@ export class TrafficSystem {
     this.spawn(20);
   }
   
+  // Traffic synchronization methods
+  setMaster(isMaster) {
+    this.isMaster = isMaster;
+    console.log(`Traffic system ${isMaster ? 'is now master' : 'is now slave'}`);
+  }
+
+  broadcastVehicleSpawn(vehicle) {
+    if (!this.multiplayerManager || !this.multiplayerManager.socket) return;
+    
+    const vehicleData = {
+      id: vehicle.id,
+      type: vehicle.type,
+      lane: vehicle.lane,
+      targetLane: vehicle.targetLane,
+      position: { x: vehicle.position.x, y: vehicle.position.y, z: vehicle.position.z },
+      velocity: { x: vehicle.velocity.x, y: vehicle.velocity.y, z: vehicle.velocity.z },
+      speed: vehicle.speed,
+      baseSpeed: vehicle.baseSpeed,
+      behavior: vehicle.behavior,
+      isBraking: vehicle.isBraking
+    };
+    
+    this.multiplayerManager.socket.emit('traffic-vehicle-spawn', vehicleData);
+  }
+
+  broadcastTrafficUpdate() {
+    if (!this.multiplayerManager || !this.multiplayerManager.socket) return;
+    
+    const trafficData = this.vehicles.map(vehicle => ({
+      id: vehicle.id,
+      position: { x: vehicle.position.x, y: vehicle.position.y, z: vehicle.position.z },
+      velocity: { x: vehicle.velocity.x, y: vehicle.velocity.y, z: vehicle.velocity.z },
+      lane: vehicle.lane,
+      targetLane: vehicle.targetLane,
+      laneChangeProgress: vehicle.laneChangeProgress,
+      speed: vehicle.speed,
+      isBraking: vehicle.isBraking
+    }));
+    
+    this.multiplayerManager.socket.emit('traffic-update', trafficData);
+  }
+
+  onVehicleSpawn(vehicleData) {
+    // Only non-master clients should spawn vehicles from network
+    if (this.isMaster) return;
+    
+    // Check if vehicle already exists
+    if (this.vehicles.find(v => v.id === vehicleData.id)) return;
+    
+    this.spawnVehicle(0, vehicleData);
+  }
+
+  onTrafficUpdate(trafficData) {
+    // Only non-master clients should update from network
+    if (this.isMaster) return;
+    
+    trafficData.forEach(update => {
+      const vehicle = this.vehicles.find(v => v.id === update.id);
+      if (vehicle) {
+        // Interpolate position
+        vehicle.position.lerp(
+          new THREE.Vector3(update.position.x, update.position.y, update.position.z),
+          0.3
+        );
+        
+        // Update velocity
+        vehicle.velocity.set(update.velocity.x, update.velocity.y, update.velocity.z);
+        
+        // Update lane info
+        vehicle.lane = update.lane;
+        vehicle.targetLane = update.targetLane;
+        vehicle.laneChangeProgress = update.laneChangeProgress;
+        vehicle.speed = update.speed;
+        vehicle.isBraking = update.isBraking;
+        
+        // Update mesh position
+        vehicle.mesh.position.copy(vehicle.position);
+      }
+    });
+  }
+
+  onVehicleRemove(vehicleId) {
+    // Remove vehicle from all clients
+    const vehicleIndex = this.vehicles.findIndex(v => v.id === vehicleId);
+    if (vehicleIndex >= 0) {
+      const vehicle = this.vehicles[vehicleIndex];
+      this.scene.remove(vehicle.mesh);
+      vehicle.mesh.traverse((object) => {
+        if (object.geometry) object.geometry.dispose();
+      });
+      this.vehicles.splice(vehicleIndex, 1);
+    }
+  }
+
   dispose() {
     // Remove all vehicles from scene
     this.vehicles.forEach(vehicle => {
@@ -571,5 +725,6 @@ export class TrafficSystem {
     this.highway = null;
     this.camera = null;
     this.vehicleMaterials = null;
+    this.multiplayerManager = null;
   }
 }

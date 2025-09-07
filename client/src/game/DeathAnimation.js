@@ -13,6 +13,7 @@ export class DeathAnimation {
     this.totalAnimationDuration = 3.0; // 3 seconds total
     this.respawnDelay = 2.0; // 2 seconds before respawn starts
     
+    
     // Materials
     this.bloodMaterial = new THREE.MeshBasicMaterial({ 
       color: 0xcc0000, 
@@ -114,6 +115,8 @@ export class DeathAnimation {
     this.scene.add(splatter);
     this.bloodSplatters.push({
       mesh: splatter,
+      geometry: splatterGeo,
+      material: splatterMat,
       age: 0,
       maxAge: 5
     });
@@ -133,6 +136,8 @@ export class DeathAnimation {
       this.scene.add(smallSplatter);
       this.bloodSplatters.push({
         mesh: smallSplatter,
+        geometry: smallSplatterGeo,
+        material: splatterMat,
         age: 0,
         maxAge: 5
       });
@@ -284,11 +289,71 @@ export class DeathAnimation {
     this.scene.add(pool);
     this.bloodSplatters.push({
       mesh: pool,
+      geometry: poolGeo,
+      material: poolMat,
       age: 0,
       maxAge: 5,
       isPool: true,
       targetScale: 3
     });
+  }
+  
+  createBoneBloodTrail(position, velocity) {
+    // Create small blood particles that follow each bone
+    const particleCount = 15;
+    const positions = new Float32Array(particleCount * 3);
+    const colors = new Float32Array(particleCount * 3);
+    const velocities = [];
+    
+    for (let i = 0; i < particleCount; i++) {
+      // Start near bone position
+      positions[i * 3] = position.x + (Math.random() - 0.5) * 0.3;
+      positions[i * 3 + 1] = position.y + (Math.random() - 0.5) * 0.3;
+      positions[i * 3 + 2] = position.z + (Math.random() - 0.5) * 0.3;
+      
+      // Dark red blood colors
+      colors[i * 3] = 0.6 + Math.random() * 0.2;     // Red
+      colors[i * 3 + 1] = 0.05 + Math.random() * 0.1; // Green 
+      colors[i * 3 + 2] = 0.05 + Math.random() * 0.1; // Blue
+      
+      // Velocities slightly slower than bone, with some spread
+      const bloodVel = velocity.clone();
+      bloodVel.multiplyScalar(0.8 + Math.random() * 0.3);
+      bloodVel.add(new THREE.Vector3(
+        (Math.random() - 0.5) * 3,
+        (Math.random() - 0.5) * 2,
+        (Math.random() - 0.5) * 3
+      ));
+      
+      velocities.push(bloodVel);
+    }
+    
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    
+    // Use existing blood particle material but make particles smaller
+    const bloodTrailMaterial = new THREE.PointsMaterial({
+      color: 0xaa0000,
+      size: 0.15,
+      transparent: true,
+      opacity: 0.8,
+      vertexColors: true,
+      blending: THREE.AdditiveBlending
+    });
+    
+    const particles = new THREE.Points(geometry, bloodTrailMaterial);
+    this.scene.add(particles);
+    
+    return {
+      mesh: particles,
+      velocities: velocities,
+      geometry: geometry,
+      positions: positions,
+      material: bloodTrailMaterial,
+      age: 0,
+      maxAge: 2.5
+    };
   }
   
   createBikeExplosion(position, velocity) {
@@ -445,9 +510,12 @@ export class DeathAnimation {
   }
   
   update(deltaTime) {
-    if (!this.isAnimating) return false;
+    // Always update effects, even if main animation isn't running (for remote player crashes)
+    const wasAnimating = this.isAnimating;
     
-    this.animationTime += deltaTime;
+    if (wasAnimating) {
+      this.animationTime += deltaTime;
+    }
     
     // Update explosion effects
     for (let i = this.explosionParticles.length - 1; i >= 0; i--) {
@@ -508,6 +576,7 @@ export class DeathAnimation {
       
       if (debris.age > debris.maxAge) {
         this.scene.remove(debris.mesh);
+        debris.mesh.geometry.dispose();
         this.bikeDebris.splice(i, 1);
         continue;
       }
@@ -597,6 +666,13 @@ export class DeathAnimation {
       
       if (bone.age > bone.maxAge) {
         this.scene.remove(bone.mesh);
+        bone.mesh.geometry.dispose();
+        // Clean up blood trail
+        if (bone.bloodParticles) {
+          this.scene.remove(bone.bloodParticles.mesh);
+          bone.bloodParticles.geometry.dispose();
+          bone.bloodParticles.material.dispose();
+        }
         this.bones.splice(i, 1);
         continue;
       }
@@ -631,6 +707,47 @@ export class DeathAnimation {
         }
       }
       
+      // Update blood trail particles
+      if (bone.bloodParticles) {
+        bone.bloodParticles.age += deltaTime;
+        
+        if (bone.bloodParticles.age > bone.bloodParticles.maxAge) {
+          // Remove blood trail when expired
+          this.scene.remove(bone.bloodParticles.mesh);
+          bone.bloodParticles.geometry.dispose();
+          bone.bloodParticles.material.dispose();
+          bone.bloodParticles = null;
+        } else {
+          // Update blood particle positions
+          const positions = bone.bloodParticles.geometry.attributes.position.array;
+          for (let j = 0; j < bone.bloodParticles.velocities.length; j++) {
+            const vel = bone.bloodParticles.velocities[j];
+            
+            // Apply gravity
+            vel.y -= 25 * deltaTime;
+            
+            // Update position
+            positions[j * 3] += vel.x * deltaTime;
+            positions[j * 3 + 1] += vel.y * deltaTime;
+            positions[j * 3 + 2] += vel.z * deltaTime;
+            
+            // Stop at ground
+            if (positions[j * 3 + 1] < 0) {
+              positions[j * 3 + 1] = 0;
+              vel.y = 0;
+              vel.x *= 0.3;
+              vel.z *= 0.3;
+            }
+          }
+          
+          bone.bloodParticles.geometry.attributes.position.needsUpdate = true;
+          
+          // Fade out blood trail
+          const fadeProgress = bone.bloodParticles.age / bone.bloodParticles.maxAge;
+          bone.bloodParticles.material.opacity = 0.8 * (1 - fadeProgress);
+        }
+      }
+      
       // Fade out near end (last 2 seconds)
       if (bone.age > bone.maxAge - 2) {
         const fadeProgress = (bone.age - (bone.maxAge - 2)) / 2;
@@ -646,6 +763,8 @@ export class DeathAnimation {
       
       if (splatter.age > splatter.maxAge) {
         this.scene.remove(splatter.mesh);
+        if (splatter.geometry) splatter.geometry.dispose();
+        if (splatter.material) splatter.material.dispose();
         this.bloodSplatters.splice(i, 1);
         continue;
       }
@@ -663,17 +782,22 @@ export class DeathAnimation {
       }
     }
     
-    // Check if animation is complete and ready for respawn
-    const readyForRespawn = this.animationTime >= this.respawnDelay;
-    const animationComplete = this.animationTime >= this.totalAnimationDuration;
-    
-    if (animationComplete) {
-      this.cleanup();
-      this.isAnimating = false;
-      return true; // Signal that respawn can happen
+    // Only handle respawn logic if main player is animating
+    if (wasAnimating) {
+      // Check if animation is complete and ready for respawn
+      const readyForRespawn = this.animationTime >= this.respawnDelay;
+      const animationComplete = this.animationTime >= this.totalAnimationDuration;
+      
+      if (animationComplete) {
+        this.cleanup();
+        this.isAnimating = false;
+        return true; // Signal that respawn can happen
+      }
+      
+      return readyForRespawn; // Return true when respawn delay is over
     }
     
-    return readyForRespawn; // Return true when respawn delay is over
+    return false; // No respawn needed if not main animation
   }
   
   cleanup() {
@@ -694,22 +818,68 @@ export class DeathAnimation {
     // Clean up bike debris
     for (const debris of this.bikeDebris) {
       this.scene.remove(debris.mesh);
+      debris.mesh.geometry.dispose();
     }
     this.bikeDebris = [];
     
     // Clean up bones
     for (const bone of this.bones) {
       this.scene.remove(bone.mesh);
+      bone.mesh.geometry.dispose();
+      // Clean up blood trail
+      if (bone.bloodParticles) {
+        this.scene.remove(bone.bloodParticles.mesh);
+        bone.bloodParticles.geometry.dispose();
+        bone.bloodParticles.material.dispose();
+      }
     }
     this.bones = [];
     
     // Clean up blood splatters
     for (const splatter of this.bloodSplatters) {
       this.scene.remove(splatter.mesh);
+      if (splatter.geometry) splatter.geometry.dispose();
+      if (splatter.material) splatter.material.dispose();
     }
     this.bloodSplatters = [];
   }
   
+  // Remote crash methods for multiplayer
+  triggerRemoteCrash(position, velocity, playerName) {
+    console.log(`🚨 Triggering remote crash effect for ${playerName}`);
+    
+    // Calculate impact direction
+    const impactDirection = new THREE.Vector3(
+      -Math.sign(velocity.x) || (Math.random() - 0.5),
+      0.3,
+      -Math.sign(velocity.z) || (Math.random() - 0.5)
+    ).normalize();
+    
+    // Use the SAME methods as the main death animation - they already work perfectly!
+    this.createBloodSplatter(position, impactDirection);
+    this.createBloodParticles(position, impactDirection, velocity);
+    this.createBikeExplosion(position, velocity);
+  }
+
+  triggerRemoteDeath(position, velocity, playerName) {
+    console.log(`💀 Triggering remote death effect for ${playerName}`);
+    
+    // Calculate impact direction
+    const impactDirection = new THREE.Vector3(
+      -Math.sign(velocity.x) || (Math.random() - 0.5),
+      0.5,
+      -Math.sign(velocity.z) || (Math.random() - 0.5)
+    ).normalize();
+    
+    // Use the SAME methods as the main death animation!
+    this.createBloodSplatter(position, impactDirection);
+    this.createBloodParticles(position, impactDirection, velocity);
+    this.createFlyingBones(position, impactDirection, velocity);
+    this.createBikeExplosion(position, velocity);
+    this.createBloodPool(position);
+  }
+
+
   dispose() {
     this.cleanup();
     this.bloodMaterial.dispose();

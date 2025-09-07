@@ -1,6 +1,7 @@
 import io from 'socket.io-client';
 import * as THREE from 'three';
 import { supabase } from '../utils/supabase.js';
+import { MotorcycleFactory } from '../game/MotorcycleFactory.js';
 
 export class MultiplayerManager {
   constructor(game) {
@@ -12,6 +13,12 @@ export class MultiplayerManager {
     this.otherPlayers = new Map();
     this.playerMeshes = new Map();
     this.isConnected = false;
+    
+    // Traffic synchronization
+    this.isTrafficMaster = false;
+    
+    // Reusable objects to prevent garbage collection pressure
+    this.tempVector3 = new THREE.Vector3();
     this.serverUrl = import.meta.env.VITE_SERVER_URL || 'http://localhost:8080';
     
     // Supabase realtime channel
@@ -64,6 +71,21 @@ export class MultiplayerManager {
   }
 
   setupSocketListeners() {
+    // Remove all existing listeners first to prevent memory leaks from stacking listeners
+    this.socket.off('welcome');
+    this.socket.off('player-joined');
+    this.socket.off('player-left');
+    this.socket.off('active-players');
+    this.socket.off('player-state-update');
+    this.socket.off('chat-message');
+    this.socket.off('disconnect');
+    this.socket.off('traffic-master-assigned');
+    this.socket.off('traffic-vehicle-spawn');
+    this.socket.off('traffic-update');
+    this.socket.off('traffic-vehicle-remove');
+    this.socket.off('player-crash');
+    this.socket.off('player-death');
+    
     // Welcome message
     this.socket.on('welcome', (data) => {
       console.log('Server welcome:', data);
@@ -83,13 +105,10 @@ export class MultiplayerManager {
 
     // Active players list
     this.socket.on('active-players', (players) => {
-      console.log(`Received active players list:`, players);
+      console.log(`📋 Received ${players.length} active players`);
       players.forEach(player => {
         if (player.playerId !== this.playerId) {
-          console.log(`Adding active player: ${player.username}`);
           this.addOtherPlayer(player.playerId, player.username);
-        } else {
-          console.log(`Skipping self: ${player.username}`);
         }
       });
     });
@@ -104,10 +123,52 @@ export class MultiplayerManager {
       this.handleChatMessage(data);
     });
 
+    // Traffic master assignment
+    this.socket.on('traffic-master-assigned', (isMaster) => {
+      this.isTrafficMaster = isMaster;
+      console.log(`Traffic master status: ${isMaster ? 'Master' : 'Slave'}`);
+      
+      // Notify traffic system
+      if (this.game && this.game.trafficSystem) {
+        this.game.trafficSystem.setMaster(isMaster);
+      }
+    });
+
+    // Traffic synchronization events
+    this.socket.on('traffic-vehicle-spawn', (vehicleData) => {
+      if (this.game && this.game.trafficSystem) {
+        this.game.trafficSystem.onVehicleSpawn(vehicleData);
+      }
+    });
+
+    this.socket.on('traffic-update', (trafficData) => {
+      if (this.game && this.game.trafficSystem) {
+        this.game.trafficSystem.onTrafficUpdate(trafficData);
+      }
+    });
+
+    this.socket.on('traffic-vehicle-remove', (vehicleId) => {
+      if (this.game && this.game.trafficSystem) {
+        this.game.trafficSystem.onVehicleRemove(vehicleId);
+      }
+    });
+
+    // Player crash events
+    this.socket.on('player-crash', (data) => {
+      console.log(`🚨 RECEIVED CRASH EVENT: Player ${data.username} crashed!`, data);
+      this.handlePlayerCrash(data);
+    });
+
+    this.socket.on('player-death', (data) => {
+      console.log(`💀 RECEIVED DEATH EVENT: Player ${data.username} died!`, data);
+      this.handlePlayerDeath(data);
+    });
+
     // Disconnection
     this.socket.on('disconnect', () => {
       console.log('Disconnected from server');
       this.isConnected = false;
+      this.isTrafficMaster = false;
     });
   }
 
@@ -117,79 +178,29 @@ export class MultiplayerManager {
   }
 
   createOtherPlayerMotorcycle(username) {
-    const motorcycle = new THREE.Group();
+    // Generate consistent colors for bike and rider based on username
+    const bikeColor = MotorcycleFactory.getUsernameColor(username);
+    const riderColor = new THREE.Color().setHSL((bikeColor.getHSL({}).h + 0.3) % 1, 0.6, 0.4); // Complementary color
     
-    // Generate consistent color based on username
-    let hash = 0;
-    for (let i = 0; i < username.length; i++) {
-      hash = username.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    const hue = (hash % 360) / 360;
-    
-    // Body (same as main motorcycle but different color)
-    const bodyGeo = new THREE.BoxGeometry(0.3, 0.4, 1.4, 2, 2, 4);
-    const bodyMat = new THREE.MeshStandardMaterial({ 
-      color: new THREE.Color().setHSL(hue, 0.8, 0.5),
-      metalness: 0.6,
-      roughness: 0.3,
-      envMapIntensity: 1.2
+    // Use MotorcycleFactory to create motorcycle with rider
+    const motorcycle = MotorcycleFactory.createMotorcycle({
+      bikeColor: bikeColor,
+      riderColor: riderColor,
+      username: username,
+      includeRider: true
     });
-    const body = new THREE.Mesh(bodyGeo, bodyMat);
-    body.position.y = 0.4;
-    body.position.z = 0.05;
-    body.castShadow = true;
-    motorcycle.add(body);
-    
-    // Tank
-    const tankGeo = new THREE.BoxGeometry(0.35, 0.3, 0.6);
-    const tank = new THREE.Mesh(tankGeo, bodyMat);
-    tank.position.set(0, 0.55, 0.2);
-    motorcycle.add(tank);
-    
-    // Seat
-    const seatGeo = new THREE.BoxGeometry(0.25, 0.1, 0.4, 2, 1, 2);
-    const seatMat = new THREE.MeshStandardMaterial({ 
-      color: 0x1a1a1a,
-      roughness: 0.8,
-      metalness: 0
-    });
-    const seat = new THREE.Mesh(seatGeo, seatMat);
-    seat.position.set(0, 0.65, -0.25);
-    motorcycle.add(seat);
-    
-    // Wheels
-    const wheelGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.15, 16);
-    const wheelMat = new THREE.MeshStandardMaterial({ 
-      color: 0x2a2a2a,
-      roughness: 0.9,
-      metalness: 0
-    });
-    
-    const frontWheel = new THREE.Mesh(wheelGeo, wheelMat);
-    frontWheel.rotation.z = Math.PI / 2;
-    frontWheel.position.set(0, 0.3, 0.7);
-    frontWheel.castShadow = true;
-    motorcycle.add(frontWheel);
-    
-    const rearWheel = new THREE.Mesh(wheelGeo, wheelMat);
-    rearWheel.rotation.z = Math.PI / 2;
-    rearWheel.position.set(0, 0.32, -0.7);
-    rearWheel.castShadow = true;
-    motorcycle.add(rearWheel);
-    
-    // Store references for animation
-    motorcycle.userData.frontWheel = frontWheel;
-    motorcycle.userData.rearWheel = rearWheel;
-    motorcycle.userData.body = body;
-    motorcycle.userData.originalColor = bodyMat.color.clone();
     
     return motorcycle;
   }
 
   addOtherPlayer(playerId, username) {
-    if (this.otherPlayers.has(playerId)) return;
+    if (this.otherPlayers.has(playerId)) {
+      return; // Reduced logging to prevent memory buildup
+    }
 
-    // Adding other player (removed debug log)
+    console.log(`✅ Adding new player: ${username} (${playerId})`);
+    console.log(`Current players before add:`, Array.from(this.otherPlayers.keys()));
+    console.log(`My player ID: ${this.playerId}`);
 
     // Create player data
     const playerData = {
@@ -208,40 +219,20 @@ export class MultiplayerManager {
     // Create motorcycle model for other players
     const motorcycle = this.createOtherPlayerMotorcycle(username);
     
-    // Position it near the player for visibility
-    const offsetX = (Math.random() - 0.5) * 20; // -10 to +10
-    const offsetZ = (Math.random() - 0.5) * 20; // -10 to +10
+    // Position at ground level, near main player for visibility but not random
+    // Start slightly to the side and behind the main player
+    const mainPlayerPos = this.game.physics?.getState()?.position || { x: 0, y: 0, z: 0 };
+    const offsetX = ((this.otherPlayers.size % 4) - 1.5) * 3; // Spread players across lanes
     motorcycle.position.set(
-      offsetX, // Side by side
-      0.3, // Ground level like regular motorcycle
-      offsetZ  // In front or behind
+      mainPlayerPos.x + offsetX,
+      0, // Ground level - no floating
+      mainPlayerPos.z - 10 - (this.otherPlayers.size * 5) // Behind main player, spaced out
     );
     
-    // Add username label
+    // Add motorcycle to scene (username label already included by MotorcycleFactory)
     if (this.game && this.game.scene) {
-      const canvas = document.createElement('canvas');
-      const context = canvas.getContext('2d');
-      canvas.width = 256;
-      canvas.height = 64;
-      
-      context.fillStyle = 'rgba(0,0,0,0.8)';
-      context.fillRect(0, 0, 256, 64);
-      
-      context.font = '32px Arial';
-      context.fillStyle = 'white';
-      context.textAlign = 'center';
-      context.fillText(username, 128, 40);
-      
-      const texture = new THREE.CanvasTexture(canvas);
-      const spriteMaterial = new THREE.SpriteMaterial({ map: texture });
-      const sprite = new THREE.Sprite(spriteMaterial);
-      sprite.scale.set(4, 1, 1); // Made bigger
-      sprite.position.y = 3;
-      
-      motorcycle.add(sprite);
       this.game.scene.add(motorcycle);
-      
-      // Player motorcycle added to scene
+      console.log(`🏍️ Added ${username}'s motorcycle with rider to scene`);
     }
     
     this.playerMeshes.set(playerId, motorcycle);
@@ -334,8 +325,19 @@ export class MultiplayerManager {
       isWheelie: bikeState.isWheelie,
       isStoppie: bikeState.isStoppie,
       isCrashed: bikeState.collision?.isCrashed || false,
-      isDead: this.game?.isDead || false
+      isDead: this.game?.isDead || false,
+      velocity: bikeState.velocity || { x: 0, y: 0, z: 0 }
     };
+
+    // Debug crash state
+    if (updateData.isCrashed || updateData.isDead) {
+      console.log(`🔍 SENDING CRASH/DEATH STATE:`, {
+        isCrashed: updateData.isCrashed,
+        isDead: updateData.isDead,
+        position: updateData.position,
+        velocity: updateData.velocity
+      });
+    }
 
     // Debug occasional updates
     if (Math.random() < 0.005) { // 0.5% of updates
@@ -361,20 +363,98 @@ export class MultiplayerManager {
     }
   }
 
+  handlePlayerCrash(data) {
+    console.log(`🔍 handlePlayerCrash called for ${data.username}`, data);
+    
+    const player = this.otherPlayers.get(data.playerId);
+    if (!player) {
+      console.log(`❌ Player ${data.playerId} not found in otherPlayers map`);
+      return;
+    }
+    
+    // Update player crash state
+    player.isCrashed = true;
+    player.lastCrashTime = Date.now();
+    console.log(`✅ Updated crash state for ${data.username}`);
+    
+    // Create visual crash effect at crash location
+    if (this.game && this.game.deathAnimation) {
+      const crashPosition = new THREE.Vector3(data.position.x, data.position.y, data.position.z);
+      const crashVelocity = new THREE.Vector3(data.velocity.x || 0, data.velocity.y || 0, data.velocity.z || 0);
+      
+      console.log(`🎬 Triggering crash animation for ${data.username} at`, crashPosition);
+      // Trigger a smaller crash effect for other players
+      this.game.deathAnimation.triggerRemoteCrash(crashPosition, crashVelocity, data.username);
+    } else {
+      console.log(`❌ Cannot trigger crash animation - game or deathAnimation not available`);
+    }
+    
+    // Show crash message in chat/HUD
+    if (this.game && this.game.showGameMessage) {
+      this.game.showGameMessage(`${data.username} crashed!`, 'crash');
+      console.log(`💬 Showed crash message for ${data.username}`);
+    }
+    
+    console.log(`💥 Finished showing crash effect for ${data.username} at position (${data.position.x?.toFixed(1)}, ${data.position.z?.toFixed(1)})`);
+  }
+
+  handlePlayerDeath(data) {
+    console.log(`🔍 handlePlayerDeath called for ${data.username}`, data);
+    
+    const player = this.otherPlayers.get(data.playerId);
+    if (!player) {
+      console.log(`❌ Player ${data.playerId} not found in otherPlayers map`);
+      return;
+    }
+    
+    // Update player death state
+    player.isDead = true;
+    player.isCrashed = false; // Clear crash state
+    player.lastDeathTime = Date.now();
+    console.log(`✅ Updated death state for ${data.username}`);
+    
+    // Create full death animation at death location
+    if (this.game && this.game.deathAnimation) {
+      const deathPosition = new THREE.Vector3(data.position.x, data.position.y, data.position.z);
+      const deathVelocity = new THREE.Vector3(data.velocity.x || 0, data.velocity.y || 0, data.velocity.z || 0);
+      
+      console.log(`🎬 Triggering death animation for ${data.username} at`, deathPosition);
+      // Trigger full death animation for other players to see
+      this.game.deathAnimation.triggerRemoteDeath(deathPosition, deathVelocity, data.username);
+    } else {
+      console.log(`❌ Cannot trigger death animation - game or deathAnimation not available`);
+    }
+    
+    // Register crash site with blood track system
+    if (this.game && this.game.bloodTrackSystem) {
+      const deathPos = new THREE.Vector3(data.position.x, data.position.y, data.position.z);
+      this.game.bloodTrackSystem.registerCrashSite(deathPos);
+      console.log(`🩸 Registered crash site in blood track system`);
+    }
+    
+    // Show death message
+    if (this.game && this.game.showGameMessage) {
+      this.game.showGameMessage(`💀 ${data.username} died!`, 'death');
+      console.log(`💬 Showed death message for ${data.username}`);
+    }
+    
+    console.log(`💀 Finished showing death effect for ${data.username} at position (${data.position.x?.toFixed(1)}, ${data.position.z?.toFixed(1)})`);
+  }
+
   update() {
     // Update other players' motorcycles
     this.playerMeshes.forEach((motorcycle, playerId) => {
       const player = this.otherPlayers.get(playerId);
       if (player && this.game) {
-        // Use absolute world positions
-        const targetPos = new THREE.Vector3(
+        // Use absolute world positions - reuse temp vector to prevent garbage collection
+        this.tempVector3.set(
           player.position.x,
           player.position.y,
           player.position.z
         );
         
         // Smooth interpolation
-        motorcycle.position.lerp(targetPos, 0.3);
+        motorcycle.position.lerp(this.tempVector3, 0.3);
         
         // Apply rotations like the main player's motorcycle
         motorcycle.rotation.set(0, 0, 0);
@@ -382,19 +462,25 @@ export class MultiplayerManager {
         motorcycle.rotateZ(player.leanAngle || 0);
         motorcycle.rotateX(player.rotation.x || 0);
         
-        // Handle crash/death states
+        // Handle crash/death states with debugging
         if (player.isDead) {
           // Hide motorcycle when dead (like main player)
           motorcycle.visible = false;
+          if (Math.random() < 0.01) { // Occasional debug
+            console.log(`Player ${player.username} is dead - hiding motorcycle`);
+          }
         } else if (player.isCrashed) {
-          // Flash red when crashed
+          // Flash red when crashed - use frame-based timing to avoid setTimeout memory leaks
           if (motorcycle.userData.body && motorcycle.userData.originalColor) {
-            motorcycle.userData.body.material.color.setHex(0xff0000);
-            setTimeout(() => {
-              if (motorcycle.userData.body && motorcycle.userData.originalColor) {
-                motorcycle.userData.body.material.color.copy(motorcycle.userData.originalColor);
-              }
-            }, 200);
+            if (!motorcycle.userData.flashTimer) {
+              motorcycle.userData.flashTimer = 0;
+              motorcycle.userData.body.material.color.setHex(0xff0000);
+            }
+            motorcycle.userData.flashTimer += 16.67; // ~60fps in milliseconds
+            if (motorcycle.userData.flashTimer >= 200) {
+              motorcycle.userData.body.material.color.copy(motorcycle.userData.originalColor);
+              motorcycle.userData.flashTimer = 0;
+            }
           }
           motorcycle.visible = true;
         } else {
@@ -403,6 +489,12 @@ export class MultiplayerManager {
             const wheelSpeed = (player.speed || 0) * 0.1;
             motorcycle.userData.frontWheel.rotation.x += wheelSpeed;
             motorcycle.userData.rearWheel.rotation.x += wheelSpeed;
+          }
+          
+          // Animate rider lean (same as main player)
+          if (motorcycle.userData.rider) {
+            motorcycle.userData.rider.rotation.z = -player.leanAngle * 0.5;
+            motorcycle.userData.rider.rotation.x = (player.rotation.x || 0) * 0.3;
           }
           
           // Normal visibility
@@ -419,6 +511,21 @@ export class MultiplayerManager {
 
   disconnect() {
     if (this.socket) {
+      // Remove all listeners before disconnecting
+      this.socket.off('welcome');
+      this.socket.off('player-joined');
+      this.socket.off('player-left');
+      this.socket.off('active-players');
+      this.socket.off('player-state-update');
+      this.socket.off('chat-message');
+      this.socket.off('disconnect');
+      this.socket.off('traffic-master-assigned');
+      this.socket.off('traffic-vehicle-spawn');
+      this.socket.off('traffic-update');
+      this.socket.off('traffic-vehicle-remove');
+      this.socket.off('player-crash');
+      this.socket.off('player-death');
+      
       this.socket.disconnect();
       this.socket = null;
     }
@@ -428,7 +535,11 @@ export class MultiplayerManager {
       this.removeOtherPlayer(playerId);
     });
 
+    // Clear circular reference to prevent memory leak
+    this.game = null;
+    
     this.isConnected = false;
+    this.isTrafficMaster = false;
     this.playerId = null;
     this.sessionId = null;
   }
