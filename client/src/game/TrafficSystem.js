@@ -8,8 +8,8 @@ export class TrafficSystem {
     this.bloodTrackSystem = bloodTrackSystem;
     this.multiplayerManager = multiplayerManager;
     this.vehicles = [];
-    this.maxVehicles = 30; // Reduced back to prevent memory issues
-    this.spawnDistance = 400; // Reduced to limit vehicles
+    this.maxVehicles = 50; // Increased for more traffic
+    this.spawnDistance = 300; // Closer spawn for more visible traffic
     
     // Create shared geometry ONCE for all vehicles to prevent memory leaks
     // Using unit cubes to scale per vehicle type
@@ -332,18 +332,18 @@ export class TrafficSystem {
     
     // Spawn new vehicles if needed (only for master client)
     if (this.vehicles.length < this.maxVehicles && (!this.multiplayerManager || this.isMaster)) {
-      if (Math.random() < 0.03) {
+      if (Math.random() < 0.08) { // Increased from 0.03 to spawn more frequently
         this.spawnVehicle(playerPosition.z);
       }
     }
     
     // Also ensure minimum traffic near player
     const nearbyVehicles = this.vehicles.filter(v => 
-      Math.abs(v.position.z - playerPosition.z) < 100
+      Math.abs(v.position.z - playerPosition.z) < 150 // Increased range
     ).length;
     
-    if (nearbyVehicles < 5 && this.vehicles.length < this.maxVehicles && (!this.multiplayerManager || this.isMaster)) {
-      // Force spawn if too few vehicles nearby
+    if (nearbyVehicles < 10 && this.vehicles.length < this.maxVehicles && (!this.multiplayerManager || this.isMaster)) {
+      // Force spawn if too few vehicles nearby (increased minimum from 5 to 10)
       this.spawnVehicle(playerPosition.z);
     }
     

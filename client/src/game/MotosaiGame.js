@@ -323,7 +323,7 @@ export class MotosaiGame {
   
   initTraffic() {
     this.trafficSystem = new TrafficSystem(this.scene, this.highway, this.camera, this.bloodTrackSystem, this.multiplayer);
-    this.trafficSystem.spawn(20); // Start with 20 vehicles
+    this.trafficSystem.spawn(35); // Increased initial spawn from 20 to 35 vehicles
     
     // For backward compatibility
     this.traffic = this.trafficSystem;
