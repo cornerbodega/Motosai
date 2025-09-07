@@ -285,6 +285,12 @@
         }
         
         window.startGame = function() {
+            // Dispose of any existing game first
+            if (game && game.dispose) {
+                game.dispose();
+                game = null;
+            }
+            
             const startScreen = document.getElementById('startScreen');
             startScreen.style.display = 'none';
             

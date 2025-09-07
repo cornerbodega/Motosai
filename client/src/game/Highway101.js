@@ -476,14 +476,21 @@ export class Highway101 {
   }
   
   regenerateRoadside(segment) {
-    // Remove old trees and signs
+    // Remove old trees and signs - properly dispose of geometries
     const toRemove = [];
     segment.group.traverse(child => {
       if (child.userData.roadside || child.userData.isSign || child.userData.isTree) {
         toRemove.push(child);
       }
     });
-    toRemove.forEach(child => segment.group.remove(child));
+    toRemove.forEach(child => {
+      // Dispose of geometry for non-shared objects
+      if (child.geometry) {
+        child.geometry.dispose();
+      }
+      // Don't dispose materials as they're shared
+      segment.group.remove(child);
+    });
     
     // Clear detail groups
     if (segment.detailGroups) {
@@ -514,24 +521,79 @@ export class Highway101 {
     const totalDistance = 650 * 1609.34; // miles to meters
     const progress = (absoluteZ % totalDistance) / totalDistance;
     
-    // Big Sur is around the middle of PCH
-    const lat = 36.27 + (progress - 0.5) * 10; // Spread over 10 degrees latitude
-    const lng = -121.8;
+    // Start at Big Sur and go south along the coast
+    // PCH runs from about lat 36.27 (Big Sur) to 32.7 (San Diego)
+    const lat = 36.27 - progress * 3.5; // Go south as we progress
+    const lng = -121.8 - progress * 1.5; // Slightly west as we go south
     
     // Location names based on progress
     let name = "Big Sur";
-    if (progress < 0.2) {
-      name = "San Francisco Bay";
-    } else if (progress < 0.4) {
+    if (progress < 0.1) {
+      name = "Big Sur California Coast";
+    } else if (progress < 0.2) {
       name = "Monterey Bay";
+    } else if (progress < 0.3) {
+      name = "Santa Cruz Coast";
+    } else if (progress < 0.4) {
+      name = "Half Moon Bay";
+    } else if (progress < 0.5) {
+      name = "San Francisco Bay";
     } else if (progress < 0.6) {
-      name = "Big Sur";
+      name = "Marin Headlands";
+    } else if (progress < 0.7) {
+      name = "Point Reyes";
     } else if (progress < 0.8) {
-      name = "San Luis Obispo";
+      name = "Mendocino Coast";
     } else {
-      name = "Santa Barbara";
+      name = "Redwood Coast";
     }
     
     return { lat, lng, name };
+  }
+  
+  dispose() {
+    // Remove all segments from scene
+    this.segments.forEach(segment => {
+      if (segment.group) {
+        segment.group.traverse((object) => {
+          if (object.geometry) {
+            object.geometry.dispose();
+          }
+          if (object.material) {
+            if (Array.isArray(object.material)) {
+              object.material.forEach(mat => mat.dispose());
+            } else {
+              object.material.dispose();
+            }
+          }
+        });
+        this.scene.remove(segment.group);
+      }
+    });
+    
+    // Clear segments array
+    this.segments = [];
+    
+    // Dispose of materials
+    if (this.asphaltMat) this.asphaltMat.dispose();
+    if (this.whiteMat) this.whiteMat.dispose();
+    if (this.yellowMat) this.yellowMat.dispose();
+    if (this.shoulderMat) this.shoulderMat.dispose();
+    if (this.grassMat) this.grassMat.dispose();
+    if (this.barrierMat) this.barrierMat.dispose();
+    if (this.rockMat) this.rockMat.dispose();
+    if (this.guardrailMat) this.guardrailMat.dispose();
+    
+    // Dispose of instanced tree meshes
+    if (this.treeMesh) {
+      this.treeMesh.geometry.dispose();
+      this.treeMesh.material.dispose();
+      this.scene.remove(this.treeMesh);
+    }
+    if (this.trunkMesh) {
+      this.trunkMesh.geometry.dispose();
+      this.trunkMesh.material.dispose();
+      this.scene.remove(this.trunkMesh);
+    }
   }
 }

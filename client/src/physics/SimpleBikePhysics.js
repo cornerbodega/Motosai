@@ -226,21 +226,24 @@ export class SimpleBikePhysics {
         // Track time off throttle
         this.offThrottleTime += deltaTime;
         
-        // Progressive tightening - builds up over 1 second to max effect
-        const timeEffect = Math.min(this.offThrottleTime, 1.0);
+        // Progressive tightening - builds up over 0.5 seconds to max effect (faster response)
+        const timeEffect = Math.min(this.offThrottleTime / 0.5, 1.0);
         
-        // Base effect from throttle position (immediate)
+        // Base effect from throttle position (immediate and stronger)
         const throttleEffect = (0.3 - this.controls.throttle) / 0.3; // 0 to 1
         
-        // Combined effect: immediate response + time buildup
-        const targetMultiplier = 1.0 + (throttleEffect * 0.3) + (timeEffect * 0.5); // Up to 1.8x tighter
+        // Combined effect: much stronger trail brake multiplier
+        // Immediate: up to 1.8x from throttle position alone
+        // Time-based: additional 1.2x after 0.5 seconds
+        // Total: up to 3.0x tighter turning when fully off throttle
+        const targetMultiplier = 1.0 + (throttleEffect * 0.8) + (timeEffect * 1.2); // Up to 3.0x tighter
         
-        // Smooth transition to target
-        this.trailBrakeMultiplier += (targetMultiplier - this.trailBrakeMultiplier) * deltaTime * 5;
+        // Faster transition to target for more responsive feel
+        this.trailBrakeMultiplier += (targetMultiplier - this.trailBrakeMultiplier) * deltaTime * 8;
       } else {
         // On throttle - gradually release trail brake effect
-        this.offThrottleTime = Math.max(0, this.offThrottleTime - deltaTime * 2);
-        this.trailBrakeMultiplier += (1.0 - this.trailBrakeMultiplier) * deltaTime * 3;
+        this.offThrottleTime = Math.max(0, this.offThrottleTime - deltaTime * 3); // Faster release
+        this.trailBrakeMultiplier += (1.0 - this.trailBrakeMultiplier) * deltaTime * 4;
       }
     } else {
       // Not turning - reset

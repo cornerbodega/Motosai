@@ -26,6 +26,11 @@ export class MotosaiGame {
       offset: { x: 0, y: 0 }
     };
     
+    // Store bound event handlers for cleanup
+    this.boundHandleResize = () => this.onResize();
+    this.boundHandleKeyDown = (e) => this.handleKeyDown(e);
+    this.boundHandleKeyUp = (e) => this.handleKeyUp(e);
+    
     // Initialize components
     this.initRenderer();
     this.initScene();
@@ -38,16 +43,48 @@ export class MotosaiGame {
     this.initControls();
     this.initHUD();
     
-    // Start game loop
+    // Start game loop - delay slightly to ensure all materials are initialized
     this.lastTime = performance.now();
-    this.animate();
+    requestAnimationFrame(() => this.animate());
   }
   
   initRenderer() {
-    this.renderer = new THREE.WebGLRenderer({ 
-      antialias: true,
-      powerPreference: "high-performance"
-    });
+    try {
+      this.renderer = new THREE.WebGLRenderer({ 
+        antialias: true,
+        powerPreference: "high-performance",
+        failIfMajorPerformanceCaveat: false // Allow fallback to software rendering
+      });
+    } catch (error) {
+      console.error('WebGL initialization failed:', error);
+      // Show error message to user
+      const errorDiv = document.createElement('div');
+      errorDiv.style.cssText = `
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(0,0,0,0.8);
+        color: white;
+        padding: 20px;
+        border-radius: 10px;
+        text-align: center;
+        font-family: Arial, sans-serif;
+      `;
+      errorDiv.innerHTML = `
+        <h2>WebGL Error</h2>
+        <p>Unable to initialize WebGL. Please try:</p>
+        <ul style="text-align: left;">
+          <li>Refreshing the page</li>
+          <li>Closing other browser tabs</li>
+          <li>Enabling hardware acceleration in browser settings</li>
+          <li>Using a different browser (Chrome/Firefox/Edge recommended)</li>
+        </ul>
+      `;
+      this.container.appendChild(errorDiv);
+      throw error;
+    }
+    
     this.renderer.setSize(this.width, this.height);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
@@ -58,7 +95,7 @@ export class MotosaiGame {
     this.container.appendChild(this.renderer.domElement);
     
     // Handle resize
-    window.addEventListener('resize', () => this.onResize());
+    window.addEventListener('resize', this.boundHandleResize);
   }
   
   initScene() {
@@ -113,9 +150,20 @@ export class MotosaiGame {
       2000
     );
     
-    // Camera positions - closer to bike for high speed
-    this.cameraOffset = new THREE.Vector3(0, 2, -4); // Moved closer from -6 to -4
-    this.cameraLookOffset = new THREE.Vector3(0, 1, 5); // Look closer too
+    // Camera mode
+    this.isFirstPerson = false;
+    
+    // Third person camera positions - closer to bike for high speed
+    this.thirdPersonOffset = new THREE.Vector3(0, 2, -4); // Moved closer from -6 to -4
+    this.thirdPersonLookOffset = new THREE.Vector3(0, 1, 5); // Look closer too
+    
+    // First person camera positions (rider POV)
+    this.firstPersonOffset = new THREE.Vector3(0, 0.9, 0.3); // Lower, more realistic rider height
+    this.firstPersonLookOffset = new THREE.Vector3(0, 0.6, 8); // Look ahead at road level
+    
+    // Current camera offsets (will switch between modes)
+    this.cameraOffset = this.thirdPersonOffset.clone();
+    this.cameraLookOffset = this.thirdPersonLookOffset.clone();
     
     // Smooth camera movement
     this.cameraPosition = new THREE.Vector3();
@@ -253,17 +301,18 @@ export class MotosaiGame {
   
   initBackgrounds() {
     try {
-      console.log('Creating BackgroundSystem with shader error fixed...');
+      console.log('[INIT] Creating BackgroundSystem...');
       this.backgrounds = new BackgroundSystem(this.scene, this.camera);
-      console.log('BackgroundSystem created successfully');
+      console.log('[INIT] BackgroundSystem created successfully');
       
-      // Test with initial location (Big Sur)
+      // Test with initial location (Big Sur) - this should trigger segment 0
+      console.log('[INIT] Setting initial location to segment 0...');
       this.backgrounds.updateLocation(0, {
         lat: 36.2704,
         lng: -121.8081,
         name: 'Big Sur California Coast'
       });
-      console.log('BackgroundSystem initial location set');
+      console.log('[INIT] Initial location set');
     } catch (error) {
       console.error('Error creating BackgroundSystem:', error);
       this.backgrounds = null; // Prevent crashes in render loop
@@ -275,11 +324,30 @@ export class MotosaiGame {
     this.traffic.spawn(20); // Start with 20 vehicles
   }
   
+  initSoftShaders() {
+    if (this.useSoftShaders) {
+      try {
+        this.softShaders = new SoftShaderSystem(this.renderer, this.scene, this.camera);
+        console.log('Soft shader system initialized');
+      } catch (error) {
+        console.error('Failed to initialize soft shaders:', error);
+        this.useSoftShaders = false;
+      }
+    }
+  }
+  
   initControls() {
     this.keys = {};
     
     // Keyboard controls
-    window.addEventListener('keydown', (e) => {
+    this.boundHandleKeyDown = (e) => {
+      // Toggle camera mode with spacebar (don't set keys[Space] to avoid brake interference)
+      if (e.code === 'Space') {
+        e.preventDefault(); // Prevent page scroll
+        this.toggleCameraMode();
+        return; // Don't process space as a regular key
+      }
+      
       this.keys[e.code] = true;
       
       // Gear shifting
@@ -290,10 +358,13 @@ export class MotosaiGame {
       } else if (e.code === 'KeyV') {
         // Toggle physics version
         this.togglePhysicsVersion();
+      } else if (e.code === 'KeyG') {
+        // Toggle soft shaders
+        this.toggleSoftShaders();
       }
-    });
+    };
     
-    window.addEventListener('keyup', (e) => {
+    this.boundHandleKeyUp = (e) => {
       this.keys[e.code] = false;
       
       if (e.code === 'KeyQ') {
@@ -301,7 +372,10 @@ export class MotosaiGame {
       } else if (e.code === 'KeyE') {
         this.physics.setControls({ gearUp: false });
       }
-    });
+    };
+    
+    window.addEventListener('keydown', this.boundHandleKeyDown);
+    window.addEventListener('keyup', this.boundHandleKeyUp);
     
     // Touch/mouse controls for mobile
     this.initTouchControls();
@@ -380,8 +454,8 @@ export class MotosaiGame {
       controls.throttle = 1;
     }
     
-    // Brakes
-    if (this.keys['KeyS'] || this.keys['ArrowDown'] || this.keys['Space']) {
+    // Brakes (removed Space since it's now camera toggle)
+    if (this.keys['KeyS'] || this.keys['ArrowDown']) {
       controls.brake = 1;
     }
     
@@ -414,11 +488,11 @@ export class MotosaiGame {
       rawInputs.throttle = 1;
     }
     
-    // Brakes
+    // Brakes (removed Space since it's now camera toggle, use Shift for front brake)
     if (this.keys['KeyS'] || this.keys['ArrowDown']) {
       rawInputs.frontBrake = 0.8;
       rawInputs.rearBrake = 0.5;
-    } else if (this.keys['Space']) {
+    } else if (this.keys['ShiftLeft'] || this.keys['ShiftRight']) {
       rawInputs.frontBrake = 1;
     }
     
@@ -449,13 +523,19 @@ export class MotosaiGame {
   updateCamera(deltaTime) {
     const state = this.physics.getState();
     
+    // Hide/show motorcycle based on camera mode
+    if (this.motorcycle) {
+      this.motorcycle.visible = !this.isFirstPerson;
+    }
+    
     // Calculate camera position based on bike
     const bikeMatrix = new THREE.Matrix4();
     bikeMatrix.makeRotationY(state.rotation.yaw);
     
-    // Apply lean to camera
+    // Apply lean to camera offset (but not as much as the bike itself in third person)
     const leanMatrix = new THREE.Matrix4();
-    leanMatrix.makeRotationZ(state.rotation.roll * 0.3); // Less lean for camera
+    const leanFactor = this.isFirstPerson ? 0.8 : 0.3; // More lean in first person for immersion
+    leanMatrix.makeRotationZ(state.rotation.roll * leanFactor);
     
     // Camera offset
     const offset = this.cameraOffset.clone();
@@ -519,6 +599,27 @@ export class MotosaiGame {
       this.cameraPosition.z
     );
     this.camera.lookAt(this.cameraTarget);
+    
+    // IMMERSIVE CAMERA TILT: Rotate the camera to match the rider's lean angle
+    // This simulates the rider's head tilting with the motorcycle
+    // We use a percentage of the actual lean angle for a more comfortable viewing experience
+    // More tilt in first person for full immersion
+    const cameraLeanFactor = this.isFirstPerson ? 0.9 : 0.7; // 90% in first person, 70% in third
+    const targetCameraRoll = state.rotation.roll * cameraLeanFactor;
+    
+    // Smooth the camera roll transition
+    if (!this.cameraRoll) this.cameraRoll = 0;
+    this.cameraRoll += (targetCameraRoll - this.cameraRoll) * 0.15; // Smooth transition
+    
+    // Apply the roll rotation to the camera
+    // Save the current up vector and rotation
+    const up = new THREE.Vector3(0, 1, 0);
+    const forward = new THREE.Vector3();
+    forward.subVectors(this.cameraTarget, this.camera.position).normalize();
+    
+    // Apply roll rotation around the forward axis
+    up.applyAxisAngle(forward, this.cameraRoll);
+    this.camera.up.copy(up);
   }
   
   updateHUD() {
@@ -535,6 +636,8 @@ export class MotosaiGame {
     
     // Update info display
     this.hud.innerHTML = `
+      Camera: ${this.isFirstPerson ? 'First Person' : 'Third Person'} (Space)<br>
+      Shaders: ${this.useSoftShaders ? 'Soft' : 'Standard'} (G)<br>
       Physics: ${physicsMode}<br>
       Gear: ${state.gear || 'N/A'}<br>
       RPM: ${state.rpm || 'N/A'}<br>
@@ -547,9 +650,51 @@ export class MotosaiGame {
     `;
   }
   
+  toggleCameraMode() {
+    this.isFirstPerson = !this.isFirstPerson;
+    
+    // Switch camera offsets
+    if (this.isFirstPerson) {
+      this.cameraOffset = this.firstPersonOffset.clone();
+      this.cameraLookOffset = this.firstPersonLookOffset.clone();
+      console.log('Switched to First Person view');
+    } else {
+      this.cameraOffset = this.thirdPersonOffset.clone();
+      this.cameraLookOffset = this.thirdPersonLookOffset.clone();
+      console.log('Switched to Third Person view');
+    }
+  }
+  
+  toggleSoftShaders() {
+    this.useSoftShaders = !this.useSoftShaders;
+    
+    if (this.useSoftShaders && !this.softShaders) {
+      this.initSoftShaders();
+    } else if (!this.useSoftShaders && this.softShaders) {
+      this.softShaders.dispose();
+      this.softShaders = null;
+      // Need to refresh materials
+      this.scene.traverse((object) => {
+        if (object.isMesh && object.material) {
+          object.material.needsUpdate = true;
+        }
+      });
+    }
+    
+    console.log('Soft shaders:', this.useSoftShaders ? 'ON' : 'OFF');
+  }
+  
   togglePhysicsVersion() {
     // Save current state
     const currentState = this.physics.getState();
+    
+    // Dispose old physics and input controller
+    if (this.physics && typeof this.physics.dispose === 'function') {
+      this.physics.dispose();
+    }
+    if (this.inputController && typeof this.inputController.dispose === 'function') {
+      this.inputController.dispose();
+    }
     
     // Cycle through physics versions: Simple -> V1 -> V2 -> Simple
     if (this.useSimplePhysics) {
@@ -577,7 +722,7 @@ export class MotosaiGame {
   }
   
   animate() {
-    requestAnimationFrame(() => this.animate());
+    this.animationId = requestAnimationFrame(() => this.animate());
     
     const currentTime = performance.now();
     const deltaTime = (currentTime - this.lastTime) / 1000;
@@ -658,8 +803,16 @@ export class MotosaiGame {
       if (this.backgrounds) {
         this.backgrounds.update(deltaTime, state.position);
         // Update location based on absolute position
-        const absoluteZ = state.position.z;
+        // this.distance is in feet, convert to meters
+        const absoluteZ = this.distance * 0.3048; // Convert feet to meters
         const location = this.highway.getLocationAtPosition(absoluteZ);
+        
+        // Debug: Log every 100 frames
+        if (!this.bgLogCounter) this.bgLogCounter = 0;
+        if (this.bgLogCounter++ % 100 === 0) {
+          console.log(`[DEBUG] Distance: ${(this.distance/5280).toFixed(2)}mi, absoluteZ: ${absoluteZ.toFixed(0)}m, location:`, location);
+        }
+        
         this.backgrounds.updateLocation(absoluteZ, location);
       }
       
@@ -709,8 +862,39 @@ export class MotosaiGame {
       this.distance += state.speed * deltaTime * 1.467; // mph to ft/s
     }
     
-    // Render
-    this.renderer.render(this.scene, this.camera);
+    // Render - wrapped to catch shader uniform errors
+    try {
+      if (this.useSoftShaders && this.softShaders) {
+        // Update materials for any new objects
+        this.softShaders.updateMaterials();
+        // Render with soft shader post-processing
+        this.softShaders.render(this.renderer, this.scene, this.camera);
+      } else {
+        // Standard render
+        this.renderer.render(this.scene, this.camera);
+      }
+    } catch (error) {
+      // Log the error once to avoid spamming console
+      if (!this.shaderErrorLogged) {
+        console.error('Shader uniform error during render:', error);
+        
+        // Log all objects with materials to find the problematic one
+        this.scene.traverse((object) => {
+          if (object.material) {
+            console.log('Object with material:', {
+              name: object.name || 'unnamed',
+              type: object.type,
+              materialType: object.material.type,
+              fog: object.material.fog,
+              transparent: object.material.transparent,
+              hasFogUniforms: object.material.uniforms?.fogColor ? true : false
+            });
+          }
+        });
+        
+        this.shaderErrorLogged = true;
+      }
+    }
   }
   
   onResize() {
@@ -721,6 +905,11 @@ export class MotosaiGame {
     this.camera.updateProjectionMatrix();
     
     this.renderer.setSize(this.width, this.height);
+    
+    // Resize soft shader system
+    if (this.softShaders) {
+      this.softShaders.resize(this.width, this.height);
+    }
   }
   
   start() {
@@ -736,6 +925,74 @@ export class MotosaiGame {
     this.physics.reset();
     this.score = 0;
     this.distance = 0;
-    this.traffic.reset();
+    if (this.traffic && typeof this.traffic.reset === 'function') {
+      this.traffic.reset();
+    }
+  }
+  
+  dispose() {
+    // Stop animation loop
+    if (this.animationId) {
+      cancelAnimationFrame(this.animationId);
+    }
+    
+    // Dispose of physics and input controller
+    if (this.physics && typeof this.physics.dispose === 'function') {
+      this.physics.dispose();
+    }
+    if (this.inputController && typeof this.inputController.dispose === 'function') {
+      this.inputController.dispose();
+    }
+    
+    // Dispose of game systems
+    if (this.traffic && typeof this.traffic.dispose === 'function') {
+      this.traffic.dispose();
+    }
+    if (this.highway && typeof this.highway.dispose === 'function') {
+      this.highway.dispose();
+    }
+    if (this.backgrounds) {
+      this.backgrounds.dispose();
+    }
+    if (this.softShaders) {
+      this.softShaders.dispose();
+    }
+    
+    // Dispose of renderer
+    if (this.renderer) {
+      this.renderer.dispose();
+      this.renderer.forceContextLoss();
+      this.renderer.domElement.remove();
+      this.renderer = null;
+    }
+    
+    // Clean up scene
+    if (this.scene) {
+      this.scene.traverse((object) => {
+        if (object.geometry) {
+          object.geometry.dispose();
+        }
+        if (object.material) {
+          if (Array.isArray(object.material)) {
+            object.material.forEach(mat => mat.dispose());
+          } else {
+            object.material.dispose();
+          }
+        }
+      });
+    }
+    
+    // Remove HUD elements
+    if (this.hud) {
+      this.hud.remove();
+    }
+    if (this.speedometer) {
+      this.speedometer.remove();
+    }
+    
+    // Remove event listeners
+    window.removeEventListener('resize', this.boundHandleResize);
+    window.removeEventListener('keydown', this.boundHandleKeyDown);
+    window.removeEventListener('keyup', this.boundHandleKeyUp);
   }
 }

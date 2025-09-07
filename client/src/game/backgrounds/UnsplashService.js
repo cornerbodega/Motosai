@@ -8,30 +8,35 @@ export class UnsplashService {
     this.accessKey = 'qFxcvfJy07a1t-xwRjHV4EzbQUgJJyWeM9-wyOBHf5w';
     this.baseUrl = 'https://api.unsplash.com';
     this.cache = new Map();
+    this.maxCacheSize = 10; // Limit cache to prevent memory buildup
     
     // For immediate testing without API key
     this.USE_MOCK_DATA = !this.accessKey || this.accessKey === 'YOUR_UNSPLASH_ACCESS_KEY';
   }
 
   async fetchPhotosForLocation(lat, lng, location_name = '') {
-    const cacheKey = `${lat.toFixed(2)},${lng.toFixed(2)}`;
+    // Don't cache by location - let BackgroundSystem handle caching by segment
+    // This ensures we get fresh photos for each segment
+    // const cacheKey = `${lat.toFixed(2)},${lng.toFixed(2)}`;
     
-    if (this.cache.has(cacheKey)) {
-      return this.cache.get(cacheKey);
-    }
+    // if (this.cache.has(cacheKey)) {
+    //   return this.cache.get(cacheKey);
+    // }
 
     // If no API key, return mock data for testing
     if (this.USE_MOCK_DATA) {
+      console.log('[Unsplash] Using MOCK data (no API key)');
       return this.getMockPhotos(lat, lng, location_name);
     }
 
     try {
       // Unsplash doesn't have GPS search, but we can search by location name
       const searchQuery = this.getSearchQuery(lat, lng, location_name);
-      console.log('Fetching Unsplash photos for:', searchQuery);
+      console.log('[Unsplash] Fetching photos for:', searchQuery);
+      console.log('[Unsplash] Using API key:', this.accessKey ? 'Yes' : 'No');
       
       const response = await fetch(
-        `${this.baseUrl}/search/photos?query=${searchQuery}&per_page=10&orientation=landscape`,
+        `${this.baseUrl}/search/photos?query=${searchQuery}&per_page=30&orientation=landscape`,
         {
           headers: {
             'Authorization': `Client-ID ${this.accessKey}`,
@@ -41,25 +46,37 @@ export class UnsplashService {
       );
 
       if (!response.ok) {
+        console.error(`[Unsplash] API error: ${response.status} ${response.statusText}`);
+        const errorText = await response.text();
+        console.error(`[Unsplash] Error details:`, errorText);
         throw new Error(`Unsplash API error: ${response.status}`);
       }
 
       const data = await response.json();
-      console.log('Unsplash API response:', data);
+      console.log('[Unsplash] API response: ', data.results?.length || 0, 'results');
       
-      // Validate and score photos
+      // Validate and score photos - get more variety
       const validPhotos = data.results
         .map(photo => this.processPhoto(photo))
         .filter(photo => photo !== null)
         .sort((a, b) => b.score - a.score)
-        .slice(0, 5);
+        .slice(0, 20);  // Get more photos for variety
 
-      console.log('Valid photos found:', validPhotos.length);
-      this.cache.set(cacheKey, validPhotos);
+      console.log('[Unsplash] Valid photos after filtering:', validPhotos.length);
+      
+      // Don't cache - let BackgroundSystem handle caching by segment
+      // // Limit cache size to prevent memory buildup
+      // if (this.cache.size >= this.maxCacheSize) {
+      //   // Remove oldest entry
+      //   const firstKey = this.cache.keys().next().value;
+      //   this.cache.delete(firstKey);
+      // }
+      // 
+      // this.cache.set(cacheKey, validPhotos);
       return validPhotos;
 
     } catch (error) {
-      console.error('Error fetching Unsplash photos:', error);
+      console.error('[Unsplash] API error, falling back to mock:', error.message);
       return this.getMockPhotos(lat, lng, location_name);
     }
   }
@@ -134,10 +151,15 @@ export class UnsplashService {
   }
 
   getMockPhotos(lat, lng, location_name) {
+    console.log(`[Unsplash] Generating mock gradients for lat:${lat}, lng:${lng}`);
     // Generate beautiful gradients based on latitude
     // This works without any API key!
     
     const latNorm = (lat - 32.7) / (47.6 - 32.7); // Normalize between SD and Seattle
+    
+    // Use lat/lng to generate more variety
+    const seed = Math.abs(Math.sin(lat * 100) * Math.cos(lng * 100));
+    const variant = Math.floor(seed * 10) % 5;
     
     // Different gradient styles based on location
     const gradients = [
@@ -203,18 +225,18 @@ export class UnsplashService {
       }
     ];
     
-    // Add some test image URLs (you can add actual images to public folder)
-    gradients.push({
-      id: 'test_photo_' + Date.now(),
-      url: '/test-images/coast-' + Math.floor(Math.random() * 3 + 1) + '.jpg',
-      type: 'photo',
-      width: 2400,
-      height: 800,
-      aspectRatio: 3,
-      author: 'Test Photo',
-      score: 30,
-      description: 'Test coastal photo'
-    });
+    // Don't add test photos that don't exist
+    // gradients.push({
+    //   id: 'test_photo_' + Date.now(),
+    //   url: '/test-images/coast-' + Math.floor(Math.random() * 3 + 1) + '.jpg',
+    //   type: 'photo',
+    //   width: 2400,
+    //   height: 800,
+    //   aspectRatio: 3,
+    //   author: 'Test Photo',
+    //   score: 30,
+    //   description: 'Test coastal photo'
+    // });
     
     return gradients;
   }

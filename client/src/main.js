@@ -101,13 +101,29 @@ testApiBtn.addEventListener('click', async () => {
 });
 
 // Latency check
+let latencyCheckInterval = null;
+
 function startLatencyCheck() {
-    setInterval(() => {
+    // Clear any existing interval
+    if (latencyCheckInterval) {
+        clearInterval(latencyCheckInterval);
+    }
+    
+    latencyCheckInterval = setInterval(() => {
         if (socket.connected) {
             socket.emit('ping', Date.now());
         }
     }, 5000);
 }
+
+// Clean up on page unload
+window.addEventListener('beforeunload', () => {
+    if (latencyCheckInterval) {
+        clearInterval(latencyCheckInterval);
+        latencyCheckInterval = null;
+    }
+    socket.disconnect();
+});
 
 // Allow Enter key to send hello
 nameInput.addEventListener('keypress', (e) => {

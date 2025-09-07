@@ -16,12 +16,13 @@ export class BackgroundSystem {
     // Current background elements
     this.horizonPlane = null;
     this.skyDome = null;
-    this.currentSegment = null;
+    this.currentSegment = -1;  // Start at -1 so segment 0 triggers
     this.nextSegment = null;
     
     // Transition state
     this.transitioning = false;
     this.transitionProgress = 0;
+    this.transitionAnimationId = null;  // Store animation frame ID
     
     // Cache
     this.backgroundCache = new Map();
@@ -91,7 +92,8 @@ export class BackgroundSystem {
     // This is now our main background holder
     this.horizonPlane = new THREE.Mesh(skyGeo, skyMat);
     this.horizonPlane.name = 'sky';
-    this.horizonPlane.renderOrder = -1;  // Render first (behind everything)
+    this.horizonPlane.renderOrder = -1000;  // Render first (behind everything)
+    this.horizonPlane.frustumCulled = false;  // Always render
     console.log('BackgroundSystem: Adding sky sphere to scene');
     this.scene.add(this.horizonPlane);
     console.log('BackgroundSystem: Sky sphere added. Total scene children:', this.scene.children.length);
@@ -102,12 +104,18 @@ export class BackgroundSystem {
   }
   
   async updateLocation(absolutePosition, location) {
-    // Calculate segment (every 50 miles to reduce API calls)
-    const segmentId = Math.floor(absolutePosition / 80467); // 50 miles in meters
+    // Calculate segment (every 1 mile for more frequent changes)
+    const segmentId = Math.floor(absolutePosition / 1609.34); // 1 mile in meters
+    
+    // Debug logging
+    const milesTravel = (absolutePosition / 1609.34).toFixed(2);
     
     if (segmentId !== this.currentSegment) {
+      console.log(`[BG] Segment change! Miles: ${milesTravel}, New segment: ${segmentId}, Location:`, location);
       this.currentSegment = segmentId;
-      await this.loadBackgroundForSegment(segmentId, location);
+      
+      // SIMPLIFIED: Just load a new background, no complex caching
+      await this.loadNewBackground(segmentId, location);
     }
     
     // Update sphere position to follow player
@@ -120,65 +128,62 @@ export class BackgroundSystem {
     }
   }
   
-  async loadBackgroundForSegment(segmentId, location) {
-    const cacheKey = `segment_${segmentId}`;
-    
-    // Limit cache size to prevent memory issues
-    if (this.backgroundCache.size > 5) {
-      const firstKey = this.backgroundCache.keys().next().value;
-      this.backgroundCache.delete(firstKey);
-    }
-    
-    // Check cache
-    if (this.backgroundCache.has(cacheKey)) {
-      this.applyBackground(this.backgroundCache.get(cacheKey));
-      return;
-    }
-    
-    console.log('Loading background for segment:', segmentId, location);
-    
-    // First check if we have a cached image in browser storage
-    const cachedImage = await this.cacheManager.getCachedImage(segmentId);
-    if (cachedImage) {
-      console.log('Using cached image from browser storage for segment:', segmentId);
-      await this.loadPhotoBackground(cachedImage);
-      this.backgroundCache.set(cacheKey, { url: cachedImage, type: 'photo' });
-      return;
-    }
-    
-    // Fetch new background from API
-    const photos = await this.photoService.fetchPhotosForLocation(
-      location.lat,
-      location.lng,
-      location.name
-    );
-    
-    if (photos && photos.length > 0) {
-      const photo = photos[0];
-      console.log('Using photo:', photo);
+  async loadNewBackground(segmentId, location) {
+    try {
+      // SIMPLIFIED: Always fetch fresh from API, no caching issues
+      console.log(`[BG] Loading background for segment ${segmentId}`);
+      console.log(`[BG] Location: lat=${location.lat.toFixed(3)}, lng=${location.lng.toFixed(3)}, name=${location.name}`);
       
-      if (photo.type === 'gradient') {
-        // Apply gradient
-        this.applyGradientBackground(photo.gradient);
-        this.backgroundCache.set(cacheKey, photo);
-      } else if (photo.url) {
-        // Load and apply photo
-        await this.loadPhotoBackground(photo.url);
+      // Fetch from API
+      const photos = await this.photoService.fetchPhotosForLocation(
+        location.lat,
+        location.lng,
+        location.name
+      );
+      
+      console.log(`[BG] API returned ${photos ? photos.length : 0} photos`);
+      
+      if (photos && photos.length > 0) {
+        // Pick a photo based on segment ID to get variety
+        const photoIndex = segmentId % photos.length;
+        const photo = photos[photoIndex];
+        console.log(`[BG] Using photo ${photoIndex + 1} of ${photos.length}`);
         
-        // Save to permanent cache for next time
-        const cachedDataUrl = await this.cacheManager.downloadAndSaveImage(segmentId, photo.url);
-        if (cachedDataUrl) {
-          console.log('Saved image to permanent cache for segment:', segmentId);
+        if (photo.type === 'gradient') {
+          console.log('[BG] Applying gradient background');
+          this.applyGradientBackground(photo.gradient);
+        } else if (photo.url) {
+          console.log('[BG] Loading photo from URL');
+          await this.loadPhotoBackground(photo.url);
         }
-        
-        this.backgroundCache.set(cacheKey, photo);
+      } else {
+        console.log('[BG] No photos returned, using default gradient');
+        // Fallback gradient
+        this.applyGradientBackground({
+          stops: [
+            { color: '#87CEEB', position: 0 },
+            { color: '#98D8F8', position: 0.5 },
+            { color: '#4682B4', position: 1 }
+          ]
+        });
       }
-    } else {
-      console.log('No photos found for segment');
+    } catch (error) {
+      console.error('[BG] Error loading background:', error);
+      // Apply fallback gradient on error
+      this.applyGradientBackground({
+        stops: [
+          { color: '#FFB6C1', position: 0 },
+          { color: '#FFA07A', position: 0.5 },
+          { color: '#FF6347', position: 1 }
+        ]
+      });
     }
   }
   
   applyGradientBackground(gradient) {
+    // Store old texture to dispose after new one is applied
+    const oldTexture = this.horizonPlane.material.map;
+    
     // Create gradient texture
     const canvas = document.createElement('canvas');
     canvas.width = 512;
@@ -200,15 +205,17 @@ export class BackgroundSystem {
     this.horizonPlane.material.map = texture;
     this.horizonPlane.material.color.set(0xffffff);
     this.horizonPlane.material.needsUpdate = true;
+    
+    // Now dispose the old texture if it existed
+    if (oldTexture && oldTexture !== texture) {
+      oldTexture.dispose();
+    }
   }
   
   async loadPhotoBackground(url) {
     return new Promise((resolve, reject) => {
-      // Dispose of old texture if exists
-      if (this.horizonPlane.material.map) {
-        this.horizonPlane.material.map.dispose();
-        this.horizonPlane.material.map = null;
-      }
+      // Store old texture to dispose after new one loads
+      const oldTexture = this.horizonPlane.material.map;
       
       const loader = new THREE.TextureLoader();
       loader.load(
@@ -223,6 +230,11 @@ export class BackgroundSystem {
           this.horizonPlane.material.map = texture;
           this.horizonPlane.material.color.set(0xffffff);
           this.horizonPlane.material.needsUpdate = true;
+          
+          // Now dispose the old texture if it existed
+          if (oldTexture && oldTexture !== texture) {
+            oldTexture.dispose();
+          }
           
           // Don't scale - keep the massive size to prevent seeing edges
           // const aspect = texture.image.width / texture.image.height;
@@ -249,7 +261,13 @@ export class BackgroundSystem {
   
   // Smooth transition between backgrounds
   async transitionToBackground(newBackground, duration = 2000) {
-    if (this.transitioning) return;
+    if (this.transitioning) {
+      // Cancel previous transition if still running
+      if (this.transitionAnimationId) {
+        cancelAnimationFrame(this.transitionAnimationId);
+        this.transitionAnimationId = null;
+      }
+    }
     
     this.transitioning = true;
     this.transitionProgress = 0;
@@ -275,7 +293,7 @@ export class BackgroundSystem {
       this.horizonPlane.material.opacity = 1 - progress;
       
       if (progress < 1) {
-        requestAnimationFrame(animate);
+        this.transitionAnimationId = requestAnimationFrame(animate);
       } else {
         // Swap planes
         const temp = this.horizonPlane;
@@ -287,6 +305,7 @@ export class BackgroundSystem {
         this.horizonPlane.material.transparent = false;
         
         this.transitioning = false;
+        this.transitionAnimationId = null;
       }
     };
     
@@ -305,24 +324,62 @@ export class BackgroundSystem {
   }
   
   dispose() {
+    // Cancel any ongoing transition animation
+    if (this.transitionAnimationId) {
+      cancelAnimationFrame(this.transitionAnimationId);
+      this.transitionAnimationId = null;
+    }
+    
+    // Dispose of horizon plane
     if (this.horizonPlane) {
+      if (this.horizonPlane.material.map) {
+        this.horizonPlane.material.map.dispose();
+      }
       this.horizonPlane.geometry.dispose();
       this.horizonPlane.material.dispose();
       this.scene.remove(this.horizonPlane);
     }
     
+    // Dispose of next horizon plane
     if (this.nextHorizonPlane) {
+      if (this.nextHorizonPlane.material.map) {
+        this.nextHorizonPlane.material.map.dispose();
+      }
       this.nextHorizonPlane.geometry.dispose();
       this.nextHorizonPlane.material.dispose();
       this.scene.remove(this.nextHorizonPlane);
     }
     
-    if (this.skyDome) {
+    // Dispose of sky dome (if different from horizonPlane)
+    if (this.skyDome && this.skyDome !== this.horizonPlane) {
+      if (this.skyDome.material.map) {
+        this.skyDome.material.map.dispose();
+      }
       this.skyDome.geometry.dispose();
       this.skyDome.material.dispose();
       this.scene.remove(this.skyDome);
     }
     
+    // Clear cache and dispose of any cached textures
+    this.backgroundCache.forEach((value) => {
+      if (value.texture && typeof value.texture.dispose === 'function') {
+        value.texture.dispose();
+      }
+    });
     this.backgroundCache.clear();
+    
+    // Dispose of services
+    if (this.photoService && typeof this.photoService.dispose === 'function') {
+      this.photoService.dispose();
+    }
+    if (this.cacheManager && typeof this.cacheManager.dispose === 'function') {
+      this.cacheManager.dispose();
+    }
+    
+    // Clear references
+    this.scene = null;
+    this.camera = null;
+    this.photoService = null;
+    this.cacheManager = null;
   }
 }

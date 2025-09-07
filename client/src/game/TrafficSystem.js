@@ -136,7 +136,7 @@ export class TrafficSystem {
   createVehicleMesh(type) {
     const vehicle = new THREE.Group();
     
-    // Random color
+    // Random color - reuse existing materials instead of creating new ones
     const bodyMat = this.vehicleMaterials.car[
       Math.floor(Math.random() * this.vehicleMaterials.car.length)
     ];
@@ -254,7 +254,13 @@ export class TrafficSystem {
       const distance = Math.abs(vehicle.position.z - playerPosition.z);
       if (distance > this.spawnDistance * 1.5) { // Reduced from 2x to 1.5x for better memory usage
         this.scene.remove(vehicle.mesh);
-        vehicle.mesh.geometry?.dispose(); // Clean up geometry
+        // Properly dispose of all geometries and materials in the group
+        vehicle.mesh.traverse((object) => {
+          if (object.geometry) {
+            object.geometry.dispose();
+          }
+          // Don't dispose shared materials - they're reused
+        });
         return false;
       }
       return true;
@@ -306,15 +312,29 @@ export class TrafficSystem {
     // Update mesh position
     vehicle.mesh.position.copy(vehicle.position);
     
-    // Update brake lights
-    if (vehicle.isBraking && vehicle.mesh.userData.brake1) {
-      vehicle.mesh.userData.brake1.material.emissive = new THREE.Color(0xff0000);
-      vehicle.mesh.userData.brake2.material.emissive = new THREE.Color(0xff0000);
-      vehicle.mesh.userData.brake1.material.emissiveIntensity = 1;
-      vehicle.mesh.userData.brake2.material.emissiveIntensity = 1;
-    } else if (vehicle.mesh.userData.brake1) {
-      vehicle.mesh.userData.brake1.material.emissive = new THREE.Color(0x000000);
-      vehicle.mesh.userData.brake2.material.emissive = new THREE.Color(0x000000);
+    // Update brake lights - check if emissive exists first
+    if (vehicle.mesh.userData.brake1 && vehicle.mesh.userData.brake1.material) {
+      const brake1Mat = vehicle.mesh.userData.brake1.material;
+      const brake2Mat = vehicle.mesh.userData.brake2.material;
+      
+      if (vehicle.isBraking) {
+        // Check if material has color property (standard material) or uniforms (shader material)
+        if (brake1Mat.color && brake1Mat.color.setHex) {
+          brake1Mat.color.setHex(0xff0000);
+          brake2Mat.color.setHex(0xff0000);
+        } else if (brake1Mat.uniforms && brake1Mat.uniforms.diffuse) {
+          brake1Mat.uniforms.diffuse.value.setHex(0xff0000);
+          brake2Mat.uniforms.diffuse.value.setHex(0xff0000);
+        }
+      } else {
+        if (brake1Mat.color && brake1Mat.color.setHex) {
+          brake1Mat.color.setHex(0x660000);
+          brake2Mat.color.setHex(0x660000);
+        } else if (brake1Mat.uniforms && brake1Mat.uniforms.diffuse) {
+          brake1Mat.uniforms.diffuse.value.setHex(0x660000);
+          brake2Mat.uniforms.diffuse.value.setHex(0x660000);
+        }
+      }
     }
   }
   
@@ -496,5 +516,34 @@ export class TrafficSystem {
     
     // Spawn initial traffic
     this.spawn(20);
+  }
+  
+  dispose() {
+    // Remove all vehicles from scene
+    this.vehicles.forEach(vehicle => {
+      if (vehicle.mesh) {
+        // Dispose of geometry and materials
+        if (vehicle.mesh.geometry) {
+          vehicle.mesh.geometry.dispose();
+        }
+        if (vehicle.mesh.material) {
+          if (Array.isArray(vehicle.mesh.material)) {
+            vehicle.mesh.material.forEach(mat => mat.dispose());
+          } else {
+            vehicle.mesh.material.dispose();
+          }
+        }
+        // Remove from scene
+        this.scene.remove(vehicle.mesh);
+      }
+    });
+    
+    // Clear vehicles array
+    this.vehicles = [];
+    
+    // Clear references
+    this.scene = null;
+    this.highway = null;
+    this.camera = null;
   }
 }
