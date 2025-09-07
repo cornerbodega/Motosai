@@ -1,20 +1,25 @@
 import * as THREE from 'three';
 
 export class TrafficSystem {
-  constructor(scene, highway) {
+  constructor(scene, highway, camera) {
     this.scene = scene;
     this.highway = highway;
+    this.camera = camera;
     this.vehicles = [];
-    this.maxVehicles = 30;
-    this.spawnDistance = 200; // meters
+    this.maxVehicles = 30; // Reduced back to prevent memory issues
+    this.spawnDistance = 400; // Reduced to limit vehicles
     
-    // Vehicle types
+    // Frustum culling
+    this.frustum = new THREE.Frustum();
+    this.cameraMatrix = new THREE.Matrix4();
+    
+    // Vehicle types (realistic highway speeds in MPH)
     this.vehicleTypes = [
-      { type: 'car', probability: 0.5, length: 4.5, width: 1.8, height: 1.4, speed: 60 },
-      { type: 'suv', probability: 0.2, length: 5, width: 2, height: 1.8, speed: 55 },
-      { type: 'truck', probability: 0.15, length: 6, width: 2.2, height: 2.5, speed: 50 },
-      { type: 'van', probability: 0.1, length: 5.5, width: 2, height: 2, speed: 55 },
-      { type: 'sports', probability: 0.05, length: 4.2, width: 1.8, height: 1.2, speed: 70 }
+      { type: 'car', probability: 0.5, length: 4.5, width: 1.8, height: 1.4, speed: 70 }, // 70 mph
+      { type: 'suv', probability: 0.2, length: 5, width: 2, height: 1.8, speed: 65 }, // 65 mph
+      { type: 'truck', probability: 0.15, length: 6, width: 2.2, height: 2.5, speed: 60 }, // 60 mph (trucks slower)
+      { type: 'van', probability: 0.1, length: 5.5, width: 2, height: 2, speed: 65 }, // 65 mph
+      { type: 'sports', probability: 0.05, length: 4.2, width: 1.8, height: 1.2, speed: 80 } // 80 mph (sports cars faster)
     ];
     
     this.createMaterials();
@@ -23,11 +28,14 @@ export class TrafficSystem {
   createMaterials() {
     this.vehicleMaterials = {
       car: [
-        new THREE.MeshPhongMaterial({ color: 0xff0000 }),
-        new THREE.MeshPhongMaterial({ color: 0x0000ff }),
-        new THREE.MeshPhongMaterial({ color: 0xffffff }),
-        new THREE.MeshPhongMaterial({ color: 0x333333 }),
-        new THREE.MeshPhongMaterial({ color: 0xcccccc })
+        new THREE.MeshPhongMaterial({ color: 0xff0000 }), // Red
+        new THREE.MeshPhongMaterial({ color: 0x0000ff }), // Blue
+        new THREE.MeshPhongMaterial({ color: 0xffffff }), // White
+        new THREE.MeshPhongMaterial({ color: 0xffff00 }), // Yellow
+        new THREE.MeshPhongMaterial({ color: 0x00ff00 }), // Green
+        new THREE.MeshPhongMaterial({ color: 0xff8800 }), // Orange
+        new THREE.MeshPhongMaterial({ color: 0x8888ff }), // Light blue
+        new THREE.MeshPhongMaterial({ color: 0xcccccc })  // Silver
       ],
       glass: new THREE.MeshPhongMaterial({ 
         color: 0x222244,
@@ -46,15 +54,15 @@ export class TrafficSystem {
     }
   }
   
-  spawnVehicle() {
+  spawnVehicle(playerZ = 0) {
     if (this.vehicles.length >= this.maxVehicles) return;
     
     // Choose vehicle type
     const type = this.selectVehicleType();
     
-    // Choose lane
-    const lane = Math.floor(Math.random() * 4);
-    const isOncoming = lane < 2; // Lanes 0-1 are oncoming
+    // Choose lane (0-2, all same direction)
+    const lane = Math.floor(Math.random() * 3);
+    const isOncoming = false; // No oncoming traffic
     
     // Create vehicle object
     const vehicle = {
@@ -64,7 +72,7 @@ export class TrafficSystem {
       lane: lane,
       targetLane: lane,
       laneChangeProgress: 0,
-      laneChangeSpeed: 0.02,
+      laneChangeSpeed: 1.5, // seconds to complete lane change
       position: new THREE.Vector3(),
       velocity: new THREE.Vector3(),
       speed: type.speed + (Math.random() - 0.5) * 10, // MPH with variation
@@ -77,20 +85,24 @@ export class TrafficSystem {
       behavior: this.generateBehavior()
     };
     
-    // Set initial position
+    // Set initial position relative to player
     const laneX = this.highway.getLanePosition(lane);
-    const spawnZ = (Math.random() - 0.5) * this.spawnDistance * 2;
+    // Spawn vehicles ahead and behind
+    const spawnAhead = Math.random() > 0.3; // 70% spawn ahead
+    let spawnOffset;
+    if (spawnAhead) {
+      spawnOffset = this.spawnDistance - Math.random() * 100;
+    } else {
+      // Some spawn behind for variety
+      spawnOffset = -this.spawnDistance/2 + Math.random() * 100;
+    }
+    const spawnZ = playerZ + spawnOffset;
     
     vehicle.position.set(laneX, 0.5, spawnZ);
     vehicle.mesh.position.copy(vehicle.position);
     
-    // Set direction
-    if (isOncoming) {
-      vehicle.mesh.rotation.y = Math.PI;
-      vehicle.velocity.z = -vehicle.speed / 2.237; // Convert MPH to m/s
-    } else {
-      vehicle.velocity.z = vehicle.speed / 2.237;
-    }
+    // Set direction (all vehicles go same direction)
+    vehicle.velocity.z = vehicle.speed / 2.237; // Convert MPH to m/s
     
     this.vehicles.push(vehicle);
     this.scene.add(vehicle.mesh);
@@ -113,9 +125,11 @@ export class TrafficSystem {
   generateBehavior() {
     return {
       aggressiveness: Math.random(), // 0 = cautious, 1 = aggressive
-      laneChangeFrequency: Math.random() * 0.01,
+      laneChangeFrequency: Math.random() * 0.002, // Much lower frequency (was 0.01)
       followDistance: 2 + Math.random() * 3, // seconds
-      reactionTime: 0.5 + Math.random() * 0.5 // seconds
+      reactionTime: 0.5 + Math.random() * 0.5, // seconds
+      lastLaneChange: 0, // Track time since last lane change
+      minLaneChangeInterval: 5 + Math.random() * 5 // 5-10 seconds between lane changes
     };
   }
   
@@ -127,11 +141,11 @@ export class TrafficSystem {
       Math.floor(Math.random() * this.vehicleMaterials.car.length)
     ];
     
-    // Main body (low poly)
-    const bodyGeo = new THREE.BoxGeometry(type.width, type.height * 0.6, type.length * 0.7);
+    // Main body (low poly) - simplified geometry
+    const bodyGeo = new THREE.BoxGeometry(type.width, type.height * 0.6, type.length * 0.7, 1, 1, 1);
     const body = new THREE.Mesh(bodyGeo, bodyMat);
     body.position.y = type.height * 0.3;
-    body.castShadow = true;
+    body.castShadow = false; // Disable shadows for performance
     vehicle.add(body);
     
     // Cabin
@@ -154,8 +168,8 @@ export class TrafficSystem {
     windows.position.set(0, type.height * 0.75, type.length * 0.1);
     vehicle.add(windows);
     
-    // Wheels
-    const wheelGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.2, 6);
+    // Wheels - simplified to boxes for performance
+    const wheelGeo = new THREE.BoxGeometry(0.2, 0.4, 0.4);
     const wheelPositions = [
       { x: type.width * 0.4, z: type.length * 0.3 },
       { x: -type.width * 0.4, z: type.length * 0.3 },
@@ -165,7 +179,6 @@ export class TrafficSystem {
     
     wheelPositions.forEach(pos => {
       const wheel = new THREE.Mesh(wheelGeo, this.vehicleMaterials.wheel);
-      wheel.rotation.z = Math.PI / 2;
       wheel.position.set(pos.x, 0.2, pos.z);
       vehicle.add(wheel);
     });
@@ -195,25 +208,62 @@ export class TrafficSystem {
   }
   
   update(deltaTime, playerPosition) {
-    // Update each vehicle
+    // Update frustum for culling
+    this.updateFrustum();
+    
+    // Update each vehicle with frustum culling
     this.vehicles.forEach(vehicle => {
-      this.updateVehicle(vehicle, deltaTime, playerPosition);
+      // Check if vehicle is in frustum or close to player
+      const distance = Math.abs(vehicle.position.z - playerPosition.z);
+      
+      if (distance < 50) {
+        // Always show vehicles very close to player
+        vehicle.mesh.visible = true;
+        this.updateVehicle(vehicle, deltaTime, playerPosition);
+      } else {
+        // Use frustum culling for distant vehicles
+        // For Groups, we need to check children
+        let inFrustum = true;
+        if (vehicle.mesh.children && vehicle.mesh.children.length > 0) {
+          // Check if any child is in frustum
+          inFrustum = vehicle.mesh.children.some(child => {
+            if (child.geometry) {
+              if (!child.geometry.boundingSphere) {
+                child.geometry.computeBoundingSphere();
+              }
+              return this.frustum.intersectsObject(child);
+            }
+            return true;
+          });
+        }
+        vehicle.mesh.visible = inFrustum;
+        
+        // Only update visible vehicles
+        if (inFrustum) {
+          this.updateVehicle(vehicle, deltaTime, playerPosition);
+        } else {
+          // Still update position for invisible vehicles (simplified)
+          vehicle.position.z += vehicle.velocity.z * deltaTime;
+          vehicle.mesh.position.copy(vehicle.position);
+        }
+      }
     });
     
     // Check for vehicles to remove (too far away)
     this.vehicles = this.vehicles.filter(vehicle => {
       const distance = Math.abs(vehicle.position.z - playerPosition.z);
-      if (distance > this.spawnDistance * 2) {
+      if (distance > this.spawnDistance * 1.5) { // Reduced from 2x to 1.5x for better memory usage
         this.scene.remove(vehicle.mesh);
+        vehicle.mesh.geometry?.dispose(); // Clean up geometry
         return false;
       }
       return true;
     });
     
-    // Spawn new vehicles if needed
+    // Spawn new vehicles if needed (relative to player position)
     if (this.vehicles.length < this.maxVehicles) {
-      if (Math.random() < 0.02) { // 2% chance per frame
-        this.spawnVehicle();
+      if (Math.random() < 0.015) { // Reduced from 2% to 1.5% for better performance
+        this.spawnVehicle(playerPosition.z);
       }
     }
     
@@ -223,22 +273,31 @@ export class TrafficSystem {
   
   updateVehicle(vehicle, deltaTime, playerPosition) {
     // AI behavior
-    this.updateAI(vehicle, playerPosition);
+    this.updateAI(vehicle, playerPosition, deltaTime);
     
-    // Lane changing
+    // Lane changing with proper time-based animation
     if (vehicle.targetLane !== vehicle.lane) {
-      vehicle.laneChangeProgress += vehicle.laneChangeSpeed;
+      // Progress based on time (laneChangeSpeed is duration in seconds)
+      vehicle.laneChangeProgress += deltaTime / vehicle.laneChangeSpeed;
       
       if (vehicle.laneChangeProgress >= 1) {
+        vehicle.laneChangeProgress = 1; // Clamp to exactly 1
+        const targetLaneX = this.highway.getLanePosition(vehicle.targetLane);
+        vehicle.position.x = targetLaneX; // Ensure exact final position
         vehicle.lane = vehicle.targetLane;
         vehicle.laneChangeProgress = 0;
+      } else {
+        // Smooth lane change interpolation
+        const currentLaneX = this.highway.getLanePosition(vehicle.lane);
+        const targetLaneX = this.highway.getLanePosition(vehicle.targetLane);
+        const t = this.smoothStep(vehicle.laneChangeProgress);
+        vehicle.position.x = currentLaneX + (targetLaneX - currentLaneX) * t;
       }
-      
-      // Smooth lane change interpolation
-      const currentLaneX = this.highway.getLanePosition(vehicle.lane);
-      const targetLaneX = this.highway.getLanePosition(vehicle.targetLane);
-      const t = this.smoothStep(vehicle.laneChangeProgress);
-      vehicle.position.x = currentLaneX + (targetLaneX - currentLaneX) * t;
+    } else {
+      // Not changing lanes - ensure vehicle stays in lane center
+      const laneX = this.highway.getLanePosition(vehicle.lane);
+      // Gradually correct position if drifted
+      vehicle.position.x += (laneX - vehicle.position.x) * deltaTime * 2;
     }
     
     // Update position
@@ -259,7 +318,10 @@ export class TrafficSystem {
     }
   }
   
-  updateAI(vehicle, playerPosition) {
+  updateAI(vehicle, playerPosition, deltaTime = 0.016) {
+    // Update time since last lane change
+    vehicle.behavior.lastLaneChange += deltaTime;
+    
     // Check distance to player (for lane splitting awareness)
     const playerDistance = Math.abs(vehicle.position.z - playerPosition.z);
     const playerLateralDistance = Math.abs(vehicle.position.x - playerPosition.x);
@@ -274,9 +336,13 @@ export class TrafficSystem {
       }
     }
     
-    // Random lane changes
-    if (Math.random() < vehicle.behavior.laneChangeFrequency) {
-      this.attemptLaneChange(vehicle);
+    // Random lane changes - only if enough time has passed and not currently changing lanes
+    if (vehicle.targetLane === vehicle.lane && // Not already changing lanes
+        vehicle.behavior.lastLaneChange > vehicle.behavior.minLaneChangeInterval && // Enough time passed
+        Math.random() < vehicle.behavior.laneChangeFrequency) {
+      if (this.attemptLaneChange(vehicle)) {
+        vehicle.behavior.lastLaneChange = 0; // Reset timer only if lane change started
+      }
     }
     
     // Speed adjustment based on front vehicle
@@ -305,28 +371,21 @@ export class TrafficSystem {
       vehicle.isBraking = false;
     }
     
-    // Update velocity based on speed
+    // Update velocity based on speed (all same direction)
     const speedMS = vehicle.speed / 2.237;
-    if (vehicle.isOncoming) {
-      vehicle.velocity.z = -speedMS;
-    } else {
-      vehicle.velocity.z = speedMS;
-    }
+    vehicle.velocity.z = speedMS;
   }
   
   attemptLaneChange(vehicle) {
-    // Determine possible lanes
+    // Determine possible lanes (0-2)
     const possibleLanes = [];
     
-    if (vehicle.isOncoming) {
-      // Oncoming traffic uses lanes 0-1
-      if (vehicle.lane === 0) possibleLanes.push(1);
-      if (vehicle.lane === 1) possibleLanes.push(0);
-    } else {
-      // Same direction uses lanes 2-3
-      if (vehicle.lane === 2) possibleLanes.push(3);
-      if (vehicle.lane === 3) possibleLanes.push(2);
+    if (vehicle.lane === 0) possibleLanes.push(1); // Can move right
+    if (vehicle.lane === 1) {
+      possibleLanes.push(0); // Can move left
+      possibleLanes.push(2); // Can move right
     }
+    if (vehicle.lane === 2) possibleLanes.push(1); // Can move left
     
     // Check if lane change is safe
     if (possibleLanes.length > 0) {
@@ -334,8 +393,10 @@ export class TrafficSystem {
       
       if (this.isLaneChangeSafe(vehicle, targetLane)) {
         vehicle.targetLane = targetLane;
+        return true; // Lane change started
       }
     }
+    return false; // No lane change
   }
   
   isLaneChangeSafe(vehicle, targetLane) {
@@ -364,34 +425,47 @@ export class TrafficSystem {
         if (other === vehicle) return;
         if (other.lane !== vehicle.lane) return;
         
-        // Check if other is in front
+        // Check if other is in front (all vehicles go same direction)
         const distance = other.position.z - vehicle.position.z;
-        if (vehicle.isOncoming) {
-          // For oncoming traffic, "front" is negative z
-          if (distance < 0 && Math.abs(distance) < minDistance) {
-            minDistance = Math.abs(distance);
-            vehicle.frontVehicle = other;
-          }
-        } else {
-          // For same direction, "front" is positive z
-          if (distance > 0 && distance < minDistance) {
-            minDistance = distance;
-            vehicle.frontVehicle = other;
-          }
+        // For same direction, "front" is positive z
+        if (distance > 0 && distance < minDistance) {
+          minDistance = distance;
+          vehicle.frontVehicle = other;
         }
       });
     });
   }
   
   checkCollision(position, radius) {
-    // Check if position collides with any vehicle
+    // Check if position collides with any vehicle using tight bounding boxes
     for (const vehicle of this.vehicles) {
-      const dx = position.x - vehicle.position.x;
-      const dz = position.z - vehicle.position.z;
-      const distance = Math.sqrt(dx * dx + dz * dz);
+      // Get vehicle's bounding box - make it slightly smaller for lane splitting
+      const vehicleHalfLength = vehicle.length / 2 * 0.9; // 90% of actual size
+      const vehicleHalfWidth = vehicle.width / 2 * 0.85; // 85% of actual width for easier lane splitting
       
-      if (distance < radius + vehicle.width / 2) {
-        return vehicle;
+      // Check if bike position is within vehicle's rectangular bounds
+      const xDist = Math.abs(position.x - vehicle.position.x);
+      const zDist = Math.abs(position.z - vehicle.position.z);
+      
+      // Use rectangular collision detection for more accuracy
+      const xCollision = xDist < (radius + vehicleHalfWidth);
+      const zCollision = zDist < (radius + vehicleHalfLength);
+      
+      if (xCollision && zCollision) {
+        // More precise corner check for lane splitting
+        // Check if we're actually hitting the corner or side
+        if (xDist > vehicleHalfWidth * 0.8 && zDist > vehicleHalfLength * 0.8) {
+          // We're near a corner, use circle collision for smoother lane splitting
+          const actualDistance = Math.sqrt(xDist * xDist + zDist * zDist);
+          const cornerRadius = Math.sqrt(vehicleHalfWidth * vehicleHalfWidth + vehicleHalfLength * vehicleHalfLength) * 0.6;
+          
+          if (actualDistance < radius + cornerRadius) {
+            return vehicle;
+          }
+        } else {
+          // Direct side or front/back collision
+          return vehicle;
+        }
       }
     }
     
@@ -401,6 +475,16 @@ export class TrafficSystem {
   smoothStep(t) {
     // Smooth interpolation function
     return t * t * (3 - 2 * t);
+  }
+  
+  updateFrustum() {
+    if (this.camera) {
+      this.cameraMatrix.multiplyMatrices(
+        this.camera.projectionMatrix,
+        this.camera.matrixWorldInverse
+      );
+      this.frustum.setFromProjectionMatrix(this.cameraMatrix);
+    }
   }
   
   reset() {

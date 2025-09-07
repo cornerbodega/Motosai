@@ -1,7 +1,7 @@
-# Motosai - Highway 101 Motorcycle Simulator
+# Motosai - Interstate 5 Motorcycle Simulator
 
 ## Game Concept
-A realistic motorcycle riding simulator featuring the entire Highway 101 from San Francisco to San Diego (~500 miles). Players experience authentic motorcycle physics while navigating through California traffic.
+A realistic motorcycle riding simulator featuring the entire Interstate 5 corridor from Seattle to San Diego (~1,380 miles). Players experience authentic motorcycle physics while navigating through West Coast traffic across three states.
 
 ## Core Features
 

@@ -259,7 +259,7 @@ export class MotorcyclePhysics {
     if (Math.abs(leanAngle) > 0.01 && speed > 1) {
       const turnRadius = speed ** 2 / (this.gravity * Math.tan(Math.abs(leanAngle)));
       const centripetalForce = this.mass * speed ** 2 / turnRadius;
-      return centripetalForce * Math.sign(leanAngle);
+      return -centripetalForce * Math.sign(leanAngle);  // Negative for correct direction
     }
     
     return 0;

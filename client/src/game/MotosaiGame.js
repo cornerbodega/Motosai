@@ -1,5 +1,8 @@
 import * as THREE from 'three';
+import { SimpleBikePhysics } from '../physics/SimpleBikePhysics.js';
 import { MotorcyclePhysics } from '../physics/MotorcyclePhysics.js';
+import { MotorcyclePhysicsV2 } from '../physics/MotorcyclePhysicsV2.js';
+import { InputController } from '../physics/InputController.js';
 import { Highway101 } from './Highway101.js';
 import { TrafficSystem } from './TrafficSystem.js';
 
@@ -14,6 +17,13 @@ export class MotosaiGame {
     this.isPaused = false;
     this.score = 0;
     this.distance = 0; // miles traveled
+    
+    // Collision effects
+    this.screenShake = {
+      intensity: 0,
+      duration: 0,
+      offset: { x: 0, y: 0 }
+    };
     
     // Initialize components
     this.initRenderer();
@@ -50,10 +60,10 @@ export class MotosaiGame {
   
   initScene() {
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.Fog(0x87CEEB, 100, 1000);
+    this.scene.fog = new THREE.Fog(0x87CEEB, 200, 3000); // Extended fog distance from 1000 to 3000
     
-    // Sky gradient
-    const skyGeo = new THREE.SphereGeometry(2000, 32, 15);
+    // Sky gradient - much larger sphere
+    const skyGeo = new THREE.SphereGeometry(10000, 32, 15); // Increased from 2000 to 10000
     const skyMat = new THREE.ShaderMaterial({
       uniforms: {
         topColor: { value: new THREE.Color(0x0077be) },
@@ -82,8 +92,8 @@ export class MotosaiGame {
       `,
       side: THREE.BackSide
     });
-    const sky = new THREE.Mesh(skyGeo, skyMat);
-    this.scene.add(sky);
+    this.sky = new THREE.Mesh(skyGeo, skyMat);
+    this.scene.add(this.sky);
   }
   
   initCamera() {
@@ -95,9 +105,9 @@ export class MotosaiGame {
       2000
     );
     
-    // Camera positions
-    this.cameraOffset = new THREE.Vector3(0, 2, -6);
-    this.cameraLookOffset = new THREE.Vector3(0, 1, 10);
+    // Camera positions - closer to bike for high speed
+    this.cameraOffset = new THREE.Vector3(0, 2, -4); // Moved closer from -6 to -4
+    this.cameraLookOffset = new THREE.Vector3(0, 1, 5); // Look closer too
     
     // Smooth camera movement
     this.cameraPosition = new THREE.Vector3();
@@ -129,7 +139,15 @@ export class MotosaiGame {
   }
   
   initPhysics() {
-    this.physics = new MotorcyclePhysics();
+    // Use new simple physics by default
+    this.useSimplePhysics = true;
+    this.physics = new SimpleBikePhysics();
+    
+    // Keep old physics for comparison if needed
+    this.useV2Physics = false;
+    
+    // Initialize input controller for smooth control (not needed for simple physics)
+    // this.inputController = new InputController();
     
     // Create motorcycle mesh (low poly)
     this.createMotorcycle();
@@ -226,7 +244,7 @@ export class MotosaiGame {
   }
   
   initTraffic() {
-    this.traffic = new TrafficSystem(this.scene, this.highway);
+    this.traffic = new TrafficSystem(this.scene, this.highway, this.camera);
     this.traffic.spawn(20); // Start with 20 vehicles
   }
   
@@ -242,6 +260,9 @@ export class MotosaiGame {
         this.physics.setControls({ gearDown: true });
       } else if (e.code === 'KeyE') {
         this.physics.setControls({ gearUp: true });
+      } else if (e.code === 'KeyV') {
+        // Toggle physics version
+        this.togglePhysicsVersion();
       }
     });
     
@@ -319,38 +340,83 @@ export class MotosaiGame {
     this.container.appendChild(this.speedometer);
   }
   
-  updateControls() {
+  updateControls(deltaTime) {
+    // Simple direct controls for our new physics
+    const controls = {
+      throttle: 0,
+      brake: 0,
+      steer: 0
+    };
+    
     // Throttle
     if (this.keys['KeyW'] || this.keys['ArrowUp']) {
-      this.physics.setControls({ throttle: 1 });
-    } else {
-      this.physics.setControls({ throttle: 0 });
+      controls.throttle = 1;
+    }
+    
+    // Brakes
+    if (this.keys['KeyS'] || this.keys['ArrowDown'] || this.keys['Space']) {
+      controls.brake = 1;
+    }
+    
+    // Steering (left/right)
+    if (this.keys['KeyA'] || this.keys['ArrowLeft']) {
+      controls.steer = -1;  // Left
+    } else if (this.keys['KeyD'] || this.keys['ArrowRight']) {
+      controls.steer = 1;   // Right
+    }
+    
+    // Apply controls to physics
+    this.physics.setControls(controls);
+  }
+  
+  updateControlsComplex(deltaTime) {
+    // Complex controls for old physics with InputController
+    const state = this.physics.getState();
+    const speed = state.speed / 2.237; // Convert MPH to m/s
+    
+    const rawInputs = {
+      throttle: 0,
+      frontBrake: 0,
+      rearBrake: 0,
+      lean: 0,
+      steer: 0
+    };
+    
+    // Throttle
+    if (this.keys['KeyW'] || this.keys['ArrowUp']) {
+      rawInputs.throttle = 1;
     }
     
     // Brakes
     if (this.keys['KeyS'] || this.keys['ArrowDown']) {
-      this.physics.setControls({ frontBrake: 0.8, rearBrake: 0.5 });
+      rawInputs.frontBrake = 0.8;
+      rawInputs.rearBrake = 0.5;
     } else if (this.keys['Space']) {
-      this.physics.setControls({ frontBrake: 1, rearBrake: 0 });
-    } else {
-      this.physics.setControls({ frontBrake: 0, rearBrake: 0 });
+      rawInputs.frontBrake = 1;
     }
     
-    // Lean
+    // Lean/Steer
     if (this.keys['KeyA'] || this.keys['ArrowLeft']) {
-      this.physics.setControls({ lean: -1 });
+      rawInputs.lean = -1;
+      rawInputs.steer = -1;
     } else if (this.keys['KeyD'] || this.keys['ArrowRight']) {
-      this.physics.setControls({ lean: 1 });
-    } else {
-      this.physics.setControls({ lean: 0 });
+      rawInputs.lean = 1;
+      rawInputs.steer = 1;
     }
     
-    // Clutch
-    if (this.keys['ShiftLeft']) {
-      this.physics.setControls({ clutch: true });
-    } else {
-      this.physics.setControls({ clutch: false });
-    }
+    // Update input controller
+    this.inputController.setRawInputs(rawInputs);
+    const smoothedInputs = this.inputController.update(deltaTime, speed);
+    
+    // Apply smoothed inputs to physics
+    this.physics.setControls({
+      throttle: smoothedInputs.throttle,
+      frontBrake: smoothedInputs.frontBrake,
+      rearBrake: smoothedInputs.rearBrake,
+      lean: smoothedInputs.lean,
+      steer: smoothedInputs.steer,
+      clutch: this.keys['ShiftLeft'] || false
+    });
   }
   
   updateCamera(deltaTime) {
@@ -369,11 +435,16 @@ export class MotosaiGame {
     offset.applyMatrix4(leanMatrix);
     offset.applyMatrix4(bikeMatrix);
     
+    // Account for lean offset in camera position
+    const leanOffset = Math.sin(state.rotation.roll) * 0.4;
+    const leanX = leanOffset * Math.cos(state.rotation.yaw + Math.PI/2);
+    const leanZ = leanOffset * Math.sin(state.rotation.yaw + Math.PI/2);
+    
     // Target positions
     const targetCameraPos = new THREE.Vector3(
-      state.position.x + offset.x,
+      state.position.x + offset.x + leanX,
       state.position.y + offset.y + 1,
-      state.position.z + offset.z
+      state.position.z + offset.z + leanZ
     );
     
     const lookOffset = this.cameraLookOffset.clone();
@@ -385,12 +456,41 @@ export class MotosaiGame {
       state.position.z + lookOffset.z
     );
     
-    // Smooth camera movement
-    const smoothing = 0.1;
+    // Smooth camera movement - much faster lerp at high speeds
+    const speedMPH = state.speed;
+    let smoothing;
+    if (speedMPH > 200) {
+      smoothing = 1.0; // Instant lock at extreme speeds
+    } else if (speedMPH > 150) {
+      smoothing = 0.9; // Nearly instant
+    } else if (speedMPH > 100) {
+      smoothing = 0.6;
+    } else if (speedMPH > 50) {
+      smoothing = 0.4;
+    } else {
+      smoothing = 0.25; // Still smooth at low speeds
+    }
+    
     this.cameraPosition.lerp(targetCameraPos, smoothing);
     this.cameraTarget.lerp(targetLookAt, smoothing);
     
-    this.camera.position.copy(this.cameraPosition);
+    // Dynamic FOV based on speed for better speed perception
+    const baseFOV = 60;
+    const maxFOVIncrease = 30; // Maximum FOV increase at top speed
+    const speedRatio = Math.min(speedMPH / 200, 1); // Normalize to displayed max of 200mph
+    const targetFOV = baseFOV + (maxFOVIncrease * speedRatio * speedRatio); // Quadratic increase
+    
+    // Smooth FOV transition
+    const currentFOV = this.camera.fov;
+    this.camera.fov = currentFOV + (targetFOV - currentFOV) * 0.1;
+    this.camera.updateProjectionMatrix();
+    
+    // Apply camera position with screen shake
+    this.camera.position.set(
+      this.cameraPosition.x + this.screenShake.offset.x * 0.1,
+      this.cameraPosition.y + this.screenShake.offset.y * 0.1,
+      this.cameraPosition.z
+    );
     this.camera.lookAt(this.cameraTarget);
   }
   
@@ -400,14 +500,53 @@ export class MotosaiGame {
     // Update speedometer
     this.speedometer.textContent = `${Math.round(state.speed)} MPH`;
     
+    // Determine physics mode label
+    let physicsMode = 'Simple (Working)';
+    if (!this.useSimplePhysics) {
+      physicsMode = this.useV2Physics ? 'V2 (Complex)' : 'V1 (Complex)';
+    }
+    
     // Update info display
     this.hud.innerHTML = `
-      Gear: ${state.gear}<br>
-      RPM: ${state.rpm}<br>
-      Lean: ${state.leanAngle.toFixed(1)}°<br>
+      Physics: ${physicsMode}<br>
+      Gear: ${state.gear || 'N/A'}<br>
+      RPM: ${state.rpm || 'N/A'}<br>
+      Lean: ${state.leanAngle !== undefined ? state.leanAngle.toFixed(1) : '0.0'}°<br>
+      ${state.turnRate !== undefined ? `Turn Rate: ${state.turnRate.toFixed(1)}°/s<br>` : ''}
+      ${state.collision && state.collision.isWobbling ? `<span style="color: orange">⚠️ WOBBLING!</span><br>` : ''}
+      ${state.collision && state.collision.isCrashed ? `<span style="color: red">💥 CRASHED!</span><br>` : ''}
       Distance: ${(this.distance / 5280).toFixed(1)} mi<br>
       Score: ${this.score}
     `;
+  }
+  
+  togglePhysicsVersion() {
+    // Save current state
+    const currentState = this.physics.getState();
+    
+    // Cycle through physics versions: Simple -> V1 -> V2 -> Simple
+    if (this.useSimplePhysics) {
+      this.useSimplePhysics = false;
+      this.useV2Physics = false;
+      this.physics = new MotorcyclePhysics();
+      this.inputController = new InputController();
+      console.log('Switched to Physics V1 (Original Complex)');
+    } else if (!this.useV2Physics) {
+      this.useV2Physics = true;
+      this.physics = new MotorcyclePhysicsV2();
+      this.inputController = new InputController();
+      console.log('Switched to Physics V2 (Improved Complex)');
+    } else {
+      this.useSimplePhysics = true;
+      this.useV2Physics = false;
+      this.physics = new SimpleBikePhysics();
+      this.inputController = null;
+      console.log('Switched to Simple Physics (Working)');
+    }
+    
+    // Restore position and velocity
+    this.physics.position = currentState.position;
+    this.physics.velocity = currentState.velocity;
   }
   
   animate() {
@@ -419,23 +558,60 @@ export class MotosaiGame {
     
     if (!this.isPaused) {
       // Update controls
-      this.updateControls();
+      if (this.useSimplePhysics) {
+        // Direct controls for simple physics
+        this.updateControls(deltaTime);
+      } else {
+        // Use input controller for complex physics
+        this.updateControlsComplex(deltaTime);
+      }
       
-      // Update physics
-      const state = this.physics.update(deltaTime);
+      // Update physics (pass traffic for collision detection)
+      const state = this.useSimplePhysics 
+        ? this.physics.update(deltaTime, this.traffic) 
+        : this.physics.update(deltaTime);
+      
+      // Check for collision effects
+      if (state.collision) {
+        // Trigger screen shake on new collision
+        if (state.collision.isWobbling && this.screenShake.duration <= 0) {
+          this.screenShake.intensity = state.collision.isCrashed ? 20 : 10;
+          this.screenShake.duration = 0.3;
+        }
+        
+        // Flash effect for invulnerability
+        if (state.collision.invulnerable) {
+          this.motorcycle.visible = Math.sin(Date.now() * 0.01) > 0;
+        } else {
+          this.motorcycle.visible = true;
+        }
+      }
+      
+      // Update screen shake
+      if (this.screenShake.duration > 0) {
+        this.screenShake.duration -= deltaTime;
+        this.screenShake.offset.x = (Math.random() - 0.5) * this.screenShake.intensity;
+        this.screenShake.offset.y = (Math.random() - 0.5) * this.screenShake.intensity;
+      } else {
+        this.screenShake.offset.x = 0;
+        this.screenShake.offset.y = 0;
+      }
       
       // Update motorcycle position and rotation
+      // Apply lean offset to make it rotate around ground contact point
+      const leanOffset = Math.sin(state.rotation.roll) * 0.4; // Height of bike center from ground
+      
       this.motorcycle.position.set(
-        state.position.x,
+        state.position.x + leanOffset * Math.cos(state.rotation.yaw + Math.PI/2),
         state.position.y,
-        state.position.z
+        state.position.z + leanOffset * Math.sin(state.rotation.yaw + Math.PI/2)
       );
       
-      this.motorcycle.rotation.set(
-        state.rotation.pitch,
-        state.rotation.yaw,
-        state.rotation.roll
-      );
+      // Apply rotations in correct order: yaw first, then lean, then pitch
+      this.motorcycle.rotation.set(0, 0, 0);
+      this.motorcycle.rotateY(state.rotation.yaw);
+      this.motorcycle.rotateZ(state.rotation.roll);
+      this.motorcycle.rotateX(state.rotation.pitch);
       
       // Update wheels rotation
       this.frontWheel.rotation.x += state.speed * deltaTime * 0.1;
@@ -446,13 +622,47 @@ export class MotosaiGame {
       this.rider.rotation.x = state.rotation.pitch * 0.3;
       
       // Update highway (infinite scrolling)
-      this.highway.update(state.position.z);
+      this.highway.update(state.position.z, state.actualSpeed || state.speed);
       
       // Update traffic
       this.traffic.update(deltaTime, state.position);
       
+      // Make sky follow camera (not just player) to prevent seeing edges
+      if (this.sky) {
+        this.sky.position.set(
+          this.camera.position.x,
+          this.camera.position.y - 100, // Keep sky centered vertically
+          this.camera.position.z
+        );
+      }
+      
+      // Make sun light follow player for consistent shadows
+      if (this.sunLight) {
+        this.sunLight.position.set(
+          state.position.x + 50,
+          100,
+          state.position.z + 50
+        );
+        this.sunLight.target.position.copy(state.position);
+      }
+      
       // Update camera
       this.updateCamera(deltaTime);
+      
+      // Speed effects on camera (using display speed)
+      const speedMPH = state.speed; // This is now the scaled display speed
+      if (speedMPH > 80) {
+        // Increase FOV at high speeds for speed effect
+        const targetFOV = 60 + Math.min((speedMPH - 80) / 10, 40); // Max 100 FOV at 480mph
+        this.camera.fov += (targetFOV - this.camera.fov) * 0.1;
+        this.camera.updateProjectionMatrix();
+        
+        // Motion blur would go here
+      } else {
+        // Return to normal FOV
+        this.camera.fov += (60 - this.camera.fov) * 0.1;
+        this.camera.updateProjectionMatrix();
+      }
       
       // Update HUD
       this.updateHUD();
