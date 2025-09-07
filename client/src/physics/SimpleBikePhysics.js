@@ -10,7 +10,7 @@ export class SimpleBikePhysics {
     
     // Speed parameters
     this.speed = 0; // Current speed in m/s
-    this.maxSpeed = 400 / 2.237; // 400mph actual (shows as ~267mph max on speedometer)
+    this.maxSpeed = Infinity; // No speed limit!
     this.baseAcceleration = 20; // Higher actual acceleration for fun gameplay
     this.acceleration = 20; // Current acceleration (increases over time)
     this.deceleration = 30; // m/s² (coasting)
@@ -102,9 +102,9 @@ export class SimpleBikePhysics {
       // Track how long throttle is held
       this.throttleHoldTime += deltaTime;
       
-      // Very gradual acceleration increase over time
-      // Takes about 15 seconds to reach max acceleration multiplier
-      const accelerationMultiplier = Math.min(3, 1 + this.throttleHoldTime / 10);
+      // Continuous acceleration increase over time for infinite speed
+      // No cap on acceleration multiplier
+      const accelerationMultiplier = 1 + this.throttleHoldTime / 5; // Doubles every 5 seconds
       this.acceleration = this.baseAcceleration * accelerationMultiplier;
       
       // Speed-based reduction - motorcycles accelerate fast at low speeds
@@ -132,9 +132,21 @@ export class SimpleBikePhysics {
       } else if (displaySpeedMPH < 240) {
         // 200-240mph: Very extreme reduction
         speedPenalty = 0.12;
-      } else {
-        // 240-267mph: Nearly impossible to accelerate
+      } else if (displaySpeedMPH < 300) {
+        // 240-300mph: Very hard to accelerate
         speedPenalty = 0.06;
+      } else if (displaySpeedMPH < 400) {
+        // 300-400mph: Extremely hard to accelerate
+        speedPenalty = 0.03;
+      } else if (displaySpeedMPH < 500) {
+        // 400-500mph: Nearly impossible
+        speedPenalty = 0.015;
+      } else if (displaySpeedMPH < 1000) {
+        // 500-1000mph: Requires extreme patience
+        speedPenalty = 0.008;
+      } else {
+        // 1000+mph: Still possible but very slow
+        speedPenalty = 0.004;
       }
       
       const accelPower = this.controls.throttle * this.acceleration * speedPenalty;
@@ -144,7 +156,10 @@ export class SimpleBikePhysics {
       // (displaySpeedMPH already declared above)
       if (displaySpeedMPH > 100 && displaySpeedMPH < 101) this.speed *= 1.01; // Tiny 100mph boost
       if (displaySpeedMPH > 200 && displaySpeedMPH < 201) this.speed *= 1.01; // Tiny 200mph boost
-      if (displaySpeedMPH > 250 && displaySpeedMPH < 251) this.speed *= 1.005; // Tiny 250mph boost
+      if (displaySpeedMPH > 300 && displaySpeedMPH < 301) this.speed *= 1.008; // Tiny 300mph boost
+      if (displaySpeedMPH > 400 && displaySpeedMPH < 401) this.speed *= 1.006; // Tiny 400mph boost
+      if (displaySpeedMPH > 500 && displaySpeedMPH < 501) this.speed *= 1.005; // Tiny 500mph boost
+      if (displaySpeedMPH > 1000 && displaySpeedMPH < 1001) this.speed *= 1.003; // Tiny 1000mph boost
     }
     // Apply brakes
     else if (this.controls.brake > 0) {
@@ -173,20 +188,20 @@ export class SimpleBikePhysics {
       // Otherwise maintain speed at low speeds
     }
     
-    // Clamp to max speed (300mph but takes much longer to reach)
-    this.speed = Math.min(this.speed, this.maxSpeed);
+    // No speed limit - infinite acceleration!
+    // this.speed = Math.min(this.speed, this.maxSpeed);
     
     // Update RPM (scales with speed, redlines at high speed)
     this.rpm = Math.min(1000 + this.speed * 100, 15000);
     
-    // Simple automatic gear shifting
-    const gearThresholds = [0, 10, 20, 30, 40, 50];
-    for (let i = this.maxGear - 1; i >= 0; i--) {
-      if (this.speed >= gearThresholds[i]) {
-        this.gear = i + 1;
-        break;
-      }
-    }
+    // Simple automatic gear shifting - extended for extreme speeds
+    const displaySpeed = this.speed * 2.237 / 1.5;
+    if (displaySpeed < 30) this.gear = 1;
+    else if (displaySpeed < 60) this.gear = 2;
+    else if (displaySpeed < 100) this.gear = 3;
+    else if (displaySpeed < 150) this.gear = 4;
+    else if (displaySpeed < 250) this.gear = 5;
+    else this.gear = 6; // Top gear for everything above 250mph
   }
   
   updateTurning(deltaTime) {

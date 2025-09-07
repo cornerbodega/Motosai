@@ -54,6 +54,22 @@ export class MotosaiGame {
     this.activeTimers = new Set();
     this.activeChatTimers = new Set();
     
+    // Pre-allocate reusable objects for updateCamera to prevent memory leaks
+    this._cameraUpdateObjects = {
+      bikeMatrix: new THREE.Matrix4(),
+      leanMatrix: new THREE.Matrix4(),
+      offset: new THREE.Vector3(),
+      targetCameraPos: new THREE.Vector3(),
+      targetLookAt: new THREE.Vector3(),
+      lookOffset: new THREE.Vector3(),
+      up: new THREE.Vector3(),
+      forward: new THREE.Vector3()
+    };
+    
+    // Pre-allocate temp vectors for death animation
+    this._tempVelocity = new THREE.Vector3();
+    this._tempDeathPosition = new THREE.Vector3();
+    
     // Initialize components
     this.initRenderer();
     this.initScene();
@@ -670,17 +686,18 @@ export class MotosaiGame {
       }
     }
     
+    // Use pre-allocated objects instead of creating new ones
+    const { bikeMatrix, leanMatrix, offset, targetCameraPos, targetLookAt, lookOffset } = this._cameraUpdateObjects;
+    
     // Calculate camera position based on bike
-    const bikeMatrix = new THREE.Matrix4();
     bikeMatrix.makeRotationY(state.rotation.yaw);
     
     // Apply lean to camera offset (but not as much as the bike itself in third person)
-    const leanMatrix = new THREE.Matrix4();
     const leanFactor = this.isFirstPerson ? 0.8 : 0.3; // More lean in first person for immersion
     leanMatrix.makeRotationZ(state.rotation.roll * leanFactor);
     
-    // Camera offset
-    const offset = this.cameraOffset.clone();
+    // Camera offset - copy instead of clone
+    offset.copy(this.cameraOffset);
     offset.applyMatrix4(leanMatrix);
     offset.applyMatrix4(bikeMatrix);
     
@@ -689,17 +706,18 @@ export class MotosaiGame {
     const leanX = leanOffset * Math.cos(state.rotation.yaw + Math.PI/2);
     const leanZ = leanOffset * Math.sin(state.rotation.yaw + Math.PI/2);
     
-    // Target positions
-    const targetCameraPos = new THREE.Vector3(
+    // Target positions - set instead of creating new
+    targetCameraPos.set(
       state.position.x + offset.x + leanX,
       state.position.y + offset.y + 1,
       state.position.z + offset.z + leanZ
     );
     
-    const lookOffset = this.cameraLookOffset.clone();
+    // Look offset - copy instead of clone
+    lookOffset.copy(this.cameraLookOffset);
     lookOffset.applyMatrix4(bikeMatrix);
     
-    const targetLookAt = new THREE.Vector3(
+    targetLookAt.set(
       state.position.x + lookOffset.x,
       state.position.y + lookOffset.y,
       state.position.z + lookOffset.z
@@ -754,9 +772,9 @@ export class MotosaiGame {
     this.cameraRoll += (targetCameraRoll - this.cameraRoll) * 0.3; // Faster transition (was 0.15)
     
     // Apply the roll rotation to the camera
-    // Save the current up vector and rotation
-    const up = new THREE.Vector3(0, 1, 0);
-    const forward = new THREE.Vector3();
+    // Use pre-allocated vectors instead of creating new ones
+    const { up, forward } = this._cameraUpdateObjects;
+    up.set(0, 1, 0);
     forward.subVectors(this.cameraTarget, this.camera.position).normalize();
     
     // Apply roll rotation around the forward axis
@@ -836,25 +854,25 @@ export class MotosaiGame {
     this.motorcycle.visible = false; // Hide motorcycle immediately
     this.rider.visible = false; // Hide rider immediately - they're now a puddle!
     
-    // Calculate collision direction from velocity
-    const velocity = new THREE.Vector3(
+    // Calculate collision direction from velocity - use pre-allocated vectors
+    this._tempVelocity.set(
       state.velocity.x || 0,
       state.velocity.y || 0,
       state.velocity.z || 0
     );
     
-    // Trigger death animation at motorcycle position
-    const deathPosition = new THREE.Vector3(
+    // Trigger death animation at motorcycle position - use pre-allocated vector
+    this._tempDeathPosition.set(
       state.position.x,
       state.position.y + 0.5, // Slightly above ground for rider height
       state.position.z
     );
     
-    this.deathAnimation.trigger(deathPosition, velocity);
+    this.deathAnimation.trigger(this._tempDeathPosition, this._tempVelocity);
     
     // Register crash site with blood track system
     if (this.bloodTrackSystem) {
-      this.bloodTrackSystem.registerCrashSite(deathPosition);
+      this.bloodTrackSystem.registerCrashSite(this._tempDeathPosition);
     }
     
     // Big screen shake for death
