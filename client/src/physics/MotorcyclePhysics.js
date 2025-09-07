@@ -382,9 +382,9 @@ export class MotorcyclePhysics {
     const speedMPH = speed * 2.237; // m/s to mph
     
     return {
-      position: { ...this.position },
-      rotation: { ...this.rotation },
-      velocity: { ...this.velocity },
+      position: this.position, // Direct reference, no clone
+      rotation: this.rotation, // Direct reference, no clone
+      velocity: this.velocity, // Direct reference, no clone
       speed: speedMPH,
       rpm: Math.round(this.engine.rpm),
       gear: this.engine.gear,

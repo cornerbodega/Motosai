@@ -342,10 +342,12 @@ export class SimpleBikePhysics {
   }
   
   getState() {
+    // Return references directly - no object cloning!
+    // The consumer should not modify these values
     return {
-      position: { ...this.position },
-      velocity: { ...this.velocity },
-      rotation: { ...this.rotation },
+      position: this.position, // Direct reference, no clone
+      velocity: this.velocity, // Direct reference, no clone
+      rotation: this.rotation, // Direct reference, no clone
       speed: this.speed * 2.237 / 1.5, // Display speed scaled down 1.5x for better feel
       actualSpeed: this.speed, // Keep actual speed for physics
       rpm: Math.round(this.rpm),
