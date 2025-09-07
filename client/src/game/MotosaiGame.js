@@ -556,6 +556,15 @@ export class MotosaiGame {
     this.hud.style.textShadow = '2px 2px 4px rgba(0,0,0,0.5)';
     this.container.appendChild(this.hud);
     
+    // Pre-create HUD elements to avoid innerHTML allocations
+    this.hudElements = {};
+    const hudLines = ['camera', 'physics', 'gear', 'rpm', 'lean', 'turnRate', 'wobble', 'death', 'distance', 'score'];
+    hudLines.forEach(line => {
+      const elem = document.createElement('div');
+      this.hud.appendChild(elem);
+      this.hudElements[line] = elem;
+    });
+    
     // Speedometer
     this.speedometer = document.createElement('div');
     this.speedometer.style.position = 'absolute';
@@ -767,19 +776,42 @@ export class MotosaiGame {
       physicsMode = this.useV2Physics ? 'V2 (Complex)' : 'V1 (Complex)';
     }
     
-    // Update info display
-    this.hud.innerHTML = `
-      Camera: ${this.isFirstPerson ? 'First Person' : 'Third Person'} (Space)<br>
-      Physics: ${physicsMode}<br>
-      Gear: ${state.gear || 'N/A'}<br>
-      RPM: ${state.rpm || 'N/A'}<br>
-      Lean: ${state.leanAngle !== undefined ? state.leanAngle.toFixed(1) : '0.0'}°<br>
-      ${state.turnRate !== undefined ? `Turn Rate: ${state.turnRate.toFixed(1)}°/s<br>` : ''}
-      ${state.collision && state.collision.isWobbling ? `<span style="color: orange">⚠️ WOBBLING!</span><br>` : ''}
-      ${this.isDead ? `<span style="color: red; font-size: 20px">💀 DEAD - Respawning...</span><br>` : ''}
-      Distance: ${(this.distance / 5280).toFixed(1)} mi<br>
-      Score: ${this.score}
-    `;
+    // Update HUD elements directly without innerHTML
+    this.hudElements.camera.textContent = `Camera: ${this.isFirstPerson ? 'First Person' : 'Third Person'} (Space)`;
+    this.hudElements.physics.textContent = `Physics: ${physicsMode}`;
+    this.hudElements.gear.textContent = `Gear: ${state.gear || 'N/A'}`;
+    this.hudElements.rpm.textContent = `RPM: ${state.rpm || 'N/A'}`;
+    this.hudElements.lean.textContent = `Lean: ${state.leanAngle !== undefined ? state.leanAngle.toFixed(1) : '0.0'}°`;
+    
+    // Conditionally show/hide turn rate
+    if (state.turnRate !== undefined) {
+      this.hudElements.turnRate.textContent = `Turn Rate: ${state.turnRate.toFixed(1)}°/s`;
+      this.hudElements.turnRate.style.display = 'block';
+    } else {
+      this.hudElements.turnRate.style.display = 'none';
+    }
+    
+    // Wobble warning
+    if (state.collision && state.collision.isWobbling) {
+      this.hudElements.wobble.textContent = '⚠️ WOBBLING!';
+      this.hudElements.wobble.style.color = 'orange';
+      this.hudElements.wobble.style.display = 'block';
+    } else {
+      this.hudElements.wobble.style.display = 'none';
+    }
+    
+    // Death indicator
+    if (this.isDead) {
+      this.hudElements.death.textContent = '💀 DEAD - Respawning...';
+      this.hudElements.death.style.color = 'red';
+      this.hudElements.death.style.fontSize = '20px';
+      this.hudElements.death.style.display = 'block';
+    } else {
+      this.hudElements.death.style.display = 'none';
+    }
+    
+    this.hudElements.distance.textContent = `Distance: ${(this.distance / 5280).toFixed(1)} mi`;
+    this.hudElements.score.textContent = `Score: ${this.score}`;
   }
   
   toggleCameraMode() {

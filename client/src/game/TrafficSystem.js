@@ -216,8 +216,8 @@ export class TrafficSystem {
     
     // Windows - REUSE shared geometry and scale to vehicle type
     const windows = new THREE.Mesh(this.sharedGeometry.window, this.vehicleMaterials.glass);
-    windows.scale.set(type.width * 0.85, type.height * 0.32, type.length * 0.38);
-    windows.position.set(0, type.height * 0.76, type.length * 0.1);
+    windows.scale.set(type.width * 0.85, type.height * 0.35, type.length * 0.38);
+    windows.position.set(0, type.height * 0.72, type.length * 0.1);
     vehicle.add(windows);
     
     // Wheels - REUSE shared geometry with scaling
