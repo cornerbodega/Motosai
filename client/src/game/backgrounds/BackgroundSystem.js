@@ -75,7 +75,6 @@ export class BackgroundSystem {
     const skyGeo = new THREE.SphereGeometry(2000, 64, 32);  // Increased size
     const skyMat = new THREE.MeshBasicMaterial({
       color: 0x87CEEB,  // Sky blue
-      emissive: 0x87CEEB,  // Make it glow
       fog: false,
       side: THREE.BackSide,  // Render inside of sphere
       depthWrite: false,  // Ensure it renders behind everything

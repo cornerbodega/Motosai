@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Multi-Layer Parallax Demo</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+        
+        #container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            background: #87CEEB;
+        }
+        
+        .layer {
+            position: absolute;
+            width: 200%;
+            height: 100%;
+            background-repeat: repeat-x;
+            background-position: 0 bottom;
+            image-rendering: crisp-edges;
+        }
+        
+        /* Layer 0: Sky (no movement) */
+        #sky {
+            background: linear-gradient(to bottom, #4A90E2 0%, #87CEEB 60%, #FFE4B5 100%);
+            width: 100%;
+        }
+        
+        /* Layer 1: Distant mountains (slowest) */
+        #distant {
+            bottom: 30%;
+            height: 40%;
+            opacity: 0.6;
+        }
+        
+        /* Layer 2: Mid hills (medium) */
+        #midground {
+            bottom: 20%;
+            height: 50%;
+            opacity: 0.8;
+        }
+        
+        /* Layer 3: Near trees (faster) */
+        #nearground {
+            bottom: 10%;
+            height: 60%;
+        }
+        
+        /* Layer 4: Road (fastest - actual speed) */
+        #road {
+            bottom: 0;
+            height: 30%;
+            background: #333;
+        }
+        
+        #info {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            background: rgba(0,0,0,0.7);
+            padding: 15px;
+            border-radius: 5px;
+            z-index: 100;
+        }
+        
+        #controls {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 100;
+        }
+        
+        button {
+            padding: 10px 20px;
+            margin: 0 5px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div class="layer" id="sky"></div>
+        <canvas class="layer" id="distant"></canvas>
+        <canvas class="layer" id="midground"></canvas>
+        <canvas class="layer" id="nearground"></canvas>
+        <canvas class="layer" id="road"></canvas>
+        
+        <div id="info">
+            <h3>Multi-Layer Parallax Explained</h3>
+            <p><strong>Speed: <span id="speed">0</span> mph</strong></p>
+            <p>Each layer moves at different speed:</p>
+            <ul style="margin: 5px 0; padding-left: 20px;">
+                <li>Sky: 0% (static)</li>
+                <li>Mountains: 10% speed</li>
+                <li>Hills: 30% speed</li>
+                <li>Trees: 70% speed</li>
+                <li>Road: 100% speed</li>
+            </ul>
+            <p>This creates depth illusion!</p>
+        </div>
+        
+        <div id="controls">
+            <button onclick="setSpeed(0)">Stop</button>
+            <button onclick="setSpeed(30)">30 mph</button>
+            <button onclick="setSpeed(60)">60 mph</button>
+            <button onclick="setSpeed(120)">120 mph</button>
+            <button onclick="setSpeed(200)">200 mph</button>
+        </div>
+    </div>
+
+    <script>
+        // Parallax factors - how much each layer moves relative to camera
+        const PARALLAX_FACTORS = {
+            sky: 0,        // Sky doesn't move
+            distant: 0.1,  // Mountains move 10% of actual speed
+            midground: 0.3,// Hills move 30% of actual speed
+            nearground: 0.7,// Trees move 70% of actual speed
+            road: 1.0      // Road moves at full speed
+        };
+
+        let currentSpeed = 0;
+        let targetSpeed = 0;
+        let positions = {
+            distant: 0,
+            midground: 0,
+            nearground: 0,
+            road: 0
+        };
+
+        // Draw mountains layer
+        function drawMountains(canvas) {
+            const ctx = canvas.getContext('2d');
+            canvas.width = window.innerWidth * 2;
+            canvas.height = window.innerHeight;
+            
+            ctx.fillStyle = '#8B7D6B';
+            
+            // Draw repeating mountain shapes
+            for (let x = 0; x < canvas.width; x += 400) {
+                ctx.beginPath();
+                ctx.moveTo(x, canvas.height);
+                ctx.lineTo(x + 100, canvas.height * 0.3);
+                ctx.lineTo(x + 200, canvas.height * 0.5);
+                ctx.lineTo(x + 300, canvas.height * 0.2);
+                ctx.lineTo(x + 400, canvas.height * 0.6);
+                ctx.lineTo(x + 400, canvas.height);
+                ctx.fill();
+            }
+        }
+
+        // Draw hills layer
+        function drawHills(canvas) {
+            const ctx = canvas.getContext('2d');
+            canvas.width = window.innerWidth * 2;
+            canvas.height = window.innerHeight;
+            
+            ctx.fillStyle = '#6B8E23';
+            
+            // Draw rolling hills
+            for (let x = 0; x < canvas.width; x += 200) {
+                ctx.beginPath();
+                ctx.arc(x + 100, canvas.height * 0.8, 150, 0, Math.PI, true);
+                ctx.fill();
+            }
+        }
+
+        // Draw trees layer
+        function drawTrees(canvas) {
+            const ctx = canvas.getContext('2d');
+            canvas.width = window.innerWidth * 2;
+            canvas.height = window.innerHeight;
+            
+            // Draw simple trees
+            for (let x = 0; x < canvas.width; x += 80) {
+                // Trunk
+                ctx.fillStyle = '#8B4513';
+                ctx.fillRect(x + 35, canvas.height * 0.6, 10, canvas.height * 0.4);
+                
+                // Leaves
+                ctx.fillStyle = '#228B22';
+                ctx.beginPath();
+                ctx.moveTo(x + 40, canvas.height * 0.3);
+                ctx.lineTo(x + 20, canvas.height * 0.6);
+                ctx.lineTo(x + 60, canvas.height * 0.6);
+                ctx.fill();
+            }
+        }
+
+        // Draw road with lane markers
+        function drawRoad(canvas) {
+            const ctx = canvas.getContext('2d');
+            canvas.width = window.innerWidth * 2;
+            canvas.height = window.innerHeight;
+            
+            // Road surface
+            ctx.fillStyle = '#333';
+            ctx.fillRect(0, canvas.height * 0.7, canvas.width, canvas.height * 0.3);
+            
+            // Lane markers
+            ctx.fillStyle = '#FFF';
+            for (let x = 0; x < canvas.width; x += 100) {
+                ctx.fillRect(x, canvas.height * 0.85, 60, 5);
+            }
+            
+            // Road edge
+            ctx.fillStyle = '#FFF';
+            ctx.fillRect(0, canvas.height * 0.7, canvas.width, 3);
+        }
+
+        // Initialize canvases
+        function init() {
+            drawMountains(document.getElementById('distant'));
+            drawHills(document.getElementById('midground'));
+            drawTrees(document.getElementById('nearground'));
+            drawRoad(document.getElementById('road'));
+        }
+
+        // Animation loop
+        function animate() {
+            // Smooth speed transitions
+            currentSpeed += (targetSpeed - currentSpeed) * 0.1;
+            
+            // Update speed display
+            document.getElementById('speed').textContent = Math.round(currentSpeed);
+            
+            // Calculate movement based on speed (mph to pixels per frame)
+            const pixelsPerFrame = currentSpeed * 0.5;
+            
+            // Update each layer position based on its parallax factor
+            for (const [layer, factor] of Object.entries(PARALLAX_FACTORS)) {
+                if (layer === 'sky') continue; // Sky doesn't move
+                
+                positions[layer] -= pixelsPerFrame * factor;
+                
+                // Wrap around when layer moves off screen
+                const canvas = document.getElementById(layer);
+                if (positions[layer] < -canvas.width / 2) {
+                    positions[layer] += canvas.width / 2;
+                }
+                
+                // Apply transform
+                canvas.style.transform = `translateX(${positions[layer]}px)`;
+            }
+            
+            requestAnimationFrame(animate);
+        }
+
+        // Control functions
+        function setSpeed(speed) {
+            targetSpeed = speed;
+        }
+
+        // Start
+        init();
+        animate();
+        
+        // Start with some movement
+        setTimeout(() => setSpeed(60), 500);
+    </script>
+</body>
+</html>
