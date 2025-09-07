@@ -66,7 +66,7 @@ echo ""
 echo "6. Starting Cloud Build deployment..."
 echo "   This will build and deploy both server and client"
 
-cd /Users/fromastermarv/Documents/Codeyard/motosai
+cd /Users/fromastermarv/Documents/Codeyard/Motosai
 
 gcloud builds submit --config cloudbuild.yaml \
     --substitutions=_PROJECT_ID=$PROJECT_ID

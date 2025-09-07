@@ -11,6 +11,16 @@ export class TrafficSystem {
     this.maxVehicles = 30; // Reduced back to prevent memory issues
     this.spawnDistance = 400; // Reduced to limit vehicles
     
+    // Create shared geometry ONCE for all vehicles to prevent memory leaks
+    // Using unit cubes to scale per vehicle type
+    this.sharedGeometry = {
+      body: new THREE.BoxGeometry(1, 1, 1),
+      cabin: new THREE.BoxGeometry(1, 1, 1),
+      window: new THREE.BoxGeometry(1, 1, 1),
+      wheel: new THREE.BoxGeometry(1, 1, 1),
+      light: new THREE.BoxGeometry(1, 1, 1)
+    };
+    
     // Synchronized traffic state
     this.isMaster = false; // Whether this client controls traffic
     this.syncedVehicles = new Map(); // vehicleId -> vehicle data
@@ -191,35 +201,26 @@ export class TrafficSystem {
       Math.floor(Math.random() * this.vehicleMaterials.car.length)
     ];
     
-    // Main body (low poly) - simplified geometry
-    const bodyGeo = new THREE.BoxGeometry(type.width, type.height * 0.6, type.length * 0.7, 1, 1, 1);
-    const body = new THREE.Mesh(bodyGeo, bodyMat);
+    // Main body - REUSE shared geometry and scale to vehicle type
+    const body = new THREE.Mesh(this.sharedGeometry.body, bodyMat);
+    body.scale.set(type.width, type.height * 0.6, type.length * 0.7);
     body.position.y = type.height * 0.3;
     body.castShadow = false; // Disable shadows for performance
     vehicle.add(body);
     
-    // Cabin - solid roof structure
-    const cabinGeo = new THREE.BoxGeometry(
-      type.width * 0.9,
-      type.height * 0.35, // Slightly shorter to make room for windows
-      type.length * 0.4
-    );
-    const cabin = new THREE.Mesh(cabinGeo, bodyMat);
-    cabin.position.set(0, type.height * 0.68, type.length * 0.1); // Slightly lower
+    // Cabin - REUSE shared geometry and scale to vehicle type
+    const cabin = new THREE.Mesh(this.sharedGeometry.cabin, bodyMat);
+    cabin.scale.set(type.width * 0.9, type.height * 0.35, type.length * 0.4);
+    cabin.position.set(0, type.height * 0.68, type.length * 0.1);
     vehicle.add(cabin);
     
-    // Windows - flush with the top of cabin
-    const windowGeo = new THREE.BoxGeometry(
-      type.width * 0.85, // Match cabin width more closely
-      type.height * 0.32, // Taller windows
-      type.length * 0.38  // Match cabin depth more closely
-    );
-    const windows = new THREE.Mesh(windowGeo, this.vehicleMaterials.glass);
-    windows.position.set(0, type.height * 0.76, type.length * 0.1); // Flush with cabin top
+    // Windows - REUSE shared geometry and scale to vehicle type
+    const windows = new THREE.Mesh(this.sharedGeometry.window, this.vehicleMaterials.glass);
+    windows.scale.set(type.width * 0.85, type.height * 0.32, type.length * 0.38);
+    windows.position.set(0, type.height * 0.76, type.length * 0.1);
     vehicle.add(windows);
     
-    // Wheels - simplified to boxes for performance
-    const wheelGeo = new THREE.BoxGeometry(0.2, 0.4, 0.4);
+    // Wheels - REUSE shared geometry with scaling
     const wheelPositions = [
       { x: type.width * 0.4, z: type.length * 0.3 },
       { x: -type.width * 0.4, z: type.length * 0.3 },
@@ -228,27 +229,31 @@ export class TrafficSystem {
     ];
     
     wheelPositions.forEach(pos => {
-      const wheel = new THREE.Mesh(wheelGeo, this.vehicleMaterials.wheel);
+      const wheel = new THREE.Mesh(this.sharedGeometry.wheel, this.vehicleMaterials.wheel);
+      wheel.scale.set(0.2, 0.4, 0.4);
       wheel.position.set(pos.x, 0.2, pos.z);
       vehicle.add(wheel);
     });
     
-    // Headlights
-    const lightGeo = new THREE.BoxGeometry(0.2, 0.2, 0.1);
-    const headlight1 = new THREE.Mesh(lightGeo, this.vehicleMaterials.lights);
+    // Headlights - REUSE shared geometry with scaling
+    const headlight1 = new THREE.Mesh(this.sharedGeometry.light, this.vehicleMaterials.lights);
+    headlight1.scale.set(0.2, 0.2, 0.1);
     headlight1.position.set(type.width * 0.3, type.height * 0.3, type.length * 0.5);
     vehicle.add(headlight1);
     
-    const headlight2 = new THREE.Mesh(lightGeo, this.vehicleMaterials.lights);
+    const headlight2 = new THREE.Mesh(this.sharedGeometry.light, this.vehicleMaterials.lights);
+    headlight2.scale.set(0.2, 0.2, 0.1);
     headlight2.position.set(-type.width * 0.3, type.height * 0.3, type.length * 0.5);
     vehicle.add(headlight2);
     
-    // Brake lights
-    const brakeLight1 = new THREE.Mesh(lightGeo, this.vehicleMaterials.brake);
+    // Brake lights - REUSE shared geometry with scaling
+    const brakeLight1 = new THREE.Mesh(this.sharedGeometry.light, this.vehicleMaterials.brake);
+    brakeLight1.scale.set(0.2, 0.2, 0.1);
     brakeLight1.position.set(type.width * 0.3, type.height * 0.3, -type.length * 0.5);
     vehicle.add(brakeLight1);
     
-    const brakeLight2 = new THREE.Mesh(lightGeo, this.vehicleMaterials.brake);
+    const brakeLight2 = new THREE.Mesh(this.sharedGeometry.light, this.vehicleMaterials.brake);
+    brakeLight2.scale.set(0.2, 0.2, 0.1);
     brakeLight2.position.set(-type.width * 0.3, type.height * 0.3, -type.length * 0.5);
     vehicle.add(brakeLight2);
     

@@ -4,7 +4,7 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci --only=production
+RUN npm install --only=production
 
 # Stage 2: Production
 FROM node:20-alpine AS runner
@@ -21,6 +21,7 @@ RUN addgroup -g 1001 -S nodejs && \
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/package*.json ./
 COPY --chown=nodejs:nodejs server.js ./
+COPY --chown=nodejs:nodejs utils ./utils
 
 # Switch to non-root user
 USER nodejs

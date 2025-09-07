@@ -50,6 +50,10 @@ export class MotosaiGame {
     this.boundHandleKeyDown = (e) => this.handleKeyDown(e);
     this.boundHandleKeyUp = (e) => this.handleKeyUp(e);
     
+    // Track active timers to prevent memory leaks
+    this.activeTimers = new Set();
+    this.activeChatTimers = new Set();
+    
     // Initialize components
     this.initRenderer();
     this.initScene();
@@ -495,19 +499,25 @@ export class MotosaiGame {
     this.gameMessageContainer.appendChild(messageElement);
 
     // Animate in
-    setTimeout(() => {
+    const fadeInTimer = setTimeout(() => {
       messageElement.style.opacity = '1';
+      this.activeTimers.delete(fadeInTimer);
     }, 50);
+    this.activeTimers.add(fadeInTimer);
 
     // Animate out and remove after 3 seconds
-    setTimeout(() => {
+    const fadeOutTimer = setTimeout(() => {
       messageElement.style.opacity = '0';
-      setTimeout(() => {
+      const removeTimer = setTimeout(() => {
         if (messageElement.parentNode) {
           messageElement.parentNode.removeChild(messageElement);
         }
+        this.activeTimers.delete(removeTimer);
       }, 300);
+      this.activeTimers.add(removeTimer);
+      this.activeTimers.delete(fadeOutTimer);
     }, 3000);
+    this.activeTimers.add(fadeOutTimer);
   }
   
   displayChatMessage(data) {
@@ -527,7 +537,11 @@ export class MotosaiGame {
     this.container.appendChild(chatMsg);
     
     // Remove after animation
-    setTimeout(() => chatMsg.remove(), 5000);
+    const removeTimer = setTimeout(() => {
+      chatMsg.remove();
+      this.activeChatTimers.delete(removeTimer);
+    }, 5000);
+    this.activeChatTimers.add(removeTimer);
   }
   
   initHUD() {
@@ -1151,6 +1165,12 @@ export class MotosaiGame {
       cancelAnimationFrame(this.animationId);
       this.animationId = null;
     }
+    
+    // Clear all active timers to prevent memory leaks
+    this.activeTimers.forEach(timer => clearTimeout(timer));
+    this.activeTimers.clear();
+    this.activeChatTimers.forEach(timer => clearTimeout(timer));
+    this.activeChatTimers.clear();
     
     // Dispose of physics and input controller
     if (this.physics && typeof this.physics.dispose === 'function') {
