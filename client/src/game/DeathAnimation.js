@@ -6,6 +6,8 @@ export class DeathAnimation {
     this.particles = [];
     this.bones = [];
     this.bloodSplatters = [];
+    this.explosionParticles = [];
+    this.bikeDebris = [];
     this.isAnimating = false;
     this.animationTime = 0;
     this.totalAnimationDuration = 3.0; // 3 seconds total
@@ -34,6 +36,29 @@ export class DeathAnimation {
       vertexColors: true,
       blending: THREE.AdditiveBlending
     });
+    
+    // Explosion particle materials
+    this.explosionMaterial = new THREE.PointsMaterial({
+      color: 0xff4400,
+      size: 0.8,
+      transparent: true,
+      opacity: 1.0,
+      vertexColors: true,
+      blending: THREE.AdditiveBlending
+    });
+    
+    // Bike debris materials
+    this.metalDebrisMaterial = new THREE.MeshStandardMaterial({
+      color: 0x666666,
+      metalness: 0.8,
+      roughness: 0.3
+    });
+    
+    this.plasticDebrisMaterial = new THREE.MeshStandardMaterial({
+      color: 0x333333,
+      metalness: 0.1,
+      roughness: 0.7
+    });
   }
   
   trigger(position, velocity, collisionNormal = null) {
@@ -59,6 +84,9 @@ export class DeathAnimation {
     
     // Create flying bones
     this.createFlyingBones(position, impactDirection, velocity);
+    
+    // Create bike explosion
+    this.createBikeExplosion(position, velocity);
     
     // Create ground blood pool
     this.createBloodPool(position);
@@ -232,7 +260,8 @@ export class DeathAnimation {
         angularVelocity: angularVelocity,
         age: 0,
         maxAge: 6,  // Last longer (was 4)
-        hasLanded: false
+        hasLanded: false,
+        bloodParticles: this.createBoneBloodTrail(bone.position, boneVelocity)
       });
     }
   }
@@ -262,10 +291,264 @@ export class DeathAnimation {
     });
   }
   
+  createBikeExplosion(position, velocity) {
+    const speed = velocity.length();
+    
+    // Create explosion flash (bright expanding sphere)
+    const flashGeo = new THREE.SphereGeometry(0.1, 8, 6);
+    const flashMat = new THREE.MeshBasicMaterial({
+      color: 0xffaa00,
+      transparent: true,
+      opacity: 1.0,
+      emissive: 0xffaa00
+    });
+    const flash = new THREE.Mesh(flashGeo, flashMat);
+    flash.position.copy(position);
+    flash.position.y += 0.3;
+    
+    this.scene.add(flash);
+    this.explosionParticles.push({
+      mesh: flash,
+      type: 'flash',
+      age: 0,
+      maxAge: 0.3,
+      targetScale: 8
+    });
+    
+    // Create fire/smoke explosion particles
+    const particleCount = 150;
+    const positions = new Float32Array(particleCount * 3);
+    const colors = new Float32Array(particleCount * 3);
+    const velocities = [];
+    
+    for (let i = 0; i < particleCount; i++) {
+      // Initial positions at explosion center
+      positions[i * 3] = position.x;
+      positions[i * 3 + 1] = position.y + 0.3;
+      positions[i * 3 + 2] = position.z;
+      
+      // Fire colors (orange to red to black)
+      const fireStage = Math.random();
+      if (fireStage < 0.4) {
+        // Bright orange fire
+        colors[i * 3] = 1.0;
+        colors[i * 3 + 1] = 0.4 + Math.random() * 0.3;
+        colors[i * 3 + 2] = 0.0;
+      } else if (fireStage < 0.7) {
+        // Red fire
+        colors[i * 3] = 0.8 + Math.random() * 0.2;
+        colors[i * 3 + 1] = 0.1 + Math.random() * 0.2;
+        colors[i * 3 + 2] = 0.0;
+      } else {
+        // Dark smoke
+        colors[i * 3] = 0.1 + Math.random() * 0.2;
+        colors[i * 3 + 1] = 0.1 + Math.random() * 0.2;
+        colors[i * 3 + 2] = 0.1 + Math.random() * 0.2;
+      }
+      
+      // Explosion velocities - spherical burst with upward bias
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.random() * Math.PI * 0.7 + Math.PI * 0.1; // Bias upward
+      const explosionSpeed = (10 + Math.random() * 15) + speed * 0.3;
+      
+      velocities.push(new THREE.Vector3(
+        Math.sin(phi) * Math.cos(theta) * explosionSpeed,
+        Math.cos(phi) * explosionSpeed + 5, // Extra upward push
+        Math.sin(phi) * Math.sin(theta) * explosionSpeed
+      ));
+    }
+    
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    
+    const particles = new THREE.Points(geometry, this.explosionMaterial);
+    this.scene.add(particles);
+    
+    this.explosionParticles.push({
+      mesh: particles,
+      type: 'particles',
+      velocities: velocities,
+      geometry: geometry,
+      positions: positions,
+      age: 0,
+      maxAge: 0.8
+    });
+    
+    // Create bike debris pieces
+    this.createBikeDebris(position, velocity);
+  }
+  
+  createBikeDebris(position, velocity) {
+    const debrisTypes = [
+      { type: 'wheel', material: 'metal', size: [0.3, 0.05, 0.3] },
+      { type: 'handlebar', material: 'metal', size: [0.6, 0.05, 0.05] },
+      { type: 'engine', material: 'metal', size: [0.4, 0.3, 0.2] },
+      { type: 'fender', material: 'plastic', size: [0.4, 0.2, 0.1] },
+      { type: 'mirror', material: 'metal', size: [0.1, 0.15, 0.05] },
+      { type: 'seat', material: 'plastic', size: [0.5, 0.1, 0.3] }
+    ];
+    
+    const speed = velocity.length();
+    const debrisCount = 6 + Math.floor(Math.random() * 4);
+    
+    for (let i = 0; i < debrisCount; i++) {
+      const debris = debrisTypes[Math.floor(Math.random() * debrisTypes.length)];
+      const material = debris.material === 'metal' ? this.metalDebrisMaterial : this.plasticDebrisMaterial;
+      
+      let debrisGeo;
+      if (debris.type === 'wheel') {
+        debrisGeo = new THREE.CylinderGeometry(debris.size[0], debris.size[0], debris.size[1], 8);
+      } else {
+        debrisGeo = new THREE.BoxGeometry(...debris.size);
+      }
+      
+      const debrisMesh = new THREE.Mesh(debrisGeo, material);
+      debrisMesh.position.copy(position);
+      debrisMesh.position.y += 0.2;
+      
+      // Random initial rotation
+      debrisMesh.rotation.set(
+        Math.random() * Math.PI * 2,
+        Math.random() * Math.PI * 2,
+        Math.random() * Math.PI * 2
+      );
+      
+      // Debris flies in all directions with forward bias
+      const angle = Math.random() * Math.PI * 2;
+      const elevation = Math.random() * Math.PI / 3 + Math.PI / 6;
+      
+      const debrisVelocity = new THREE.Vector3(
+        velocity.x * (0.3 + Math.random() * 0.4) + Math.cos(angle) * 10,
+        Math.sin(elevation) * 12 + 5,
+        velocity.z * (0.3 + Math.random() * 0.4) + Math.sin(angle) * 10
+      );
+      
+      const angularVelocity = new THREE.Vector3(
+        (Math.random() - 0.5) * 15,
+        (Math.random() - 0.5) * 15,
+        (Math.random() - 0.5) * 15
+      );
+      
+      debrisMesh.castShadow = true;
+      this.scene.add(debrisMesh);
+      
+      this.bikeDebris.push({
+        mesh: debrisMesh,
+        velocity: debrisVelocity,
+        angularVelocity: angularVelocity,
+        age: 0,
+        maxAge: 5,
+        hasLanded: false
+      });
+    }
+  }
+  
   update(deltaTime) {
     if (!this.isAnimating) return false;
     
     this.animationTime += deltaTime;
+    
+    // Update explosion effects
+    for (let i = this.explosionParticles.length - 1; i >= 0; i--) {
+      const explosion = this.explosionParticles[i];
+      explosion.age += deltaTime;
+      
+      if (explosion.age > explosion.maxAge) {
+        this.scene.remove(explosion.mesh);
+        if (explosion.geometry) explosion.geometry.dispose();
+        this.explosionParticles.splice(i, 1);
+        continue;
+      }
+      
+      if (explosion.type === 'flash') {
+        // Expanding flash sphere
+        const scale = (explosion.age / explosion.maxAge) * explosion.targetScale;
+        explosion.mesh.scale.setScalar(scale);
+        
+        // Fade out quickly
+        explosion.mesh.material.opacity = 1 - (explosion.age / explosion.maxAge);
+      } else if (explosion.type === 'particles') {
+        // Update explosion particle positions
+        const positions = explosion.geometry.attributes.position.array;
+        for (let j = 0; j < explosion.velocities.length; j++) {
+          const vel = explosion.velocities[j];
+          
+          // Apply gravity and air resistance
+          vel.y -= 15 * deltaTime;
+          vel.multiplyScalar(0.98); // Air resistance
+          
+          // Update position
+          positions[j * 3] += vel.x * deltaTime;
+          positions[j * 3 + 1] += vel.y * deltaTime;
+          positions[j * 3 + 2] += vel.z * deltaTime;
+          
+          // Stop at ground
+          if (positions[j * 3 + 1] < 0) {
+            positions[j * 3 + 1] = 0;
+            vel.set(0, 0, 0);
+          }
+        }
+        
+        explosion.geometry.attributes.position.needsUpdate = true;
+        
+        // Fade out quickly after brief initial burn
+        const fadeStart = explosion.maxAge * 0.3;
+        if (explosion.age > fadeStart) {
+          const fadeProgress = (explosion.age - fadeStart) / (explosion.maxAge - fadeStart);
+          explosion.mesh.material.opacity = 1 - fadeProgress;
+        }
+      }
+    }
+    
+    // Update bike debris
+    for (let i = this.bikeDebris.length - 1; i >= 0; i--) {
+      const debris = this.bikeDebris[i];
+      debris.age += deltaTime;
+      
+      if (debris.age > debris.maxAge) {
+        this.scene.remove(debris.mesh);
+        this.bikeDebris.splice(i, 1);
+        continue;
+      }
+      
+      if (!debris.hasLanded) {
+        // Apply physics
+        debris.velocity.y -= 25 * deltaTime; // Gravity
+        
+        // Update position
+        debris.mesh.position.x += debris.velocity.x * deltaTime;
+        debris.mesh.position.y += debris.velocity.y * deltaTime;
+        debris.mesh.position.z += debris.velocity.z * deltaTime;
+        
+        // Update rotation (tumbling)
+        debris.mesh.rotation.x += debris.angularVelocity.x * deltaTime;
+        debris.mesh.rotation.y += debris.angularVelocity.y * deltaTime;
+        debris.mesh.rotation.z += debris.angularVelocity.z * deltaTime;
+        
+        // Check ground collision
+        if (debris.mesh.position.y <= 0.05) {
+          debris.mesh.position.y = 0.05;
+          debris.velocity.multiplyScalar(0.4); // Bounce with energy loss
+          debris.velocity.y = Math.abs(debris.velocity.y) * 0.4;
+          debris.angularVelocity.multiplyScalar(0.6);
+          
+          // Stop bouncing if velocity is low
+          if (debris.velocity.length() < 2) {
+            debris.hasLanded = true;
+            debris.velocity.set(0, 0, 0);
+            debris.angularVelocity.multiplyScalar(0.1);
+          }
+        }
+      }
+      
+      // Fade out near end
+      if (debris.age > debris.maxAge - 1.5) {
+        const fadeProgress = (debris.age - (debris.maxAge - 1.5)) / 1.5;
+        debris.mesh.material.opacity = 1 - fadeProgress;
+        debris.mesh.material.transparent = true;
+      }
+    }
     
     // Update blood particles
     for (let i = this.particles.length - 1; i >= 0; i--) {
@@ -401,6 +684,19 @@ export class DeathAnimation {
     }
     this.particles = [];
     
+    // Clean up explosion effects
+    for (const explosion of this.explosionParticles) {
+      this.scene.remove(explosion.mesh);
+      if (explosion.geometry) explosion.geometry.dispose();
+    }
+    this.explosionParticles = [];
+    
+    // Clean up bike debris
+    for (const debris of this.bikeDebris) {
+      this.scene.remove(debris.mesh);
+    }
+    this.bikeDebris = [];
+    
     // Clean up bones
     for (const bone of this.bones) {
       this.scene.remove(bone.mesh);
@@ -419,5 +715,8 @@ export class DeathAnimation {
     this.bloodMaterial.dispose();
     this.boneMaterial.dispose();
     this.particleMaterial.dispose();
+    this.explosionMaterial.dispose();
+    this.metalDebrisMaterial.dispose();
+    this.plasticDebrisMaterial.dispose();
   }
 }

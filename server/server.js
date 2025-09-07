@@ -173,6 +173,11 @@ io.on('connection', (socket) => {
     player.lastUpdate = Date.now();
     player.state = data;
 
+    // Log occasional updates to verify they're coming through
+    if (Math.random() < 0.01) { // 1% of updates
+      console.log(`Player ${player.username} update: pos(${data.position?.x?.toFixed(1)}, ${data.position?.z?.toFixed(1)}) speed=${data.speed?.toFixed(0)}`);
+    }
+
     // Broadcast to other players in session
     socket.to(`session-${player.sessionId}`).emit('player-state-update', {
       playerId,

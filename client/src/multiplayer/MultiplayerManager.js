@@ -116,10 +116,80 @@ export class MultiplayerManager {
     console.log('Using WebSocket-only multiplayer (no Supabase)');
   }
 
+  createOtherPlayerMotorcycle(username) {
+    const motorcycle = new THREE.Group();
+    
+    // Generate consistent color based on username
+    let hash = 0;
+    for (let i = 0; i < username.length; i++) {
+      hash = username.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const hue = (hash % 360) / 360;
+    
+    // Body (same as main motorcycle but different color)
+    const bodyGeo = new THREE.BoxGeometry(0.3, 0.4, 1.4, 2, 2, 4);
+    const bodyMat = new THREE.MeshStandardMaterial({ 
+      color: new THREE.Color().setHSL(hue, 0.8, 0.5),
+      metalness: 0.6,
+      roughness: 0.3,
+      envMapIntensity: 1.2
+    });
+    const body = new THREE.Mesh(bodyGeo, bodyMat);
+    body.position.y = 0.4;
+    body.position.z = 0.05;
+    body.castShadow = true;
+    motorcycle.add(body);
+    
+    // Tank
+    const tankGeo = new THREE.BoxGeometry(0.35, 0.3, 0.6);
+    const tank = new THREE.Mesh(tankGeo, bodyMat);
+    tank.position.set(0, 0.55, 0.2);
+    motorcycle.add(tank);
+    
+    // Seat
+    const seatGeo = new THREE.BoxGeometry(0.25, 0.1, 0.4, 2, 1, 2);
+    const seatMat = new THREE.MeshStandardMaterial({ 
+      color: 0x1a1a1a,
+      roughness: 0.8,
+      metalness: 0
+    });
+    const seat = new THREE.Mesh(seatGeo, seatMat);
+    seat.position.set(0, 0.65, -0.25);
+    motorcycle.add(seat);
+    
+    // Wheels
+    const wheelGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.15, 16);
+    const wheelMat = new THREE.MeshStandardMaterial({ 
+      color: 0x2a2a2a,
+      roughness: 0.9,
+      metalness: 0
+    });
+    
+    const frontWheel = new THREE.Mesh(wheelGeo, wheelMat);
+    frontWheel.rotation.z = Math.PI / 2;
+    frontWheel.position.set(0, 0.3, 0.7);
+    frontWheel.castShadow = true;
+    motorcycle.add(frontWheel);
+    
+    const rearWheel = new THREE.Mesh(wheelGeo, wheelMat);
+    rearWheel.rotation.z = Math.PI / 2;
+    rearWheel.position.set(0, 0.32, -0.7);
+    rearWheel.castShadow = true;
+    motorcycle.add(rearWheel);
+    
+    // Store references for animation
+    motorcycle.userData.frontWheel = frontWheel;
+    motorcycle.userData.rearWheel = rearWheel;
+    motorcycle.userData.body = body;
+    motorcycle.userData.originalColor = bodyMat.color.clone();
+    
+    return motorcycle;
+  }
+
   addOtherPlayer(playerId, username) {
     if (this.otherPlayers.has(playerId)) return;
 
-    console.log(`Adding other player: ${username} (${playerId})`);
+    // Adding other player (removed debug log)
 
     // Create player data
     const playerData = {
@@ -128,25 +198,23 @@ export class MultiplayerManager {
       position: new THREE.Vector3(0, 0.5, 0),
       rotation: new THREE.Euler(0, 0, 0),
       speed: 0,
-      leanAngle: 0
+      leanAngle: 0,
+      isCrashed: false,
+      isDead: false
     };
 
     this.otherPlayers.set(playerId, playerData);
 
-    // Create visual representation (bright colored box for visibility)
-    const geometry = new THREE.BoxGeometry(2, 3, 4); // Made bigger for visibility
-    const material = new THREE.MeshPhongMaterial({ 
-      color: new THREE.Color().setHSL(Math.random(), 1.0, 0.6),
-      emissive: new THREE.Color().setHSL(Math.random(), 0.8, 0.3),
-      emissiveIntensity: 0.5
-    });
-    const mesh = new THREE.Mesh(geometry, material);
+    // Create motorcycle model for other players
+    const motorcycle = this.createOtherPlayerMotorcycle(username);
     
-    // Position it somewhere visible initially
-    mesh.position.set(
-      Math.random() * 20 - 10, // Random X position
-      2, // Above ground
-      Math.random() * 20 - 10  // Random Z position
+    // Position it near the player for visibility
+    const offsetX = (Math.random() - 0.5) * 20; // -10 to +10
+    const offsetZ = (Math.random() - 0.5) * 20; // -10 to +10
+    motorcycle.position.set(
+      offsetX, // Side by side
+      0.3, // Ground level like regular motorcycle
+      offsetZ  // In front or behind
     );
     
     // Add username label
@@ -170,13 +238,13 @@ export class MultiplayerManager {
       sprite.scale.set(4, 1, 1); // Made bigger
       sprite.position.y = 3;
       
-      mesh.add(sprite);
-      this.game.scene.add(mesh);
+      motorcycle.add(sprite);
+      this.game.scene.add(motorcycle);
       
-      console.log(`Added player mesh to scene at position:`, mesh.position);
+      // Player motorcycle added to scene
     }
     
-    this.playerMeshes.set(playerId, mesh);
+    this.playerMeshes.set(playerId, motorcycle);
   }
 
   removeOtherPlayer(playerId) {
@@ -214,6 +282,8 @@ export class MultiplayerManager {
     }
     if (data.speed !== undefined) player.speed = data.speed;
     if (data.leanAngle !== undefined) player.leanAngle = data.leanAngle;
+    if (data.isCrashed !== undefined) player.isCrashed = data.isCrashed;
+    if (data.isDead !== undefined) player.isDead = data.isDead;
 
     // Don't interpolate position directly - set it based on relative position
     // The mesh position will be updated in the update() method relative to highway
@@ -254,16 +324,23 @@ export class MultiplayerManager {
         z: bikeState.position.z
       },
       rotation: {
-        x: bikeState.rotation.x,
-        y: bikeState.rotation.y,
-        z: bikeState.rotation.z
+        x: bikeState.rotation.x || 0,
+        y: bikeState.rotation.yaw || 0, // Use yaw for Y rotation
+        z: bikeState.rotation.roll || 0 // Use roll for Z rotation
       },
       speed: bikeState.speed,
-      leanAngle: bikeState.leanAngle,
+      leanAngle: bikeState.leanAngle || bikeState.rotation.roll || 0,
       gear: bikeState.gear,
       isWheelie: bikeState.isWheelie,
-      isStoppie: bikeState.isStoppie
+      isStoppie: bikeState.isStoppie,
+      isCrashed: bikeState.collision?.isCrashed || false,
+      isDead: this.game?.isDead || false
     };
+
+    // Debug occasional updates
+    if (Math.random() < 0.005) { // 0.5% of updates
+      console.log(`Sending update: pos(${updateData.position.x?.toFixed(1)}, ${updateData.position.z?.toFixed(1)}) speed=${updateData.speed?.toFixed(0)}`);
+    }
 
     this.socket.emit('player-update', updateData);
   }
@@ -285,11 +362,11 @@ export class MultiplayerManager {
   }
 
   update() {
-    // Update other players' positions smoothly
-    this.playerMeshes.forEach((mesh, playerId) => {
+    // Update other players' motorcycles
+    this.playerMeshes.forEach((motorcycle, playerId) => {
       const player = this.otherPlayers.get(playerId);
-      if (player) {
-        // Update mesh position with interpolation
+      if (player && this.game) {
+        // Use absolute world positions
         const targetPos = new THREE.Vector3(
           player.position.x,
           player.position.y,
@@ -297,18 +374,45 @@ export class MultiplayerManager {
         );
         
         // Smooth interpolation
-        mesh.position.lerp(targetPos, 0.3);
+        motorcycle.position.lerp(targetPos, 0.3);
         
-        // Make mesh more visible for debugging
-        mesh.scale.set(1.5, 1.5, 1.5);
+        // Apply rotations like the main player's motorcycle
+        motorcycle.rotation.set(0, 0, 0);
+        motorcycle.rotateY(player.rotation.y || 0);
+        motorcycle.rotateZ(player.leanAngle || 0);
+        motorcycle.rotateX(player.rotation.x || 0);
         
-        // Ensure mesh is visible
-        mesh.visible = true;
-        mesh.traverse(child => {
-          if (child.material) {
-            child.material.emissiveIntensity = 0.5;
+        // Handle crash/death states
+        if (player.isDead) {
+          // Hide motorcycle when dead (like main player)
+          motorcycle.visible = false;
+        } else if (player.isCrashed) {
+          // Flash red when crashed
+          if (motorcycle.userData.body && motorcycle.userData.originalColor) {
+            motorcycle.userData.body.material.color.setHex(0xff0000);
+            setTimeout(() => {
+              if (motorcycle.userData.body && motorcycle.userData.originalColor) {
+                motorcycle.userData.body.material.color.copy(motorcycle.userData.originalColor);
+              }
+            }, 200);
           }
-        });
+          motorcycle.visible = true;
+        } else {
+          // Animate wheels based on speed
+          if (motorcycle.userData.frontWheel && motorcycle.userData.rearWheel) {
+            const wheelSpeed = (player.speed || 0) * 0.1;
+            motorcycle.userData.frontWheel.rotation.x += wheelSpeed;
+            motorcycle.userData.rearWheel.rotation.x += wheelSpeed;
+          }
+          
+          // Normal visibility
+          motorcycle.visible = true;
+          
+          // Reset color if needed
+          if (motorcycle.userData.body && motorcycle.userData.originalColor) {
+            motorcycle.userData.body.material.color.copy(motorcycle.userData.originalColor);
+          }
+        }
       }
     });
   }
