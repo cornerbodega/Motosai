@@ -28,23 +28,37 @@ export class TrafficSystem {
   createMaterials() {
     this.vehicleMaterials = {
       car: [
-        new THREE.MeshPhongMaterial({ color: 0xff0000 }), // Red
-        new THREE.MeshPhongMaterial({ color: 0x0000ff }), // Blue
-        new THREE.MeshPhongMaterial({ color: 0xffffff }), // White
-        new THREE.MeshPhongMaterial({ color: 0xffff00 }), // Yellow
-        new THREE.MeshPhongMaterial({ color: 0x00ff00 }), // Green
-        new THREE.MeshPhongMaterial({ color: 0xff8800 }), // Orange
-        new THREE.MeshPhongMaterial({ color: 0x8888ff }), // Light blue
-        new THREE.MeshPhongMaterial({ color: 0xcccccc })  // Silver
+        new THREE.MeshStandardMaterial({ color: 0xff0000, metalness: 0.8, roughness: 0.2 }), // Red - shiny
+        new THREE.MeshStandardMaterial({ color: 0x0000ff, metalness: 0.8, roughness: 0.2 }), // Blue - shiny
+        new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.9, roughness: 0.1 }), // White - very shiny
+        new THREE.MeshStandardMaterial({ color: 0xffff00, metalness: 0.7, roughness: 0.25 }), // Yellow - shiny
+        new THREE.MeshStandardMaterial({ color: 0x00ff00, metalness: 0.8, roughness: 0.2 }), // Green - shiny
+        new THREE.MeshStandardMaterial({ color: 0xff8800, metalness: 0.8, roughness: 0.2 }), // Orange - shiny
+        new THREE.MeshStandardMaterial({ color: 0x8888ff, metalness: 0.8, roughness: 0.2 }), // Light blue - shiny
+        new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.95, roughness: 0.05 })  // Silver - extremely shiny
       ],
-      glass: new THREE.MeshPhongMaterial({ 
+      glass: new THREE.MeshStandardMaterial({ 
         color: 0x222244,
+        metalness: 0.1,
+        roughness: 0,
         transparent: true,
-        opacity: 0.6
+        opacity: 0.5
       }),
-      wheel: new THREE.MeshPhongMaterial({ color: 0x222222 }),
-      lights: new THREE.MeshBasicMaterial({ color: 0xffff00 }),
-      brake: new THREE.MeshBasicMaterial({ color: 0xff0000 })
+      wheel: new THREE.MeshStandardMaterial({ 
+        color: 0x1a1a1a,
+        roughness: 0.9,
+        metalness: 0
+      }),
+      lights: new THREE.MeshStandardMaterial({ 
+        color: 0xffff00,
+        emissive: 0xffff00,
+        emissiveIntensity: 0.5
+      }),
+      brake: new THREE.MeshStandardMaterial({ 
+        color: 0xff0000,
+        emissive: 0xff0000,
+        emissiveIntensity: 0.3
+      })
     };
   }
   
@@ -268,9 +282,19 @@ export class TrafficSystem {
     
     // Spawn new vehicles if needed (relative to player position)
     if (this.vehicles.length < this.maxVehicles) {
-      if (Math.random() < 0.015) { // Reduced from 2% to 1.5% for better performance
+      if (Math.random() < 0.03) { // Increased to 3% to ensure traffic keeps flowing
         this.spawnVehicle(playerPosition.z);
       }
+    }
+    
+    // Also ensure minimum traffic near player
+    const nearbyVehicles = this.vehicles.filter(v => 
+      Math.abs(v.position.z - playerPosition.z) < 100
+    ).length;
+    
+    if (nearbyVehicles < 5 && this.vehicles.length < this.maxVehicles) {
+      // Force spawn if too few vehicles nearby
+      this.spawnVehicle(playerPosition.z);
     }
     
     // Update vehicle interactions
@@ -314,26 +338,13 @@ export class TrafficSystem {
     
     // Update brake lights - check if emissive exists first
     if (vehicle.mesh.userData.brake1 && vehicle.mesh.userData.brake1.material) {
-      const brake1Mat = vehicle.mesh.userData.brake1.material;
-      const brake2Mat = vehicle.mesh.userData.brake2.material;
-      
       if (vehicle.isBraking) {
-        // Check if material has color property (standard material) or uniforms (shader material)
-        if (brake1Mat.color && brake1Mat.color.setHex) {
-          brake1Mat.color.setHex(0xff0000);
-          brake2Mat.color.setHex(0xff0000);
-        } else if (brake1Mat.uniforms && brake1Mat.uniforms.diffuse) {
-          brake1Mat.uniforms.diffuse.value.setHex(0xff0000);
-          brake2Mat.uniforms.diffuse.value.setHex(0xff0000);
-        }
+        // MeshBasicMaterial doesn't have emissive, use color instead
+        vehicle.mesh.userData.brake1.material.color.setHex(0xff0000);
+        vehicle.mesh.userData.brake2.material.color.setHex(0xff0000);
       } else {
-        if (brake1Mat.color && brake1Mat.color.setHex) {
-          brake1Mat.color.setHex(0x660000);
-          brake2Mat.color.setHex(0x660000);
-        } else if (brake1Mat.uniforms && brake1Mat.uniforms.diffuse) {
-          brake1Mat.uniforms.diffuse.value.setHex(0x660000);
-          brake2Mat.uniforms.diffuse.value.setHex(0x660000);
-        }
+        vehicle.mesh.userData.brake1.material.color.setHex(0x660000);
+        vehicle.mesh.userData.brake2.material.color.setHex(0x660000);
       }
     }
   }
@@ -522,17 +533,13 @@ export class TrafficSystem {
     // Remove all vehicles from scene
     this.vehicles.forEach(vehicle => {
       if (vehicle.mesh) {
-        // Dispose of geometry and materials
-        if (vehicle.mesh.geometry) {
-          vehicle.mesh.geometry.dispose();
-        }
-        if (vehicle.mesh.material) {
-          if (Array.isArray(vehicle.mesh.material)) {
-            vehicle.mesh.material.forEach(mat => mat.dispose());
-          } else {
-            vehicle.mesh.material.dispose();
+        // Dispose of geometries in the group
+        vehicle.mesh.traverse((object) => {
+          if (object.geometry) {
+            object.geometry.dispose();
           }
-        }
+          // Don't dispose shared materials here - they're disposed below
+        });
         // Remove from scene
         this.scene.remove(vehicle.mesh);
       }
@@ -541,9 +548,28 @@ export class TrafficSystem {
     // Clear vehicles array
     this.vehicles = [];
     
+    // Dispose of shared materials
+    if (this.vehicleMaterials) {
+      // Dispose car materials array
+      if (this.vehicleMaterials.car) {
+        this.vehicleMaterials.car.forEach(mat => {
+          if (mat && typeof mat.dispose === 'function') {
+            mat.dispose();
+          }
+        });
+      }
+      // Dispose other shared materials
+      ['glass', 'wheel', 'lights', 'brake'].forEach(key => {
+        if (this.vehicleMaterials[key] && typeof this.vehicleMaterials[key].dispose === 'function') {
+          this.vehicleMaterials[key].dispose();
+        }
+      });
+    }
+    
     // Clear references
     this.scene = null;
     this.highway = null;
     this.camera = null;
+    this.vehicleMaterials = null;
   }
 }

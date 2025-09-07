@@ -104,10 +104,8 @@ testApiBtn.addEventListener('click', async () => {
 let latencyCheckInterval = null;
 
 function startLatencyCheck() {
-    // Clear any existing interval
-    if (latencyCheckInterval) {
-        clearInterval(latencyCheckInterval);
-    }
+    // Clear any existing interval first - prevents accumulation
+    stopLatencyCheck();
     
     latencyCheckInterval = setInterval(() => {
         if (socket.connected) {
@@ -116,12 +114,16 @@ function startLatencyCheck() {
     }, 5000);
 }
 
-// Clean up on page unload
-window.addEventListener('beforeunload', () => {
+function stopLatencyCheck() {
     if (latencyCheckInterval) {
         clearInterval(latencyCheckInterval);
         latencyCheckInterval = null;
     }
+}
+
+// Clean up on page unload
+window.addEventListener('beforeunload', () => {
+    stopLatencyCheck();
     socket.disconnect();
 });
 

@@ -4,7 +4,7 @@
 export class SimpleBikePhysics {
   constructor() {
     // Position and movement
-    this.position = { x: 0, y: 0, z: 0 };
+    this.position = { x: 0, y: 0.3, z: 0 }; // Start at wheel height to prevent clipping
     this.velocity = { x: 0, y: 0, z: 0 };
     this.rotation = { pitch: 0, yaw: 0, roll: 0 };
     
@@ -50,12 +50,12 @@ export class SimpleBikePhysics {
       invulnerableTime: 0, // Brief invulnerability after collision
     };
     
-    // Collision response parameters
+    // Collision response parameters - balanced for lane splitting
     this.collisionResponse = {
-      glancing: { speedLoss: 0.2, deflection: 5, wobbleDuration: 0.5, wobbleAmp: 0.1 },
-      sideSwipe: { speedLoss: 0.4, deflection: 10, wobbleDuration: 1.0, wobbleAmp: 0.2 },
-      tBone: { speedLoss: 0.7, deflection: 15, wobbleDuration: 1.5, wobbleAmp: 0.3 },
-      headOn: { speedLoss: 0.9, deflection: 0, wobbleDuration: 2.0, wobbleAmp: 0.4, crash: true }
+      glancing: { speedLoss: 0.3, deflection: 5, wobbleDuration: 0.5, wobbleAmp: 0.1, crash: false }, // Glancing is survivable
+      sideSwipe: { speedLoss: 0.5, deflection: 10, wobbleDuration: 1.0, wobbleAmp: 0.2, crash: true }, // Side hit = death
+      tBone: { speedLoss: 0.8, deflection: 15, wobbleDuration: 1.5, wobbleAmp: 0.3, crash: true }, // T-bone = death
+      headOn: { speedLoss: 0.95, deflection: 0, wobbleDuration: 2.0, wobbleAmp: 0.4, crash: true } // Head-on = death
     };
   }
   
@@ -76,8 +76,8 @@ export class SimpleBikePhysics {
     // Update collision recovery
     this.updateCollisionEffects(deltaTime);
     
-    // Check for new collisions
-    if (trafficSystem && this.collision.invulnerableTime <= 0) {
+    // Check for new collisions (moved check here)
+    if (trafficSystem) {
       this.checkCollisions(trafficSystem);
     }
     
@@ -346,12 +346,21 @@ export class SimpleBikePhysics {
   }
   
   checkCollisions(trafficSystem) {
-    // Use very small radius for precise collision detection to allow lane splitting
-    const collision = trafficSystem.checkCollision(this.position, 0.3); // Very small for lane splitting
+    // Skip if we're invulnerable
+    if (this.collision.invulnerableTime > 0) return;
+    
+    // Use small radius for lane splitting but not too small to miss collisions
+    const collision = trafficSystem.checkCollision(this.position, 0.35); // Balanced for lane splitting
     if (collision) {
-      const impactAngle = this.calculateImpactAngle(collision);
-      const relativeSpeed = this.calculateRelativeSpeed(collision);
-      this.applyCollisionResponse(impactAngle, relativeSpeed, collision);
+      // ANY collision = instant death, no complex calculations needed
+      this.collision.isCrashed = true;
+      this.collision.recoveryTime = 2.0;
+      
+      // Add some physics effects for visual feedback
+      const dx = collision.position.x - this.position.x;
+      const deflectionDir = Math.sign(dx) * -1;
+      this.collision.lateralVelocity = deflectionDir * 10;
+      this.speed *= 0.5; // Slow down but don't stop (death animation will handle it)
     }
   }
   
@@ -378,10 +387,10 @@ export class SimpleBikePhysics {
   
   getCollisionType(angle) {
     const angleDeg = angle * 180 / Math.PI;
-    if (angleDeg < 30) return 'glancing';
-    if (angleDeg < 60) return 'sideSwipe';
-    if (angleDeg < 120) return 'tBone';
-    return 'headOn';
+    if (angleDeg < 20) return 'glancing';  // Only very shallow angles are glancing
+    if (angleDeg < 45) return 'sideSwipe'; // Side swipes are now deadly
+    if (angleDeg < 90) return 'tBone';     // T-bones are deadly
+    return 'headOn';                       // Everything else is head-on
   }
   
   applyCollisionResponse(angle, speed, vehicle) {
@@ -413,11 +422,12 @@ export class SimpleBikePhysics {
     // Set brief invulnerability
     this.collision.invulnerableTime = 1.0; // 1 second of invulnerability
     
-    // Check for crash
-    if (response.crash && this.speed > 10) {
+    // Check for crash - reasonable speed threshold
+    const displaySpeedMPH = this.speed * 2.237 / 1.5;
+    if (response.crash && displaySpeedMPH > 30) { // Crash at 30mph+ for better gameplay
       this.collision.isCrashed = true;
       this.collision.recoveryTime = 2.0;
-      this.speed = 0;
+      // Don't set speed to 0 here - let the death animation handle it
     }
   }
   

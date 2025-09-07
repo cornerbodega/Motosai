@@ -8,6 +8,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.57.2",
     "socket.io-client": "^4.8.1",
     "three": "^0.160.0"
   },

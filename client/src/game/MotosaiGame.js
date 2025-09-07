@@ -6,12 +6,20 @@ import { InputController } from '../physics/InputController.js';
 import { Highway101 } from './Highway101.js';
 import { TrafficSystem } from './TrafficSystem.js';
 import { BackgroundSystem } from './backgrounds/BackgroundSystem.js';
+import { DeathAnimation } from './DeathAnimation.js';
+import { MultiplayerManager } from '../multiplayer/MultiplayerManager.js';
 
 export class MotosaiGame {
-  constructor(container) {
+  constructor(container, config = {}) {
     this.container = container;
     this.width = container.clientWidth;
     this.height = container.clientHeight;
+    
+    // Configuration options
+    this.config = {
+      riderColor: config.riderColor || 0x2a2a2a, // Default dark grey
+      ...config
+    };
     
     // Game state
     this.isRunning = false;
@@ -25,6 +33,15 @@ export class MotosaiGame {
       duration: 0,
       offset: { x: 0, y: 0 }
     };
+    
+    // Death animation system
+    this.deathAnimation = null;
+    this.isDead = false;
+    this.respawnTimer = 0;
+    
+    // Multiplayer
+    this.multiplayer = null;
+    this.isMultiplayerEnabled = config.multiplayer || false;
     
     // Store bound event handlers for cleanup
     this.boundHandleResize = () => this.onResize();
@@ -42,6 +59,12 @@ export class MotosaiGame {
     this.initTraffic();
     this.initControls();
     this.initHUD();
+    this.initDeathAnimation();
+    
+    // Initialize multiplayer asynchronously
+    if (this.isMultiplayerEnabled) {
+      this.initMultiplayer();
+    }
     
     // Start game loop - delay slightly to ensure all materials are initialized
     this.lastTime = performance.now();
@@ -87,11 +110,22 @@ export class MotosaiGame {
     
     this.renderer.setSize(this.width, this.height);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    
+    // Enhanced shadow settings for softer shadows
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.VSMShadowMap; // Very soft shadows
+    this.renderer.shadowMap.autoUpdate = true;
+    
+    // Better tone mapping for realistic lighting
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 0.8;
-    this.renderer.setClearColor(0x87CEEB, 1); // Set clear color to sky blue
+    this.renderer.toneMappingExposure = 1.2;
+    
+    // Enable physically correct lighting
+    this.renderer.physicallyCorrectLights = true;
+    this.renderer.outputEncoding = THREE.sRGBEncoding;
+    
+    // Soft sky color
+    this.renderer.setClearColor(0x87CEEB, 1);
     this.container.appendChild(this.renderer.domElement);
     
     // Handle resize
@@ -171,27 +205,38 @@ export class MotosaiGame {
   }
   
   initLights() {
-    // Ambient light
-    const ambient = new THREE.AmbientLight(0xffffff, 0.6);
+    // Softer ambient light with warm tint
+    const ambient = new THREE.AmbientLight(0xfff5e6, 0.4);
     this.scene.add(ambient);
     
-    // Directional light (sun)
-    this.sunLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    this.sunLight.position.set(50, 100, 50);
+    // Main sun light - softer and warmer
+    this.sunLight = new THREE.DirectionalLight(0xfff5dd, 2.5);
+    this.sunLight.position.set(100, 150, 80);
     this.sunLight.castShadow = true;
-    this.sunLight.shadow.camera.left = -50;
-    this.sunLight.shadow.camera.right = 50;
-    this.sunLight.shadow.camera.top = 50;
-    this.sunLight.shadow.camera.bottom = -50;
-    this.sunLight.shadow.camera.near = 0.1;
-    this.sunLight.shadow.camera.far = 200;
-    this.sunLight.shadow.mapSize.width = 2048;
-    this.sunLight.shadow.mapSize.height = 2048;
+    
+    // Softer shadow settings
+    this.sunLight.shadow.camera.left = -60;
+    this.sunLight.shadow.camera.right = 60;
+    this.sunLight.shadow.camera.top = 60;
+    this.sunLight.shadow.camera.bottom = -60;
+    this.sunLight.shadow.camera.near = 1;  // Increased from 0.1 to reduce shadow acne
+    this.sunLight.shadow.camera.far = 300;
+    this.sunLight.shadow.mapSize.width = 4096;
+    this.sunLight.shadow.mapSize.height = 4096;
+    this.sunLight.shadow.radius = 4; // Soft shadow edges
+    this.sunLight.shadow.blurSamples = 25; // More blur samples for softer shadows
+    this.sunLight.shadow.bias = -0.0005; // Add negative bias to fix shadow acne
+    this.sunLight.shadow.normalBias = 0.02; // Add normal bias to prevent artifacts
     this.scene.add(this.sunLight);
     
-    // Hemisphere light for ambient
-    const hemi = new THREE.HemisphereLight(0x87CEEB, 0x545454, 0.4);
+    // Hemisphere light for soft sky lighting
+    const hemi = new THREE.HemisphereLight(0x87CEEB, 0x8b7355, 0.6);
     this.scene.add(hemi);
+    
+    // Add a subtle fill light to soften harsh shadows
+    const fillLight = new THREE.DirectionalLight(0xe6f0ff, 0.4);
+    fillLight.position.set(-50, 80, -50);
+    this.scene.add(fillLight);
   }
   
   initPhysics() {
@@ -212,14 +257,17 @@ export class MotosaiGame {
   createMotorcycle() {
     this.motorcycle = new THREE.Group();
     
-    // Body (simplified sportbike shape)
-    const bodyGeo = new THREE.BoxGeometry(0.3, 0.4, 1.8);
-    const bodyMat = new THREE.MeshPhongMaterial({ 
+    // Body (simplified sportbike shape - shortened to prevent rear clipping)
+    const bodyGeo = new THREE.BoxGeometry(0.3, 0.4, 1.4, 2, 2, 4); // Added subdivisions for smoother shading
+    const bodyMat = new THREE.MeshStandardMaterial({ 
       color: 0xff0000,
-      shininess: 100
+      metalness: 0.6,
+      roughness: 0.3,
+      envMapIntensity: 1.2
     });
     const body = new THREE.Mesh(bodyGeo, bodyMat);
     body.position.y = 0.4;
+    body.position.z = 0.05; // Shifted slightly forward
     body.castShadow = true;
     this.motorcycle.add(body);
     
@@ -229,20 +277,29 @@ export class MotosaiGame {
     tank.position.set(0, 0.55, 0.2);
     this.motorcycle.add(tank);
     
-    // Seat
-    const seatGeo = new THREE.BoxGeometry(0.25, 0.1, 0.5);
-    const seatMat = new THREE.MeshPhongMaterial({ color: 0x000000 });
+    // Seat (adjusted position to not extend past rear wheel) - soft leather material
+    const seatGeo = new THREE.BoxGeometry(0.25, 0.1, 0.4, 2, 1, 2); // Added subdivisions
+    const seatMat = new THREE.MeshStandardMaterial({ 
+      color: 0x1a1a1a,
+      roughness: 0.8,
+      metalness: 0
+    });
     const seat = new THREE.Mesh(seatGeo, seatMat);
-    seat.position.set(0, 0.65, -0.3);
+    seat.position.set(0, 0.65, -0.25); // Moved forward from -0.3 to -0.25
     this.motorcycle.add(seat);
     
-    // Front wheel
-    const wheelGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.15, 8);
-    const wheelMat = new THREE.MeshPhongMaterial({ color: 0x333333 });
+    // Front wheel - rubber tire material
+    const wheelGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.15, 16);
+    const wheelMat = new THREE.MeshStandardMaterial({ 
+      color: 0x2a2a2a,
+      roughness: 0.9,
+      metalness: 0
+    });
     this.frontWheel = new THREE.Mesh(wheelGeo, wheelMat);
     this.frontWheel.rotation.z = Math.PI / 2;
     this.frontWheel.position.set(0, 0.3, 0.7);
     this.frontWheel.castShadow = true;
+    this.frontWheel.receiveShadow = true;
     this.motorcycle.add(this.frontWheel);
     
     // Rear wheel
@@ -250,11 +307,16 @@ export class MotosaiGame {
     this.rearWheel.rotation.z = Math.PI / 2;
     this.rearWheel.position.set(0, 0.32, -0.7);
     this.rearWheel.castShadow = true;
+    this.rearWheel.receiveShadow = true;
     this.motorcycle.add(this.rearWheel);
     
-    // Fork
-    const forkGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.6, 6);
-    const forkMat = new THREE.MeshPhongMaterial({ color: 0x666666 });
+    // Fork - brushed metal
+    const forkGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.6, 8);
+    const forkMat = new THREE.MeshStandardMaterial({ 
+      color: 0x888888,
+      metalness: 0.9,
+      roughness: 0.4
+    });
     const fork1 = new THREE.Mesh(forkGeo, forkMat);
     fork1.position.set(0.08, 0.3, 0.7);
     fork1.rotation.z = 0.1;
@@ -265,28 +327,74 @@ export class MotosaiGame {
     fork2.rotation.z = -0.1;
     this.motorcycle.add(fork2);
     
-    // Handlebars
+    // Handlebars - rubber grips
     const barGeo = new THREE.BoxGeometry(0.5, 0.02, 0.02);
-    const bars = new THREE.Mesh(barGeo, forkMat);
+    const barMat = new THREE.MeshStandardMaterial({
+      color: 0x1a1a1a,
+      roughness: 0.9,
+      metalness: 0
+    });
+    const bars = new THREE.Mesh(barGeo, barMat);
     bars.position.set(0, 0.7, 0.6);
     this.motorcycle.add(bars);
     
-    // Rider (very simple)
+    // Rider (improved but keeping two-part structure)
     const riderGroup = new THREE.Group();
     
-    // Helmet
-    const helmetGeo = new THREE.SphereGeometry(0.12, 6, 6);
-    const helmetMat = new THREE.MeshPhongMaterial({ color: 0x111111 });
+    // Helmet (even bigger) - glossy finish
+    const helmetGeo = new THREE.SphereGeometry(0.22, 12, 8); // Increased to 0.22 for even bigger helmet
+    const helmetMat = new THREE.MeshStandardMaterial({ 
+      color: this.config.riderColor, // Same color as gear
+      metalness: 0.4,
+      roughness: 0.15 // More glossy than gear
+    });
     const helmet = new THREE.Mesh(helmetGeo, helmetMat);
-    helmet.position.set(0, 1.0, -0.1);
+    helmet.position.set(0, 0.9, -0.1); // Lower position for smaller body
+    helmet.scale.set(1, 0.9, 1.1); // Slightly elongated for helmet shape
     riderGroup.add(helmet);
     
-    // Body
-    const riderBodyGeo = new THREE.BoxGeometry(0.3, 0.4, 0.3);
-    const riderBodyMat = new THREE.MeshPhongMaterial({ color: 0x333333 });
+    // Visor - glass-like material (scaled up to match bigger helmet)
+    const visorGeo = new THREE.BoxGeometry(0.18, 0.09, 0.11); // Scaled up for bigger helmet
+    const visorMat = new THREE.MeshStandardMaterial({ 
+      color: 0x000033,
+      metalness: 0.1,
+      roughness: 0,
+      opacity: 0.7,
+      transparent: true
+    });
+    const visor = new THREE.Mesh(visorGeo, visorMat);
+    visor.position.set(0, 0.9, 0);
+    riderGroup.add(visor);
+    
+    // Body (much smaller) - using configured rider color
+    const riderBodyGeo = new THREE.BoxGeometry(0.24, 0.3, 0.25, 2, 2, 2); // Even smaller body
+    const riderBodyMat = new THREE.MeshStandardMaterial({ 
+      color: this.config.riderColor, // Use configured color
+      roughness: 0.7,
+      metalness: 0
+    });
     const riderBody = new THREE.Mesh(riderBodyGeo, riderBodyMat);
-    riderBody.position.set(0, 0.8, -0.2);
+    riderBody.position.set(0, 0.7, -0.2); // Lower position
     riderGroup.add(riderBody);
+    
+    // Shoulders (proportionally smaller)
+    const shoulderGeo = new THREE.BoxGeometry(0.3, 0.1, 0.2); // Smaller shoulders
+    const shoulders = new THREE.Mesh(shoulderGeo, riderBodyMat);
+    shoulders.position.set(0, 0.78, -0.18); // Adjusted position
+    riderGroup.add(shoulders);
+    
+    // Arms (simplified, angled forward to handlebars) - same material as body
+    const armGeo = new THREE.BoxGeometry(0.06, 0.25, 0.06); // Even smaller arms
+    
+    const leftArm = new THREE.Mesh(armGeo, riderBodyMat); // Use same material as body
+    leftArm.position.set(0.14, 0.65, 0.05); // Adjusted for even smaller body
+    leftArm.rotation.x = -0.6; // Angle forward
+    riderGroup.add(leftArm);
+    
+    const rightArm = new THREE.Mesh(armGeo, riderBodyMat); // Use same material as body
+    rightArm.position.set(-0.14, 0.65, 0.05); // Adjusted for even smaller body
+    rightArm.rotation.x = -0.6; // Angle forward
+    riderGroup.add(rightArm);
     
     this.rider = riderGroup;
     this.motorcycle.add(this.rider);
@@ -324,18 +432,6 @@ export class MotosaiGame {
     this.traffic.spawn(20); // Start with 20 vehicles
   }
   
-  initSoftShaders() {
-    if (this.useSoftShaders) {
-      try {
-        this.softShaders = new SoftShaderSystem(this.renderer, this.scene, this.camera);
-        console.log('Soft shader system initialized');
-      } catch (error) {
-        console.error('Failed to initialize soft shaders:', error);
-        this.useSoftShaders = false;
-      }
-    }
-  }
-  
   initControls() {
     this.keys = {};
     
@@ -358,9 +454,6 @@ export class MotosaiGame {
       } else if (e.code === 'KeyV') {
         // Toggle physics version
         this.togglePhysicsVersion();
-      } else if (e.code === 'KeyG') {
-        // Toggle soft shaders
-        this.toggleSoftShaders();
       }
     };
     
@@ -385,12 +478,13 @@ export class MotosaiGame {
     let touchStartX = 0;
     let touchStartY = 0;
     
-    this.renderer.domElement.addEventListener('touchstart', (e) => {
+    // Store bound handlers for cleanup
+    this.boundHandleTouchStart = (e) => {
       touchStartX = e.touches[0].clientX;
       touchStartY = e.touches[0].clientY;
-    });
+    };
     
-    this.renderer.domElement.addEventListener('touchmove', (e) => {
+    this.boundHandleTouchMove = (e) => {
       const touchX = e.touches[0].clientX;
       const touchY = e.touches[0].clientY;
       
@@ -406,15 +500,89 @@ export class MotosaiGame {
       } else if (deltaY > 0.1) {
         this.physics.setControls({ frontBrake: deltaY });
       }
-    });
+    };
     
-    this.renderer.domElement.addEventListener('touchend', () => {
+    this.boundHandleTouchEnd = () => {
       this.physics.setControls({ 
         lean: 0,
         throttle: 0,
         frontBrake: 0
       });
-    });
+    };
+    
+    this.renderer.domElement.addEventListener('touchstart', this.boundHandleTouchStart);
+    this.renderer.domElement.addEventListener('touchmove', this.boundHandleTouchMove);
+    this.renderer.domElement.addEventListener('touchend', this.boundHandleTouchEnd);
+  }
+  
+  initDeathAnimation() {
+    this.deathAnimation = new DeathAnimation(this.scene);
+  }
+  
+  async initMultiplayer() {
+    if (!this.isMultiplayerEnabled) return;
+    
+    this.multiplayer = new MultiplayerManager(this);
+    
+    try {
+      // Connect with a default username for now
+      const playerInfo = await this.multiplayer.connect();
+      console.log(`Connected to multiplayer as ${playerInfo.username}`);
+      
+      // Add multiplayer status to HUD
+      this.updateMultiplayerHUD();
+    } catch (error) {
+      console.error('Failed to connect to multiplayer:', error);
+      this.isMultiplayerEnabled = false;
+    }
+  }
+  
+  updateMultiplayerHUD() {
+    if (!this.multiplayer || !this.multiplayer.isConnected) return;
+    
+    // Create multiplayer HUD if it doesn't exist
+    if (!this.multiplayerHUD) {
+      this.multiplayerHUD = document.createElement('div');
+      this.multiplayerHUD.style.position = 'absolute';
+      this.multiplayerHUD.style.top = '10px';
+      this.multiplayerHUD.style.right = '10px';
+      this.multiplayerHUD.style.color = 'white';
+      this.multiplayerHUD.style.fontFamily = 'monospace';
+      this.multiplayerHUD.style.fontSize = '12px';
+      this.multiplayerHUD.style.textShadow = '2px 2px 4px rgba(0,0,0,0.5)';
+      this.multiplayerHUD.style.textAlign = 'right';
+      this.container.appendChild(this.multiplayerHUD);
+    }
+    
+    const players = this.multiplayer.getPlayerList();
+    const playerListHTML = players.map(p => 
+      `<div style="color: ${p.id === this.multiplayer.playerId ? '#00ff00' : 'white'}">${p.username}</div>`
+    ).join('');
+    
+    this.multiplayerHUD.innerHTML = `
+      <div style="font-size: 14px; margin-bottom: 5px;">🏍️ Online Players (${players.length})</div>
+      ${playerListHTML}
+    `;
+  }
+  
+  displayChatMessage(data) {
+    // Create chat message element
+    const chatMsg = document.createElement('div');
+    chatMsg.style.cssText = `
+      position: absolute;
+      bottom: 100px;
+      left: 10px;
+      color: white;
+      font-family: monospace;
+      font-size: 14px;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.7);
+      animation: fadeOut 5s forwards;
+    `;
+    chatMsg.textContent = `${data.username}: ${data.message}`;
+    this.container.appendChild(chatMsg);
+    
+    // Remove after animation
+    setTimeout(() => chatMsg.remove(), 5000);
   }
   
   initHUD() {
@@ -523,9 +691,15 @@ export class MotosaiGame {
   updateCamera(deltaTime) {
     const state = this.physics.getState();
     
-    // Hide/show motorcycle based on camera mode
-    if (this.motorcycle) {
-      this.motorcycle.visible = !this.isFirstPerson;
+    // Hide/show motorcycle based on camera mode (ONLY if not dead!)
+    if (this.motorcycle && !this.isDead) {
+      // Only hide in first person, don't override death/respawn visibility
+      if (this.isFirstPerson) {
+        this.motorcycle.visible = false;
+      } else {
+        this.motorcycle.visible = true;
+        this.rider.visible = true; // Make sure rider is visible too in third person
+      }
     }
     
     // Calculate camera position based on bike
@@ -563,19 +737,19 @@ export class MotosaiGame {
       state.position.z + lookOffset.z
     );
     
-    // Smooth camera movement - much faster lerp at high speeds
+    // Smooth camera movement - more responsive at all speeds
     const speedMPH = state.speed;
     let smoothing;
     if (speedMPH > 200) {
       smoothing = 1.0; // Instant lock at extreme speeds
     } else if (speedMPH > 150) {
-      smoothing = 0.9; // Nearly instant
+      smoothing = 0.95; // Nearly instant
     } else if (speedMPH > 100) {
-      smoothing = 0.6;
+      smoothing = 0.85;
     } else if (speedMPH > 50) {
-      smoothing = 0.4;
+      smoothing = 0.75;
     } else {
-      smoothing = 0.25; // Still smooth at low speeds
+      smoothing = 0.65; // Much more responsive at low speeds (was 0.25)
     }
     
     this.cameraPosition.lerp(targetCameraPos, smoothing);
@@ -587,9 +761,9 @@ export class MotosaiGame {
     const speedRatio = Math.min(speedMPH / 200, 1); // Normalize to displayed max of 200mph
     const targetFOV = baseFOV + (maxFOVIncrease * speedRatio * speedRatio); // Quadratic increase
     
-    // Smooth FOV transition
+    // Smooth FOV transition - make it more responsive
     const currentFOV = this.camera.fov;
-    this.camera.fov = currentFOV + (targetFOV - currentFOV) * 0.1;
+    this.camera.fov = currentFOV + (targetFOV - currentFOV) * 0.2; // Faster FOV changes (was 0.1)
     this.camera.updateProjectionMatrix();
     
     // Apply camera position with screen shake
@@ -607,9 +781,9 @@ export class MotosaiGame {
     const cameraLeanFactor = this.isFirstPerson ? 0.9 : 0.7; // 90% in first person, 70% in third
     const targetCameraRoll = state.rotation.roll * cameraLeanFactor;
     
-    // Smooth the camera roll transition
+    // Smooth the camera roll transition - make it more responsive
     if (!this.cameraRoll) this.cameraRoll = 0;
-    this.cameraRoll += (targetCameraRoll - this.cameraRoll) * 0.15; // Smooth transition
+    this.cameraRoll += (targetCameraRoll - this.cameraRoll) * 0.3; // Faster transition (was 0.15)
     
     // Apply the roll rotation to the camera
     // Save the current up vector and rotation
@@ -637,14 +811,13 @@ export class MotosaiGame {
     // Update info display
     this.hud.innerHTML = `
       Camera: ${this.isFirstPerson ? 'First Person' : 'Third Person'} (Space)<br>
-      Shaders: ${this.useSoftShaders ? 'Soft' : 'Standard'} (G)<br>
       Physics: ${physicsMode}<br>
       Gear: ${state.gear || 'N/A'}<br>
       RPM: ${state.rpm || 'N/A'}<br>
       Lean: ${state.leanAngle !== undefined ? state.leanAngle.toFixed(1) : '0.0'}°<br>
       ${state.turnRate !== undefined ? `Turn Rate: ${state.turnRate.toFixed(1)}°/s<br>` : ''}
       ${state.collision && state.collision.isWobbling ? `<span style="color: orange">⚠️ WOBBLING!</span><br>` : ''}
-      ${state.collision && state.collision.isCrashed ? `<span style="color: red">💥 CRASHED!</span><br>` : ''}
+      ${this.isDead ? `<span style="color: red; font-size: 20px">💀 DEAD - Respawning...</span><br>` : ''}
       Distance: ${(this.distance / 5280).toFixed(1)} mi<br>
       Score: ${this.score}
     `;
@@ -665,23 +838,73 @@ export class MotosaiGame {
     }
   }
   
-  toggleSoftShaders() {
-    this.useSoftShaders = !this.useSoftShaders;
+  triggerDeath(state) {
+    if (this.isDead) return; // Already dead
     
-    if (this.useSoftShaders && !this.softShaders) {
-      this.initSoftShaders();
-    } else if (!this.useSoftShaders && this.softShaders) {
-      this.softShaders.dispose();
-      this.softShaders = null;
-      // Need to refresh materials
-      this.scene.traverse((object) => {
-        if (object.isMesh && object.material) {
-          object.material.needsUpdate = true;
-        }
-      });
-    }
+    this.isDead = true;
+    this.motorcycle.visible = false; // Hide motorcycle immediately
+    this.rider.visible = false; // Hide rider immediately - they're now a puddle!
     
-    console.log('Soft shaders:', this.useSoftShaders ? 'ON' : 'OFF');
+    // Calculate collision direction from velocity
+    const velocity = new THREE.Vector3(
+      state.velocity.x || 0,
+      state.velocity.y || 0,
+      state.velocity.z || 0
+    );
+    
+    // Trigger death animation at motorcycle position
+    const deathPosition = new THREE.Vector3(
+      state.position.x,
+      state.position.y + 0.5, // Slightly above ground for rider height
+      state.position.z
+    );
+    
+    this.deathAnimation.trigger(deathPosition, velocity);
+    
+    // Big screen shake for death
+    this.screenShake.intensity = 30;
+    this.screenShake.duration = 0.5;
+    
+    // Stop the bike completely
+    this.physics.velocity = { x: 0, y: 0, z: 0 };
+    this.physics.speed = 0;
+  }
+  
+  respawnPlayer() {
+    this.isDead = false;
+    
+    // Make everything visible again
+    this.motorcycle.visible = true;
+    this.rider.visible = true; // Rider is back from being a puddle!
+    
+    // Also make all children visible
+    this.motorcycle.traverse((child) => {
+      child.visible = true;
+    });
+    
+    // Reset physics but keep position (player has fallen behind)
+    const currentState = this.physics.getState();
+    this.physics.speed = 20 / 2.237; // Start at low speed (20 mph)
+    this.physics.velocity = { x: 0, y: 0, z: this.physics.speed };
+    this.physics.rotation = { pitch: 0, yaw: 0, roll: 0 };
+    
+    // Clear collision state
+    this.physics.collision = {
+      isWobbling: false,
+      wobbleTime: 0,
+      wobbleAmplitude: 0,
+      lateralVelocity: 0,
+      isCrashed: false,
+      recoveryTime: 0,
+      invulnerableTime: 2.0 // 2 seconds of invulnerability after respawn
+    };
+    
+    // Reset visual elements
+    this.rider.rotation.set(0, 0, 0);
+    this.frontWheel.rotation.x = 0;
+    this.rearWheel.rotation.x = 0;
+    
+    console.log('Player respawned!');
   }
   
   togglePhysicsVersion() {
@@ -722,6 +945,8 @@ export class MotosaiGame {
   }
   
   animate() {
+    // Prevent multiple animation loops
+    if (this.isDisposed) return;
     this.animationId = requestAnimationFrame(() => this.animate());
     
     const currentTime = performance.now();
@@ -729,35 +954,72 @@ export class MotosaiGame {
     this.lastTime = currentTime;
     
     if (!this.isPaused) {
-      // Update controls
-      if (this.useSimplePhysics) {
-        // Direct controls for simple physics
-        this.updateControls(deltaTime);
-      } else {
-        // Use input controller for complex physics
-        this.updateControlsComplex(deltaTime);
-      }
+      // Get physics state first
+      let state;
       
-      // Update physics (pass traffic for collision detection)
-      const state = this.useSimplePhysics 
-        ? this.physics.update(deltaTime, this.traffic) 
-        : this.physics.update(deltaTime);
-      
-      // Check for collision effects
-      if (state.collision) {
-        // Trigger screen shake on new collision
-        if (state.collision.isWobbling && this.screenShake.duration <= 0) {
-          this.screenShake.intensity = state.collision.isCrashed ? 20 : 10;
-          this.screenShake.duration = 0.3;
+      // Handle death animation
+      if (this.isDead) {
+        // Update death animation
+        const readyForRespawn = this.deathAnimation.update(deltaTime);
+        
+        // Check if we should respawn
+        if (readyForRespawn && !this.deathAnimation.isAnimating) {
+          this.respawnPlayer();
         }
         
-        // Flash effect for invulnerability
-        if (state.collision.invulnerable) {
-          this.motorcycle.visible = Math.sin(Date.now() * 0.01) > 0;
+        // Get state for camera
+        state = this.physics.getState();
+      } else {
+        // Normal gameplay
+        // Update controls
+        if (this.useSimplePhysics) {
+          // Direct controls for simple physics
+          this.updateControls(deltaTime);
         } else {
-          this.motorcycle.visible = true;
+          // Use input controller for complex physics
+          this.updateControlsComplex(deltaTime);
+        }
+        
+        // Update physics (pass traffic for collision detection)
+        state = this.useSimplePhysics 
+          ? this.physics.update(deltaTime, this.traffic) 
+          : this.physics.update(deltaTime);
+        
+        // Check for collision effects
+        if (state.collision) {
+          // Check for crash (serious collision)
+          if (state.collision.isCrashed && !this.isDead) {
+            this.triggerDeath(state);
+          } else {
+            // Minor collision - just wobble
+            // Trigger screen shake on new collision
+            if (state.collision.isWobbling && this.screenShake.duration <= 0) {
+              this.screenShake.intensity = 10;
+              this.screenShake.duration = 0.3;
+            }
+            
+            // Invulnerability effects are handled in the motorcycle update section
+          }
         }
       }
+      
+      // Update multiplayer
+      if (this.multiplayer && this.multiplayer.isConnected) {
+        // Send our state to other players
+        this.multiplayer.sendPlayerUpdate(state);
+        
+        // Update other players
+        this.multiplayer.update();
+        
+        // Update multiplayer HUD
+        this.updateMultiplayerHUD();
+      }
+      
+      // ALWAYS update traffic regardless of death state
+      this.traffic.update(deltaTime, state.position);
+      
+      // Update highway 
+      this.highway.update(state.position.z, state.actualSpeed || state.speed);
       
       // Update screen shake
       if (this.screenShake.duration > 0) {
@@ -769,35 +1031,53 @@ export class MotosaiGame {
         this.screenShake.offset.y = 0;
       }
       
-      // Update motorcycle position and rotation
-      // Apply lean offset to make it rotate around ground contact point
-      const leanOffset = Math.sin(state.rotation.roll) * 0.4; // Height of bike center from ground
-      
-      this.motorcycle.position.set(
-        state.position.x + leanOffset * Math.cos(state.rotation.yaw + Math.PI/2),
-        state.position.y,
-        state.position.z + leanOffset * Math.sin(state.rotation.yaw + Math.PI/2)
-      );
-      
-      // Apply rotations in correct order: yaw first, then lean, then pitch
-      this.motorcycle.rotation.set(0, 0, 0);
-      this.motorcycle.rotateY(state.rotation.yaw);
-      this.motorcycle.rotateZ(state.rotation.roll);
-      this.motorcycle.rotateX(state.rotation.pitch);
-      
-      // Update wheels rotation
-      this.frontWheel.rotation.x += state.speed * deltaTime * 0.1;
-      this.rearWheel.rotation.x += state.speed * deltaTime * 0.1;
-      
-      // Rider lean animation
-      this.rider.rotation.z = -state.rotation.roll * 0.5;
-      this.rider.rotation.x = state.rotation.pitch * 0.3;
-      
-      // Update highway (infinite scrolling)
-      this.highway.update(state.position.z, state.actualSpeed || state.speed);
-      
-      // Update traffic
-      this.traffic.update(deltaTime, state.position);
+      // Handle motorcycle visibility and updates - DEATH CHECK FIRST!
+      if (this.isDead) {
+        // ALWAYS force hide when dead - this is the FIRST check
+        this.motorcycle.visible = false;
+        this.rider.visible = false;
+        // Also hide all children to be absolutely sure
+        this.motorcycle.traverse((child) => {
+          child.visible = false;
+        });
+        // Don't do any other updates when dead
+      } else if (this.motorcycle) {
+        // Only update when alive
+        // Handle invulnerability flashing
+        if (state.collision && state.collision.invulnerable) {
+          // Flashing during invulnerability
+          this.motorcycle.visible = Math.sin(Date.now() * 0.01) > 0;
+          this.rider.visible = this.motorcycle.visible;
+        } else {
+          // Normal visibility when alive
+          this.motorcycle.visible = true;
+          this.rider.visible = true;
+        }
+        
+        // Update motorcycle position and rotation
+        // Apply lean offset to make it rotate around ground contact point
+        const leanOffset = Math.sin(state.rotation.roll) * 0.4; // Height of bike center from ground
+        
+        this.motorcycle.position.set(
+          state.position.x + leanOffset * Math.cos(state.rotation.yaw + Math.PI/2),
+          state.position.y,
+          state.position.z + leanOffset * Math.sin(state.rotation.yaw + Math.PI/2)
+        );
+        
+        // Apply rotations in correct order: yaw first, then lean, then pitch
+        this.motorcycle.rotation.set(0, 0, 0);
+        this.motorcycle.rotateY(state.rotation.yaw);
+        this.motorcycle.rotateZ(state.rotation.roll);
+        this.motorcycle.rotateX(state.rotation.pitch);
+        
+        // Update wheels rotation
+        this.frontWheel.rotation.x += state.speed * deltaTime * 0.1;
+        this.rearWheel.rotation.x += state.speed * deltaTime * 0.1;
+        
+        // Rider lean animation
+        this.rider.rotation.z = -state.rotation.roll * 0.5;
+        this.rider.rotation.x = state.rotation.pitch * 0.3;
+      }
       
       // Update backgrounds
       if (this.backgrounds) {
@@ -837,23 +1117,8 @@ export class MotosaiGame {
         this.sunLight.target.position.copy(state.position);
       }
       
-      // Update camera
+      // Update camera (includes FOV updates)
       this.updateCamera(deltaTime);
-      
-      // Speed effects on camera (using display speed)
-      const speedMPH = state.speed; // This is now the scaled display speed
-      if (speedMPH > 80) {
-        // Increase FOV at high speeds for speed effect
-        const targetFOV = 60 + Math.min((speedMPH - 80) / 10, 40); // Max 100 FOV at 480mph
-        this.camera.fov += (targetFOV - this.camera.fov) * 0.1;
-        this.camera.updateProjectionMatrix();
-        
-        // Motion blur would go here
-      } else {
-        // Return to normal FOV
-        this.camera.fov += (60 - this.camera.fov) * 0.1;
-        this.camera.updateProjectionMatrix();
-      }
       
       // Update HUD
       this.updateHUD();
@@ -864,15 +1129,7 @@ export class MotosaiGame {
     
     // Render - wrapped to catch shader uniform errors
     try {
-      if (this.useSoftShaders && this.softShaders) {
-        // Update materials for any new objects
-        this.softShaders.updateMaterials();
-        // Render with soft shader post-processing
-        this.softShaders.render(this.renderer, this.scene, this.camera);
-      } else {
-        // Standard render
-        this.renderer.render(this.scene, this.camera);
-      }
+      this.renderer.render(this.scene, this.camera);
     } catch (error) {
       // Log the error once to avoid spamming console
       if (!this.shaderErrorLogged) {
@@ -905,11 +1162,6 @@ export class MotosaiGame {
     this.camera.updateProjectionMatrix();
     
     this.renderer.setSize(this.width, this.height);
-    
-    // Resize soft shader system
-    if (this.softShaders) {
-      this.softShaders.resize(this.width, this.height);
-    }
   }
   
   start() {
@@ -931,9 +1183,13 @@ export class MotosaiGame {
   }
   
   dispose() {
+    // Mark as disposed to prevent further animation frames
+    this.isDisposed = true;
+    
     // Stop animation loop
     if (this.animationId) {
       cancelAnimationFrame(this.animationId);
+      this.animationId = null;
     }
     
     // Dispose of physics and input controller
@@ -942,6 +1198,11 @@ export class MotosaiGame {
     }
     if (this.inputController && typeof this.inputController.dispose === 'function') {
       this.inputController.dispose();
+    }
+    
+    // Dispose of multiplayer
+    if (this.multiplayer) {
+      this.multiplayer.disconnect();
     }
     
     // Dispose of game systems
@@ -954,8 +1215,8 @@ export class MotosaiGame {
     if (this.backgrounds) {
       this.backgrounds.dispose();
     }
-    if (this.softShaders) {
-      this.softShaders.dispose();
+    if (this.deathAnimation) {
+      this.deathAnimation.dispose();
     }
     
     // Dispose of renderer
@@ -994,5 +1255,18 @@ export class MotosaiGame {
     window.removeEventListener('resize', this.boundHandleResize);
     window.removeEventListener('keydown', this.boundHandleKeyDown);
     window.removeEventListener('keyup', this.boundHandleKeyUp);
+    
+    // Remove touch event listeners if they exist
+    if (this.renderer && this.renderer.domElement) {
+      if (this.boundHandleTouchStart) {
+        this.renderer.domElement.removeEventListener('touchstart', this.boundHandleTouchStart);
+      }
+      if (this.boundHandleTouchMove) {
+        this.renderer.domElement.removeEventListener('touchmove', this.boundHandleTouchMove);
+      }
+      if (this.boundHandleTouchEnd) {
+        this.renderer.domElement.removeEventListener('touchend', this.boundHandleTouchEnd);
+      }
+    }
   }
 }

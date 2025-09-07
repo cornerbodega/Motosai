@@ -17,6 +17,12 @@
             background: #000;
         }
         
+        @keyframes fadeOut {
+            0% { opacity: 1; }
+            70% { opacity: 1; }
+            100% { opacity: 0; }
+        }
+        
         #gameContainer {
             width: 100vw;
             height: 100vh;
@@ -150,60 +156,9 @@
             font-size: 48px;
         }
         
-        #mobileControls {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            height: 150px;
-            display: none;
-            z-index: 101;
-        }
-        
-        .mobileButton {
-            position: absolute;
-            width: 80px;
-            height: 80px;
-            background: rgba(255,255,255,0.2);
-            border: 2px solid white;
-            border-radius: 50%;
-            color: white;
-            font-size: 24px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            touch-action: none;
-        }
-        
-        #throttleBtn {
-            right: 20px;
-            bottom: 20px;
-            background: rgba(0,255,0,0.3);
-        }
-        
-        #brakeBtn {
-            right: 120px;
-            bottom: 20px;
-            background: rgba(255,0,0,0.3);
-        }
-        
-        #leanLeft {
-            left: 20px;
-            bottom: 20px;
-        }
-        
-        #leanRight {
-            left: 120px;
-            bottom: 20px;
-        }
-        
         @media (max-width: 768px) {
             #controls {
                 display: none;
-            }
-            
-            #mobileControls {
-                display: block;
             }
         }
     </style>
@@ -220,6 +175,22 @@
         <div id="startScreen">
             <h1>🏍️ MOTOSAI</h1>
             <h2>Highway 101: San Francisco to San Diego</h2>
+            
+            <div style="margin: 20px 0;">
+                <label style="color: white; font-size: 18px; margin-right: 10px;">Rider Gear Color:</label>
+                <select id="riderColor" style="padding: 8px 15px; font-size: 16px; border-radius: 5px; background: rgba(255,255,255,0.9); border: none;">
+                    <option value="0x1a1a1a">Black</option>
+                    <option value="0xff0000">Red</option>
+                    <option value="0x0066cc">Blue</option>
+                    <option value="0xffff00">Hi-Viz Yellow</option>
+                    <option value="0xff6600">Orange</option>
+                    <option value="0x00ff00">Green</option>
+                    <option value="0xffffff">White</option>
+                    <option value="0x800080">Purple</option>
+                    <option value="0x00ffff">Cyan</option>
+                </select>
+            </div>
+            
             <button class="startButton" onclick="startGame()">START RIDE</button>
             <button class="startButton" onclick="showOptions()">OPTIONS</button>
         </div>
@@ -242,12 +213,6 @@
             <div><kbd>P</kbd> - Pause</div>
         </div>
         
-        <div id="mobileControls">
-            <div class="mobileButton" id="leanLeft">←</div>
-            <div class="mobileButton" id="leanRight">→</div>
-            <div class="mobileButton" id="brakeBtn">🛑</div>
-            <div class="mobileButton" id="throttleBtn">⚡</div>
-        </div>
     </div>
     
     <script type="module">
@@ -294,9 +259,17 @@
             const startScreen = document.getElementById('startScreen');
             startScreen.style.display = 'none';
             
-            // Initialize game
+            // Get selected rider color
+            const riderColorSelect = document.getElementById('riderColor');
+            const riderColor = parseInt(riderColorSelect.value);
+            
+            // Initialize game with configuration
             const container = document.getElementById('gameContainer');
-            game = new MotosaiGame(container);
+            const config = {
+                riderColor: riderColor,
+                multiplayer: true  // Enable multiplayer
+            };
+            game = new MotosaiGame(container, config);
             game.start();
             
             // Setup pause
@@ -306,8 +279,6 @@
                 }
             });
             
-            // Setup mobile controls
-            setupMobileControls();
         }
         
         window.showOptions = function() {
@@ -326,44 +297,6 @@
             } else {
                 pauseOverlay.style.display = 'none';
             }
-        }
-        
-        function setupMobileControls() {
-            if (!game) return;
-            
-            const throttle = document.getElementById('throttleBtn');
-            const brake = document.getElementById('brakeBtn');
-            const leanLeft = document.getElementById('leanLeft');
-            const leanRight = document.getElementById('leanRight');
-            
-            // Touch controls
-            throttle.addEventListener('touchstart', () => {
-                game.physics.setControls({ throttle: 1 });
-            });
-            throttle.addEventListener('touchend', () => {
-                game.physics.setControls({ throttle: 0 });
-            });
-            
-            brake.addEventListener('touchstart', () => {
-                game.physics.setControls({ frontBrake: 1, rearBrake: 0.5 });
-            });
-            brake.addEventListener('touchend', () => {
-                game.physics.setControls({ frontBrake: 0, rearBrake: 0 });
-            });
-            
-            leanLeft.addEventListener('touchstart', () => {
-                game.physics.setControls({ lean: -1 });
-            });
-            leanLeft.addEventListener('touchend', () => {
-                game.physics.setControls({ lean: 0 });
-            });
-            
-            leanRight.addEventListener('touchstart', () => {
-                game.physics.setControls({ lean: 1 });
-            });
-            leanRight.addEventListener('touchend', () => {
-                game.physics.setControls({ lean: 0 });
-            });
         }
         
         // Start loading

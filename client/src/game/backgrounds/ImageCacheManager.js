@@ -4,6 +4,10 @@
 export class ImageCacheManager {
   constructor() {
     this.cacheManifest = this.loadManifest();
+    this.maxCacheSize = 50 * 1024 * 1024; // 50MB max cache size
+    this.maxCacheEntries = 20; // Maximum number of cached images
+    this.currentCacheSize = 0;
+    this.calculateCurrentCacheSize();
   }
   
   loadManifest() {
@@ -12,17 +16,42 @@ export class ImageCacheManager {
     return manifest ? JSON.parse(manifest) : {};
   }
   
+  calculateCurrentCacheSize() {
+    this.currentCacheSize = 0;
+    for (const segmentId in this.cacheManifest) {
+      const entry = this.cacheManifest[segmentId];
+      if (entry.size) {
+        this.currentCacheSize += entry.size;
+      }
+    }
+  }
+  
   saveManifest() {
     localStorage.setItem('backgroundCacheManifest', JSON.stringify(this.cacheManifest));
   }
   
   async downloadAndSaveImage(segmentId, imageUrl) {
     try {
+      // Check if we need to clear space first
+      await this.ensureCacheSpace();
+      
       // Download the image
       const response = await fetch(imageUrl);
       if (!response.ok) throw new Error('Failed to download image');
       
       const blob = await response.blob();
+      const blobSize = blob.size;
+      
+      // Check if image is too large
+      if (blobSize > this.maxCacheSize / 2) {
+        console.warn('Image too large to cache:', blobSize);
+        return null;
+      }
+      
+      // Make room if needed
+      while (this.currentCacheSize + blobSize > this.maxCacheSize) {
+        await this.removeOldestEntry();
+      }
       
       // Convert to data URL for storage
       const reader = new FileReader();
@@ -40,8 +69,10 @@ export class ImageCacheManager {
                 type: 'indexeddb',
                 key: cacheKey,
                 timestamp: Date.now(),
-                originalUrl: imageUrl
+                originalUrl: imageUrl,
+                size: blobSize
               };
+              this.currentCacheSize += blobSize;
               this.saveManifest();
               resolve(dataUrl);
             });
@@ -51,8 +82,10 @@ export class ImageCacheManager {
               type: 'localStorage',
               key: cacheKey,
               timestamp: Date.now(),
-              originalUrl: imageUrl
+              originalUrl: imageUrl,
+              size: blobSize
             };
+            this.currentCacheSize += blobSize;
             this.saveManifest();
             resolve(dataUrl);
           }
@@ -150,11 +183,7 @@ export class ImageCacheManager {
       const entry = this.cacheManifest[segmentId];
       if (now - entry.timestamp > maxAge) {
         // Remove old entries
-        if (entry.type === 'localStorage') {
-          localStorage.removeItem(entry.key);
-        }
-        // IndexedDB cleanup would be more complex
-        delete this.cacheManifest[segmentId];
+        this.removeEntry(segmentId);
         changed = true;
       }
     }
@@ -162,5 +191,93 @@ export class ImageCacheManager {
     if (changed) {
       this.saveManifest();
     }
+  }
+  
+  async ensureCacheSpace() {
+    // Remove entries if we have too many
+    const entries = Object.keys(this.cacheManifest);
+    if (entries.length >= this.maxCacheEntries) {
+      // Remove oldest entries until we're under the limit
+      const sortedEntries = entries.sort((a, b) => {
+        return this.cacheManifest[a].timestamp - this.cacheManifest[b].timestamp;
+      });
+      
+      const entriesToRemove = sortedEntries.slice(0, entries.length - this.maxCacheEntries + 1);
+      for (const segmentId of entriesToRemove) {
+        await this.removeEntry(segmentId);
+      }
+    }
+  }
+  
+  async removeOldestEntry() {
+    const entries = Object.keys(this.cacheManifest);
+    if (entries.length === 0) return;
+    
+    // Find oldest entry
+    let oldestId = entries[0];
+    let oldestTime = this.cacheManifest[oldestId].timestamp;
+    
+    for (const segmentId of entries) {
+      if (this.cacheManifest[segmentId].timestamp < oldestTime) {
+        oldestId = segmentId;
+        oldestTime = this.cacheManifest[segmentId].timestamp;
+      }
+    }
+    
+    await this.removeEntry(oldestId);
+  }
+  
+  async removeEntry(segmentId) {
+    const entry = this.cacheManifest[segmentId];
+    if (!entry) return;
+    
+    // Remove from storage
+    if (entry.type === 'localStorage') {
+      localStorage.removeItem(entry.key);
+    } else if (entry.type === 'indexeddb') {
+      await this.removeFromIndexedDB(entry.key);
+    }
+    
+    // Update cache size
+    if (entry.size) {
+      this.currentCacheSize -= entry.size;
+    }
+    
+    // Remove from manifest
+    delete this.cacheManifest[segmentId];
+  }
+  
+  async removeFromIndexedDB(key) {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open('MotosaiBackgrounds', 1);
+      
+      request.onsuccess = (event) => {
+        const db = event.target.result;
+        const transaction = db.transaction(['images'], 'readwrite');
+        const store = transaction.objectStore('images');
+        const deleteRequest = store.delete(key);
+        
+        deleteRequest.onsuccess = () => {
+          db.close();
+          resolve();
+        };
+        
+        deleteRequest.onerror = () => {
+          db.close();
+          reject(deleteRequest.error);
+        };
+      };
+      
+      request.onerror = () => reject(request.error);
+    });
+  }
+  
+  dispose() {
+    // Clear all cache on dispose
+    for (const segmentId in this.cacheManifest) {
+      this.removeEntry(segmentId);
+    }
+    this.cacheManifest = {};
+    this.saveManifest();
   }
 }

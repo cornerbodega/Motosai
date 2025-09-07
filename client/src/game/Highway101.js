@@ -22,33 +22,50 @@ export class Highway101 {
   }
   
   createMaterials() {
-    // Asphalt
-    this.asphaltMat = new THREE.MeshLambertMaterial({ 
-      color: 0x333333
+    // Asphalt - very rough, completely non-reflective surface
+    this.asphaltMat = new THREE.MeshStandardMaterial({ 
+      color: 0x2a2a2a,
+      roughness: 1.0,  // Maximum roughness for completely matte
+      metalness: 0,
+      bumpScale: 0.002
     });
     
-    // Lane markings
-    this.whiteMat = new THREE.MeshBasicMaterial({ 
-      color: 0xffffff 
+    // Lane markings - slightly reflective paint
+    this.whiteMat = new THREE.MeshStandardMaterial({ 
+      color: 0xffffff,
+      roughness: 0.6,
+      metalness: 0.1,
+      emissive: 0xffffff,
+      emissiveIntensity: 0.05
     });
     
-    this.yellowMat = new THREE.MeshBasicMaterial({ 
-      color: 0xffcc00 
+    this.yellowMat = new THREE.MeshStandardMaterial({ 
+      color: 0xffcc00,
+      roughness: 0.6,
+      metalness: 0.1,
+      emissive: 0xffcc00,
+      emissiveIntensity: 0.05
     });
     
-    // Shoulder
-    this.shoulderMat = new THREE.MeshLambertMaterial({ 
-      color: 0x555555 
+    // Shoulder - worn concrete
+    this.shoulderMat = new THREE.MeshStandardMaterial({ 
+      color: 0x4a4a4a,
+      roughness: 0.9,
+      metalness: 0
     });
     
-    // Grass
-    this.grassMat = new THREE.MeshLambertMaterial({ 
-      color: 0x7cae3f 
+    // Grass - soft, non-reflective
+    this.grassMat = new THREE.MeshStandardMaterial({ 
+      color: 0x7cae3f,
+      roughness: 1,
+      metalness: 0
     });
     
-    // Concrete barrier
-    this.barrierMat = new THREE.MeshLambertMaterial({ 
-      color: 0x999999 
+    // Concrete barrier - weathered concrete
+    this.barrierMat = new THREE.MeshStandardMaterial({ 
+      color: 0x8a8a8a,
+      roughness: 0.85,
+      metalness: 0
     });
   }
   

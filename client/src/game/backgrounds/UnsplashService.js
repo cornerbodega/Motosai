@@ -25,15 +25,15 @@ export class UnsplashService {
 
     // If no API key, return mock data for testing
     if (this.USE_MOCK_DATA) {
-      console.log('[Unsplash] Using MOCK data (no API key)');
+      console.log('[Unsplash] Using MOCK data');
       return this.getMockPhotos(lat, lng, location_name);
     }
 
     try {
       // Unsplash doesn't have GPS search, but we can search by location name
       const searchQuery = this.getSearchQuery(lat, lng, location_name);
-      console.log('[Unsplash] Fetching photos for:', searchQuery);
-      console.log('[Unsplash] Using API key:', this.accessKey ? 'Yes' : 'No');
+      // console.log('[Unsplash] Fetching photos for:', searchQuery);
+      // console.log('[Unsplash] Using API key:', this.accessKey ? 'Yes' : 'No');
       
       const response = await fetch(
         `${this.baseUrl}/search/photos?query=${searchQuery}&per_page=30&orientation=landscape`,
@@ -53,7 +53,7 @@ export class UnsplashService {
       }
 
       const data = await response.json();
-      console.log('[Unsplash] API response: ', data.results?.length || 0, 'results');
+      // console.log('[Unsplash] API response: ', data.results?.length || 0, 'results');
       
       // Validate and score photos - get more variety
       const validPhotos = data.results
@@ -62,7 +62,7 @@ export class UnsplashService {
         .sort((a, b) => b.score - a.score)
         .slice(0, 20);  // Get more photos for variety
 
-      console.log('[Unsplash] Valid photos after filtering:', validPhotos.length);
+      // console.log('[Unsplash] Valid photos after filtering:', validPhotos.length);
       
       // Don't cache - let BackgroundSystem handle caching by segment
       // // Limit cache size to prevent memory buildup
@@ -76,7 +76,7 @@ export class UnsplashService {
       return validPhotos;
 
     } catch (error) {
-      console.error('[Unsplash] API error, falling back to mock:', error.message);
+      console.error('[Unsplash] API FAILED, using mock. Error:', error.message);
       return this.getMockPhotos(lat, lng, location_name);
     }
   }
@@ -151,7 +151,7 @@ export class UnsplashService {
   }
 
   getMockPhotos(lat, lng, location_name) {
-    console.log(`[Unsplash] Generating mock gradients for lat:${lat}, lng:${lng}`);
+    // console.log(`[Unsplash] Generating mock gradients for lat:${lat}, lng:${lng}`);
     // Generate beautiful gradients based on latitude
     // This works without any API key!
     
