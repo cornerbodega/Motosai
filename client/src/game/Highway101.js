@@ -507,4 +507,31 @@ export class Highway101 {
     const lane = Math.round((xPosition / this.laneWidth) + 1);
     return Math.max(0, Math.min(2, lane)); // Clamp to 0-2 for 3 lanes
   }
+  
+  getLocationAtPosition(absoluteZ) {
+    // Map absolute position to PCH locations
+    // PCH is about 650 miles total, convert to meters
+    const totalDistance = 650 * 1609.34; // miles to meters
+    const progress = (absoluteZ % totalDistance) / totalDistance;
+    
+    // Big Sur is around the middle of PCH
+    const lat = 36.27 + (progress - 0.5) * 10; // Spread over 10 degrees latitude
+    const lng = -121.8;
+    
+    // Location names based on progress
+    let name = "Big Sur";
+    if (progress < 0.2) {
+      name = "San Francisco Bay";
+    } else if (progress < 0.4) {
+      name = "Monterey Bay";
+    } else if (progress < 0.6) {
+      name = "Big Sur";
+    } else if (progress < 0.8) {
+      name = "San Luis Obispo";
+    } else {
+      name = "Santa Barbara";
+    }
+    
+    return { lat, lng, name };
+  }
 }

@@ -1,0 +1,166 @@
+// Image Cache Manager - Downloads and saves images locally
+// This way we only hit the Unsplash API once per location
+
+export class ImageCacheManager {
+  constructor() {
+    this.cacheManifest = this.loadManifest();
+  }
+  
+  loadManifest() {
+    // Load manifest from localStorage to track what we've cached
+    const manifest = localStorage.getItem('backgroundCacheManifest');
+    return manifest ? JSON.parse(manifest) : {};
+  }
+  
+  saveManifest() {
+    localStorage.setItem('backgroundCacheManifest', JSON.stringify(this.cacheManifest));
+  }
+  
+  async downloadAndSaveImage(segmentId, imageUrl) {
+    try {
+      // Download the image
+      const response = await fetch(imageUrl);
+      if (!response.ok) throw new Error('Failed to download image');
+      
+      const blob = await response.blob();
+      
+      // Convert to data URL for storage
+      const reader = new FileReader();
+      return new Promise((resolve, reject) => {
+        reader.onloadend = () => {
+          const dataUrl = reader.result;
+          
+          // Store in localStorage (or IndexedDB for larger files)
+          const cacheKey = `background_segment_${segmentId}`;
+          
+          // For large images, we should use IndexedDB instead
+          if (dataUrl.length > 1000000) { // 1MB limit for localStorage
+            this.saveToIndexedDB(cacheKey, dataUrl).then(() => {
+              this.cacheManifest[segmentId] = {
+                type: 'indexeddb',
+                key: cacheKey,
+                timestamp: Date.now(),
+                originalUrl: imageUrl
+              };
+              this.saveManifest();
+              resolve(dataUrl);
+            });
+          } else {
+            localStorage.setItem(cacheKey, dataUrl);
+            this.cacheManifest[segmentId] = {
+              type: 'localStorage',
+              key: cacheKey,
+              timestamp: Date.now(),
+              originalUrl: imageUrl
+            };
+            this.saveManifest();
+            resolve(dataUrl);
+          }
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    } catch (error) {
+      console.error('Failed to cache image:', error);
+      return null;
+    }
+  }
+  
+  async getCachedImage(segmentId) {
+    const manifestEntry = this.cacheManifest[segmentId];
+    if (!manifestEntry) return null;
+    
+    try {
+      if (manifestEntry.type === 'localStorage') {
+        return localStorage.getItem(manifestEntry.key);
+      } else if (manifestEntry.type === 'indexeddb') {
+        return await this.getFromIndexedDB(manifestEntry.key);
+      }
+    } catch (error) {
+      console.error('Failed to retrieve cached image:', error);
+      // Remove from manifest if corrupted
+      delete this.cacheManifest[segmentId];
+      this.saveManifest();
+      return null;
+    }
+  }
+  
+  async saveToIndexedDB(key, data) {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open('MotosaiBackgrounds', 1);
+      
+      request.onupgradeneeded = (event) => {
+        const db = event.target.result;
+        if (!db.objectStoreNames.contains('images')) {
+          db.createObjectStore('images');
+        }
+      };
+      
+      request.onsuccess = (event) => {
+        const db = event.target.result;
+        const transaction = db.transaction(['images'], 'readwrite');
+        const store = transaction.objectStore('images');
+        const putRequest = store.put(data, key);
+        
+        putRequest.onsuccess = () => {
+          db.close();
+          resolve();
+        };
+        
+        putRequest.onerror = () => {
+          db.close();
+          reject(putRequest.error);
+        };
+      };
+      
+      request.onerror = () => reject(request.error);
+    });
+  }
+  
+  async getFromIndexedDB(key) {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open('MotosaiBackgrounds', 1);
+      
+      request.onsuccess = (event) => {
+        const db = event.target.result;
+        const transaction = db.transaction(['images'], 'readonly');
+        const store = transaction.objectStore('images');
+        const getRequest = store.get(key);
+        
+        getRequest.onsuccess = () => {
+          db.close();
+          resolve(getRequest.result);
+        };
+        
+        getRequest.onerror = () => {
+          db.close();
+          reject(getRequest.error);
+        };
+      };
+      
+      request.onerror = () => reject(request.error);
+    });
+  }
+  
+  clearOldCache(maxAge = 30 * 24 * 60 * 60 * 1000) { // 30 days
+    const now = Date.now();
+    let changed = false;
+    
+    for (const segmentId in this.cacheManifest) {
+      const entry = this.cacheManifest[segmentId];
+      if (now - entry.timestamp > maxAge) {
+        // Remove old entries
+        if (entry.type === 'localStorage') {
+          localStorage.removeItem(entry.key);
+        }
+        // IndexedDB cleanup would be more complex
+        delete this.cacheManifest[segmentId];
+        changed = true;
+      }
+    }
+    
+    if (changed) {
+      this.saveManifest();
+    }
+  }
+}

@@ -5,6 +5,7 @@ import { MotorcyclePhysicsV2 } from '../physics/MotorcyclePhysicsV2.js';
 import { InputController } from '../physics/InputController.js';
 import { Highway101 } from './Highway101.js';
 import { TrafficSystem } from './TrafficSystem.js';
+import { BackgroundSystem } from './backgrounds/BackgroundSystem.js';
 
 export class MotosaiGame {
   constructor(container) {
@@ -32,6 +33,7 @@ export class MotosaiGame {
     this.initLights();
     this.initPhysics();
     this.initHighway();
+    this.initBackgrounds();
     this.initTraffic();
     this.initControls();
     this.initHUD();
@@ -52,6 +54,7 @@ export class MotosaiGame {
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 0.8;
+    this.renderer.setClearColor(0x87CEEB, 1); // Set clear color to sky blue
     this.container.appendChild(this.renderer.domElement);
     
     // Handle resize
@@ -62,7 +65,11 @@ export class MotosaiGame {
     this.scene = new THREE.Scene();
     this.scene.fog = new THREE.Fog(0x87CEEB, 200, 3000); // Extended fog distance from 1000 to 3000
     
-    // Sky gradient - much larger sphere
+    // Ensure sky object is null to prevent shader errors
+    this.sky = null;
+    
+    // Sky is now handled by BackgroundSystem - commenting out duplicate
+    /*
     const skyGeo = new THREE.SphereGeometry(10000, 32, 15); // Increased from 2000 to 10000
     const skyMat = new THREE.ShaderMaterial({
       uniforms: {
@@ -94,6 +101,7 @@ export class MotosaiGame {
     });
     this.sky = new THREE.Mesh(skyGeo, skyMat);
     this.scene.add(this.sky);
+    */
   }
   
   initCamera() {
@@ -241,6 +249,25 @@ export class MotosaiGame {
   initHighway() {
     this.highway = new Highway101(this.scene);
     this.highway.generate();
+  }
+  
+  initBackgrounds() {
+    try {
+      console.log('Creating BackgroundSystem with shader error fixed...');
+      this.backgrounds = new BackgroundSystem(this.scene, this.camera);
+      console.log('BackgroundSystem created successfully');
+      
+      // Test with initial location (Big Sur)
+      this.backgrounds.updateLocation(0, {
+        lat: 36.2704,
+        lng: -121.8081,
+        name: 'Big Sur California Coast'
+      });
+      console.log('BackgroundSystem initial location set');
+    } catch (error) {
+      console.error('Error creating BackgroundSystem:', error);
+      this.backgrounds = null; // Prevent crashes in render loop
+    }
   }
   
   initTraffic() {
@@ -627,7 +654,17 @@ export class MotosaiGame {
       // Update traffic
       this.traffic.update(deltaTime, state.position);
       
-      // Make sky follow camera (not just player) to prevent seeing edges
+      // Update backgrounds
+      if (this.backgrounds) {
+        this.backgrounds.update(deltaTime, state.position);
+        // Update location based on absolute position
+        const absoluteZ = state.position.z;
+        const location = this.highway.getLocationAtPosition(absoluteZ);
+        this.backgrounds.updateLocation(absoluteZ, location);
+      }
+      
+      // Sky is now handled by BackgroundSystem
+      /*
       if (this.sky) {
         this.sky.position.set(
           this.camera.position.x,
@@ -635,6 +672,7 @@ export class MotosaiGame {
           this.camera.position.z
         );
       }
+      */
       
       // Make sun light follow player for consistent shadows
       if (this.sunLight) {
