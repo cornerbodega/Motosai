@@ -8,8 +8,8 @@ export class TrafficSystem {
     this.bloodTrackSystem = bloodTrackSystem;
     this.multiplayerManager = multiplayerManager;
     this.vehicles = [];
-    this.maxVehicles = 50; // Increased for more traffic
-    this.spawnDistance = 300; // Closer spawn for more visible traffic
+    this.maxVehicles = 30; // Optimized for lower-end machines
+    this.spawnDistance = 200; // Reduced spawn distance for performance
     
     // Create shared geometry ONCE for all vehicles to prevent memory leaks
     // Using unit cubes to scale per vehicle type
@@ -40,6 +40,20 @@ export class TrafficSystem {
     ];
     
     this.createMaterials();
+  }
+  
+  setMaxVehicles(count) {
+    this.maxVehicles = count;
+    // Remove excess vehicles if needed
+    while (this.vehicles.length > this.maxVehicles) {
+      const vehicle = this.vehicles.pop();
+      this.scene.remove(vehicle.mesh);
+      this.disposeVehicleMesh(vehicle.mesh);
+    }
+  }
+  
+  setSpawnDistance(distance) {
+    this.spawnDistance = distance;
   }
   
   createMaterials() {
@@ -80,7 +94,9 @@ export class TrafficSystem {
   }
   
   spawn(count) {
-    for (let i = 0; i < count; i++) {
+    // Don't exceed max vehicles
+    const actualCount = Math.min(count, this.maxVehicles - this.vehicles.length);
+    for (let i = 0; i < actualCount; i++) {
       this.spawnVehicle();
     }
   }

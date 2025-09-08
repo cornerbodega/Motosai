@@ -5,7 +5,7 @@ export class Highway101 {
     this.scene = scene;
     this.segments = [];
     this.segmentLength = 200; // Doubled from 100 to 200 meters per segment
-    this.numSegments = 20; // Reduced to prevent memory issues
+    this.numSegments = 15; // Further reduced for lower-end machines
     this.currentZ = 0;
     
     // Highway parameters

@@ -10,6 +10,7 @@ import { DeathAnimation } from './DeathAnimation.js';
 import { BloodTrackSystem } from './BloodTrackSystem.js';
 import { MultiplayerManager } from '../multiplayer/MultiplayerManager.js';
 import { MotorcycleFactory } from './MotorcycleFactory.js';
+import { PerformanceManager } from '../utils/PerformanceManager.js';
 
 export class MotosaiGame {
   constructor(container, config = {}) {
@@ -45,10 +46,29 @@ export class MotosaiGame {
     this.multiplayer = null;
     this.isMultiplayerEnabled = config.multiplayer || false;
     
+    // Initialize performance manager - add error handling
+    try {
+      this.performanceManager = new PerformanceManager();
+      this.currentConfig = this.performanceManager.getConfig();
+    } catch (error) {
+      console.error('Performance manager failed, using defaults:', error);
+      this.performanceManager = null;
+      this.currentConfig = {
+        antialias: true,
+        pixelRatio: Math.min(window.devicePixelRatio, 2),
+        shadowType: THREE.PCFShadowMap,
+        shadowMapSize: 2048,
+        maxVehicles: 25,
+        physicallyCorrectLights: false,
+        toneMapping: THREE.ACESFilmicToneMapping
+      };
+    }
+    
     // Store bound event handlers for cleanup
     this.boundHandleResize = () => this.onResize();
     this.boundHandleKeyDown = (e) => this.handleKeyDown(e);
     this.boundHandleKeyUp = (e) => this.handleKeyUp(e);
+    this.boundHandlePerformanceChange = (e) => this.handlePerformanceChange(e);
     
     // Track active timers to prevent memory leaks
     this.activeTimers = new Set();
@@ -100,7 +120,7 @@ export class MotosaiGame {
   initRenderer() {
     try {
       this.renderer = new THREE.WebGLRenderer({ 
-        antialias: true,
+        antialias: this.currentConfig.antialias,
         powerPreference: "high-performance",
         failIfMajorPerformanceCaveat: false // Allow fallback to software rendering
       });
@@ -135,27 +155,28 @@ export class MotosaiGame {
     }
     
     this.renderer.setSize(this.width, this.height);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(this.currentConfig.pixelRatio);
     
-    // Enhanced shadow settings for softer shadows
+    // Dynamic shadow settings based on performance
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.VSMShadowMap; // Very soft shadows
-    this.renderer.shadowMap.autoUpdate = true;
+    this.renderer.shadowMap.type = this.currentConfig.shadowType;
+    this.renderer.shadowMap.autoUpdate = false; // Manual updates for performance
     
-    // Better tone mapping for realistic lighting
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.2;
+    // Dynamic tone mapping based on performance
+    this.renderer.toneMapping = this.currentConfig.toneMapping;
+    this.renderer.toneMappingExposure = 1.0;
     
-    // Enable physically correct lighting
-    this.renderer.physicallyCorrectLights = true;
+    // Dynamic lighting based on performance
+    this.renderer.physicallyCorrectLights = this.currentConfig.physicallyCorrectLights;
     this.renderer.outputEncoding = THREE.sRGBEncoding;
     
     // Soft sky color
     this.renderer.setClearColor(0x87CEEB, 1);
     this.container.appendChild(this.renderer.domElement);
     
-    // Handle resize
+    // Handle resize and performance changes
     window.addEventListener('resize', this.boundHandleResize);
+    window.addEventListener('performanceChanged', this.boundHandlePerformanceChange);
   }
   
   initScene() {
@@ -247,10 +268,10 @@ export class MotosaiGame {
     this.sunLight.shadow.camera.bottom = -60;
     this.sunLight.shadow.camera.near = 1;  // Increased from 0.1 to reduce shadow acne
     this.sunLight.shadow.camera.far = 300;
-    this.sunLight.shadow.mapSize.width = 4096;
-    this.sunLight.shadow.mapSize.height = 4096;
-    this.sunLight.shadow.radius = 4; // Soft shadow edges
-    this.sunLight.shadow.blurSamples = 25; // More blur samples for softer shadows
+    this.sunLight.shadow.mapSize.width = this.currentConfig.shadowMapSize;
+    this.sunLight.shadow.mapSize.height = this.currentConfig.shadowMapSize;
+    this.sunLight.shadow.radius = 2; // Reduced soft shadow edges
+    this.sunLight.shadow.blurSamples = 10; // Fewer blur samples for performance
     this.sunLight.shadow.bias = -0.0005; // Add negative bias to fix shadow acne
     this.sunLight.shadow.normalBias = 0.02; // Add normal bias to prevent artifacts
     this.scene.add(this.sunLight);
@@ -323,7 +344,7 @@ export class MotosaiGame {
   
   initTraffic() {
     this.trafficSystem = new TrafficSystem(this.scene, this.highway, this.camera, this.bloodTrackSystem, this.multiplayer);
-    this.trafficSystem.spawn(35); // Increased initial spawn from 20 to 35 vehicles
+    this.trafficSystem.spawn(this.currentConfig.maxVehicles);
     
     // For backward compatibility
     this.traffic = this.trafficSystem;
@@ -797,6 +818,18 @@ export class MotosaiGame {
     // Update HUD elements directly without innerHTML
     this.hudElements.camera.textContent = `Camera: ${this.isFirstPerson ? 'First Person' : 'Third Person'} (Space)`;
     this.hudElements.physics.textContent = `Physics: ${physicsMode}`;
+    
+    // Add performance level color coding - with safety checks
+    if (this.performanceManager && this.hudElements.performance && this.hudElements.fps) {
+      const perfLevel = this.performanceManager.performanceLevel;
+      this.hudElements.performance.textContent = `Performance: ${perfLevel.toUpperCase()}`;
+      this.hudElements.performance.style.color = perfLevel === 'high' ? '#00ff00' : perfLevel === 'medium' ? '#ffff00' : '#ff6600';
+      
+      const fps = Math.round(this.performanceManager.getAverageFPS());
+      this.hudElements.fps.textContent = `FPS: ${fps}`;
+      this.hudElements.fps.style.color = fps >= 55 ? '#00ff00' : fps >= 30 ? '#ffff00' : '#ff6600';
+    }
+    
     this.hudElements.gear.textContent = `Gear: ${state.gear || 'N/A'}`;
     this.hudElements.rpm.textContent = `RPM: ${state.rpm || 'N/A'}`;
     this.hudElements.lean.textContent = `Lean: ${state.leanAngle !== undefined ? state.leanAngle.toFixed(1) : '0.0'}°`;
@@ -921,6 +954,41 @@ export class MotosaiGame {
     console.log('Player respawned!');
   }
   
+  handlePerformanceChange(event) {
+    const { level, previousLevel } = event.detail;
+    console.log(`Performance level changed from ${previousLevel} to ${level}`);
+    
+    // Update current config
+    this.currentConfig = this.performanceManager.getConfig();
+    
+    // Apply immediate changes that don't require restart
+    if (this.renderer) {
+      this.renderer.setPixelRatio(this.currentConfig.pixelRatio);
+      this.renderer.toneMapping = this.currentConfig.toneMapping;
+      this.renderer.physicallyCorrectLights = this.currentConfig.physicallyCorrectLights;
+      
+      // Update shadow map settings
+      this.renderer.shadowMap.type = this.currentConfig.shadowType;
+      if (this.sunLight) {
+        this.sunLight.shadow.mapSize.setScalar(this.currentConfig.shadowMapSize);
+      }
+    }
+    
+    // Update traffic system
+    if (this.trafficSystem) {
+      this.trafficSystem.setMaxVehicles(this.currentConfig.maxVehicles);
+      this.trafficSystem.setSpawnDistance(this.currentConfig.spawnDistance);
+    }
+    
+    // Update highway if possible
+    if (this.highway && typeof this.highway.setSegmentCount === 'function') {
+      this.highway.setSegmentCount(this.currentConfig.segmentCount);
+    }
+    
+    // Show performance notification
+    this.showGameMessage(`Performance adjusted to: ${level.toUpperCase()}`, 'info');
+  }
+  
   togglePhysicsVersion() {
     // Save current state
     const currentState = this.physics.getState();
@@ -1025,10 +1093,10 @@ export class MotosaiGame {
         // Update other players
         this.multiplayer.update();
         
-        // Update multiplayer HUD less frequently to prevent DOM thrashing
+        // Update multiplayer HUD even less frequently to prevent DOM thrashing
         if (!this.multiplayerHUDUpdateTimer) this.multiplayerHUDUpdateTimer = 0;
         this.multiplayerHUDUpdateTimer += deltaTime;
-        if (this.multiplayerHUDUpdateTimer >= 1.0) { // Update only once per second
+        if (this.multiplayerHUDUpdateTimer >= 2.0) { // Update only once per 2 seconds
           this.updateMultiplayerHUD();
           this.multiplayerHUDUpdateTimer = 0;
         }
@@ -1111,9 +1179,9 @@ export class MotosaiGame {
         const absoluteZ = this.distance * 0.3048; // Convert feet to meters
         const location = this.highway.getLocationAtPosition(absoluteZ);
         
-        // Debug: Log every 100 frames
+        // Debug: Log every 300 frames to reduce console overhead
         if (!this.bgLogCounter) this.bgLogCounter = 0;
-        if (this.bgLogCounter++ % 100 === 0) {
+        if (this.bgLogCounter++ % 300 === 0) {
           console.log(`[DEBUG] Distance: ${(this.distance/5280).toFixed(2)}mi, absoluteZ: ${absoluteZ.toFixed(0)}m, location:`, location);
         }
         
@@ -1149,6 +1217,11 @@ export class MotosaiGame {
       
       // Track distance
       this.distance += state.speed * deltaTime * 1.467; // mph to ft/s
+      
+      // Update performance manager
+      if (this.performanceManager) {
+        this.performanceManager.update(deltaTime);
+      }
     }
     
     // Render - wrapped to catch shader uniform errors
@@ -1294,6 +1367,7 @@ export class MotosaiGame {
     window.removeEventListener('resize', this.boundHandleResize);
     window.removeEventListener('keydown', this.boundHandleKeyDown);
     window.removeEventListener('keyup', this.boundHandleKeyUp);
+    window.removeEventListener('performanceChanged', this.boundHandlePerformanceChange);
     
     // Remove touch event listeners if they exist
     if (this.renderer && this.renderer.domElement) {

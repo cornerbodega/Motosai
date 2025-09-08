@@ -11,8 +11,8 @@ export class MotorcycleFactory {
 
     const motorcycle = new THREE.Group();
     
-    // Body (simplified sportbike shape - shortened to prevent rear clipping)
-    const bodyGeo = new THREE.BoxGeometry(0.3, 0.4, 1.4, 2, 2, 4);
+    // Body (simplified sportbike shape - reduced complexity)
+    const bodyGeo = new THREE.BoxGeometry(0.3, 0.4, 1.4, 1, 1, 2);
     const bodyMat = new THREE.MeshStandardMaterial({ 
       color: bikeColor,
       metalness: 0.6,
@@ -32,7 +32,7 @@ export class MotorcycleFactory {
     motorcycle.add(tank);
     
     // Seat
-    const seatGeo = new THREE.BoxGeometry(0.25, 0.1, 0.4, 2, 1, 2);
+    const seatGeo = new THREE.BoxGeometry(0.25, 0.1, 0.4, 1, 1, 1);
     const seatMat = new THREE.MeshStandardMaterial({ 
       color: 0x1a1a1a,
       roughness: 0.8,
@@ -42,8 +42,8 @@ export class MotorcycleFactory {
     seat.position.set(0, 0.65, -0.25);
     motorcycle.add(seat);
     
-    // Wheels
-    const wheelGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.15, 16);
+    // Wheels (reduced segments for performance)
+    const wheelGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.15, 12);
     const wheelMat = new THREE.MeshStandardMaterial({ 
       color: 0x2a2a2a,
       roughness: 0.9,
@@ -64,8 +64,8 @@ export class MotorcycleFactory {
     rearWheel.receiveShadow = true;
     motorcycle.add(rearWheel);
     
-    // Fork - brushed metal
-    const forkGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.6, 8);
+    // Fork - brushed metal (reduced segments)
+    const forkGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.6, 6);
     const forkMat = new THREE.MeshStandardMaterial({ 
       color: 0x888888,
       metalness: 0.9,
@@ -121,8 +121,8 @@ export class MotorcycleFactory {
   static createRider(riderColor = 0x2a2a2a) {
     const riderGroup = new THREE.Group();
     
-    // Helmet
-    const helmetGeo = new THREE.SphereGeometry(0.22, 12, 8);
+    // Helmet (reduced segments for performance)
+    const helmetGeo = new THREE.SphereGeometry(0.22, 8, 6);
     const helmetMat = new THREE.MeshStandardMaterial({ 
       color: riderColor,
       metalness: 0.4,
@@ -147,7 +147,7 @@ export class MotorcycleFactory {
     riderGroup.add(visor);
     
     // Body
-    const riderBodyGeo = new THREE.BoxGeometry(0.24, 0.3, 0.25, 2, 2, 2);
+    const riderBodyGeo = new THREE.BoxGeometry(0.24, 0.3, 0.25, 1, 1, 1);
     const riderBodyMat = new THREE.MeshStandardMaterial({ 
       color: riderColor,
       roughness: 0.7,
