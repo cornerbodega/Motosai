@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { ROAD_CONSTANTS } from './RoadConstants.js';
 
 export class Highway101 {
   constructor(scene) {
@@ -8,11 +9,18 @@ export class Highway101 {
     this.numSegments = 15; // Further reduced for lower-end machines
     this.currentZ = 0;
     
-    // Highway parameters
-    this.laneWidth = 4.5; // meters - wider lanes for easier driving
-    this.numLanes = 3; // 3 lanes all same direction
-    this.shoulderWidth = 2.5; // Slightly wider shoulders too
-    this.totalWidth = this.laneWidth * this.numLanes + this.shoulderWidth * 2;
+    // MEMORY LEAK FIX: Dynamic segment limits based on speed
+    this.BASE_SEGMENTS = 15;
+    this.MAX_SEGMENTS = 50; // Hard limit to prevent crashes
+    this.MIN_COVERAGE_DISTANCE = 1000; // Always cover at least 1km ahead
+    this.segmentCleanupCounter = 0;
+    this.lastPlayerSpeed = 0;
+    
+    // Highway parameters - using shared constants
+    this.laneWidth = ROAD_CONSTANTS.LANE_WIDTH;
+    this.numLanes = ROAD_CONSTANTS.NUM_LANES;
+    this.shoulderWidth = ROAD_CONSTANTS.SHOULDER_WIDTH;
+    this.totalWidth = ROAD_CONSTANTS.TOTAL_WIDTH;
     
     // Materials
     this.createMaterials();
@@ -209,17 +217,43 @@ export class Highway101 {
     segment.add(rightGrass);
     if (segmentData) segmentData.detailGroups.roadside.push(rightGrass);
     
-    // Concrete barriers (occasionally)
-    if (Math.random() > 0.85) { // Reduced frequency from 0.7 to 0.85
-      const barrierGeo = new THREE.BoxGeometry(0.5, 1, this.segmentLength);
-      
-      const leftBarrier = new THREE.Mesh(barrierGeo, this.barrierMat);
-      leftBarrier.position.set(-this.totalWidth / 2 - this.shoulderWidth - 0.25, 0.5, 0);
-      leftBarrier.castShadow = true;
-      leftBarrier.userData.isRoadside = true;
-      segment.add(leftBarrier);
-      if (segmentData) segmentData.detailGroups.roadside.push(leftBarrier);
-    }
+    // GUARDRAILS - Much further out (beyond shoulder)
+    const barrierGeo = new THREE.BoxGeometry(0.5, 1.2, this.segmentLength);
+    const railingOffset = ROAD_CONSTANTS.TOTAL_WIDTH / 2 + ROAD_CONSTANTS.BARRIER_OFFSET; // Further out beyond shoulder
+    
+    // Left guardrail
+    const leftBarrier = new THREE.Mesh(barrierGeo, this.barrierMat);
+    leftBarrier.position.set(-railingOffset, 0.6, 0);
+    leftBarrier.castShadow = false; // No shadows for performance
+    leftBarrier.userData.isBarrier = true;
+    segment.add(leftBarrier);
+    if (segmentData) segmentData.detailGroups.roadside.push(leftBarrier);
+    
+    // Right guardrail
+    const rightBarrier = new THREE.Mesh(barrierGeo, this.barrierMat);
+    rightBarrier.position.set(railingOffset, 0.6, 0);
+    rightBarrier.castShadow = false; // No shadows for performance
+    rightBarrier.userData.isBarrier = true;
+    segment.add(rightBarrier);
+    if (segmentData) segmentData.detailGroups.roadside.push(rightBarrier);
+    
+    // Add reflective strips for visibility - WHITE like guardrails
+    const stripGeo = new THREE.BoxGeometry(0.1, 0.1, this.segmentLength);
+    const stripMat = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      emissive: 0xffffff,
+      emissiveIntensity: 0.2,
+      metalness: 0.9,
+      roughness: 0.1
+    });
+    
+    const leftStrip = new THREE.Mesh(stripGeo, stripMat);
+    leftStrip.position.set(-railingOffset + 0.25, 0.9, 0);
+    segment.add(leftStrip);
+    
+    const rightStrip = new THREE.Mesh(stripGeo, stripMat);
+    rightStrip.position.set(railingOffset - 0.25, 0.9, 0);
+    segment.add(rightStrip);
     
     // Trees (low poly)
     this.addTrees(segment, 0);
@@ -342,11 +376,35 @@ export class Highway101 {
   }
   
   update(playerZ, playerSpeed) {
-    // Infinite scrolling - move segments as player progresses
-    // Keep visibility limited to prevent performance issues
-    const speedFactor = Math.max(1, Math.min(2, (playerSpeed || 0) / 50)); // Cap speed factor
-    const aheadDistance = this.segmentLength * Math.min(8, 5 + speedFactor * 2); // Max 8 segments ahead
-    const behindDistance = this.segmentLength * 2; // Keep minimal behind
+    // DYNAMIC SEGMENT MANAGEMENT FOR INFINITE SPEED
+    this.lastPlayerSpeed = playerSpeed || 0;
+    
+    // Calculate needed coverage based on speed
+    // At high speeds, we need more segments ahead
+    const speedFactor = Math.max(1, this.lastPlayerSpeed / 50);
+    const segmentsAhead = Math.min(Math.ceil(5 + speedFactor * 3), 20); // More segments at high speed
+    const segmentsBehind = 3; // Keep minimal behind
+    
+    const aheadDistance = this.segmentLength * segmentsAhead;
+    const behindDistance = this.segmentLength * segmentsBehind;
+    
+    // Dynamically adjust segment pool size based on speed
+    const neededSegments = segmentsAhead + segmentsBehind;
+    
+    // Update the target number of segments based on need
+    this.numSegments = Math.min(neededSegments, this.MAX_SEGMENTS);
+    
+    // Create segments if we need more
+    if (this.segments.length < this.numSegments) {
+      const segmentsToCreate = Math.min(this.numSegments - this.segments.length, 3);
+      console.log(`Need ${segmentsToCreate} more segments for coverage at speed ${playerSpeed}`);
+      
+      // Create segments at needed positions
+      for (let i = 0; i < segmentsToCreate; i++) {
+        const newZ = playerZ + (aheadDistance - i * this.segmentLength);
+        this.createSegment(newZ);
+      }
+    }
     
     // Update LOD for all segments based on distance and speed
     this.updateLOD(playerZ, playerSpeed);
@@ -448,6 +506,19 @@ export class Highway101 {
   }
   
   ensureContinuousCoverage(playerZ, aheadDistance, behindDistance) {
+    // MEMORY LEAK FIX: Clean up distant segments periodically
+    this.segmentCleanupCounter++;
+    if (this.segmentCleanupCounter % 60 === 0) { // Every 60 frames (once per second)
+      this.cleanupDistantSegments(playerZ);
+    }
+    
+    // MEMORY LEAK FIX: Emergency cleanup if too many segments
+    if (this.segments.length > this.MAX_SEGMENTS) {
+      console.warn(`Too many segments (${this.segments.length}), performing emergency cleanup`);
+      this.emergencyCleanup(playerZ);
+      // Don't return - still try to maintain coverage
+    }
+    
     // Calculate the range we need to cover
     const minZ = playerZ - behindDistance;
     const maxZ = playerZ + aheadDistance;
@@ -484,9 +555,36 @@ export class Highway101 {
           availableSegment.group.position.z = requiredZ;
           this.regenerateRoadside(availableSegment);
         } else {
-          // This shouldn't happen, but create emergency segment if needed
-          console.warn('Creating emergency segment at', requiredZ);
-          this.createSegment(requiredZ);
+          // MEMORY LEAK FIX: Create new segment if we have room
+          if (this.segments.length < this.numSegments) {
+            // We have room, create a new segment
+            console.log('Creating needed segment at', requiredZ);
+            this.createSegment(requiredZ);
+          } else {
+            // Try to recycle the furthest segment
+            let furthestDist = 0;
+            let furthestSegment = null;
+            
+            this.segments.forEach(s => {
+              if (!requiredPositions.includes(s.z)) {
+                const dist = Math.abs(s.z - playerZ);
+                if (dist > furthestDist) {
+                  furthestDist = dist;
+                  furthestSegment = s;
+                }
+              }
+            });
+            
+            if (furthestSegment) {
+              // Recycle the furthest segment
+              furthestSegment.z = requiredZ;
+              furthestSegment.group.position.z = requiredZ;
+              this.regenerateRoadside(furthestSegment);
+              console.log(`Recycled segment from ${furthestDist}m away to position ${requiredZ}`);
+            } else {
+              console.warn('No segments available to recycle for position', requiredZ);
+            }
+          }
         }
       }
     });
@@ -522,14 +620,13 @@ export class Highway101 {
   
   getLanePosition(lane) {
     // Returns x position for given lane (0-2 for 3 lanes)
-    const laneOffset = (lane - 1) * this.laneWidth; // Lane 0 is left, 1 is center, 2 is right
-    return laneOffset;
+    return ROAD_CONSTANTS.getLanePosition(lane);
   }
   
   getNearestLane(xPosition) {
     // Returns nearest lane number for given x position
-    const lane = Math.round((xPosition / this.laneWidth) + 1);
-    return Math.max(0, Math.min(2, lane)); // Clamp to 0-2 for 3 lanes
+    const lane = Math.round((xPosition / ROAD_CONSTANTS.LANE_WIDTH) + 1);
+    return Math.max(0, Math.min(ROAD_CONSTANTS.NUM_LANES - 1, lane)); // Clamp to valid lane range
   }
   
   getLocationAtPosition(absoluteZ) {
@@ -612,5 +709,100 @@ export class Highway101 {
       this.trunkMesh.material.dispose();
       this.scene.remove(this.trunkMesh);
     }
+  }
+  
+  // MEMORY LEAK FIX: Add cleanup methods
+  cleanupDistantSegments(playerZ) {
+    if (!this.segments || this.segments.length === 0) return;
+    
+    // Only cleanup if we have too many segments
+    if (this.segments.length <= this.numSegments) {
+      return; // Don't cleanup if we're at or below target
+    }
+    
+    // Dynamic cleanup distance based on speed
+    const speedFactor = Math.max(1, this.lastPlayerSpeed / 50);
+    const maxDistance = Math.max(3000, 1500 * speedFactor); // More generous distance
+    
+    const removed = [];
+    this.segments = this.segments.filter(segment => {
+      const distance = Math.abs(segment.z - playerZ);
+      if (distance > maxDistance && this.segments.length > this.numSegments) {
+        removed.push(segment);
+        return false;
+      }
+      return true;
+    });
+    
+    // Properly dispose removed segments
+    removed.forEach(segment => {
+      this.disposeSegment(segment);
+    });
+    
+    if (removed.length > 0) {
+      console.log(`Cleaned up ${removed.length} distant segments`);
+    }
+  }
+  
+  emergencyCleanup(playerZ) {
+    if (!this.segments || this.segments.length === 0) return;
+    
+    // Sort by distance from player
+    this.segments.sort((a, b) => {
+      const distA = Math.abs(a.z - playerZ);
+      const distB = Math.abs(b.z - playerZ);
+      return distA - distB;
+    });
+    
+    // Keep only closest segments
+    const toKeep = this.segments.slice(0, this.numSegments);
+    const toRemove = this.segments.slice(this.numSegments);
+    
+    // Dispose excess segments
+    toRemove.forEach(segment => {
+      this.disposeSegment(segment);
+    });
+    
+    this.segments = toKeep;
+    console.log(`Emergency cleanup: removed ${toRemove.length} segments`);
+  }
+  
+  disposeSegment(segment) {
+    if (!segment) return;
+    
+    // Remove from scene and dispose group
+    if (segment.group) {
+      // Traverse and dispose all children
+      const toDispose = [];
+      segment.group.traverse(child => {
+        if (child !== segment.group) {
+          toDispose.push(child);
+        }
+      });
+      
+      toDispose.forEach(child => {
+        // Dispose geometry (if not shared)
+        if (child.geometry && !child.userData.sharedGeometry) {
+          child.geometry.dispose();
+        }
+        
+        // Don't dispose shared materials
+        // Materials are reused across segments
+        
+        // Remove from parent
+        if (child.parent) {
+          child.parent.remove(child);
+        }
+      });
+      
+      // Remove group from scene
+      if (segment.group.parent) {
+        segment.group.parent.remove(segment.group);
+      }
+    }
+    
+    // Clear references
+    segment.group = null;
+    segment.detailGroups = null;
   }
 }

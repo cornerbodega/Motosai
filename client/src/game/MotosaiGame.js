@@ -11,6 +11,7 @@ import { BloodTrackSystem } from './BloodTrackSystem.js';
 import { MultiplayerManager } from '../multiplayer/MultiplayerManager.js';
 import { MotorcycleFactory } from './MotorcycleFactory.js';
 import { PerformanceManager } from '../utils/PerformanceManager.js';
+import { AudioManager } from './AudioManager.js';
 
 export class MotosaiGame {
   constructor(container, config = {}) {
@@ -101,6 +102,7 @@ export class MotosaiGame {
     this.initControls();
     this.initHUD();
     this.initDeathAnimation();
+    this.initAudio();
     this.initBloodTrackSystem();
     
     // Initialize multiplayer first, then traffic (for synchronization)
@@ -122,7 +124,9 @@ export class MotosaiGame {
       this.renderer = new THREE.WebGLRenderer({ 
         antialias: this.currentConfig.antialias,
         powerPreference: "high-performance",
-        failIfMajorPerformanceCaveat: false // Allow fallback to software rendering
+        failIfMajorPerformanceCaveat: false, // Allow fallback to software rendering
+        preserveDrawingBuffer: false, // Better performance
+        stencil: false // Not needed, saves memory
       });
     } catch (error) {
       console.error('WebGL initialization failed:', error);
@@ -158,9 +162,11 @@ export class MotosaiGame {
     this.renderer.setPixelRatio(this.currentConfig.pixelRatio);
     
     // Dynamic shadow settings based on performance
-    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.enabled = this.currentConfig.shadowMapSize > 0;
     this.renderer.shadowMap.type = this.currentConfig.shadowType;
     this.renderer.shadowMap.autoUpdate = false; // Manual updates for performance
+    this.shadowUpdateTimer = 0;
+    this.shadowUpdateInterval = 0.1; // Update shadows every 100ms instead of every frame
     
     // Dynamic tone mapping based on performance
     this.renderer.toneMapping = this.currentConfig.toneMapping;
@@ -177,6 +183,29 @@ export class MotosaiGame {
     // Handle resize and performance changes
     window.addEventListener('resize', this.boundHandleResize);
     window.addEventListener('performanceChanged', this.boundHandlePerformanceChange);
+    
+    // CRITICAL: Handle WebGL context loss to prevent crashes
+    this.boundHandleContextLost = (e) => {
+      e.preventDefault();
+      console.error('WebGL context lost! Stopping render loop.');
+      this.isPaused = true;
+      if (this.animationId) {
+        cancelAnimationFrame(this.animationId);
+        this.animationId = null;
+      }
+      // Show user message
+      this.showGameMessage('Graphics error - Please refresh the page', 'death');
+    };
+    
+    this.boundHandleContextRestored = () => {
+      console.log('WebGL context restored');
+      this.initRenderer();
+      this.isPaused = false;
+      this.animate();
+    };
+    
+    this.renderer.domElement.addEventListener('webglcontextlost', this.boundHandleContextLost);
+    this.renderer.domElement.addEventListener('webglcontextrestored', this.boundHandleContextRestored);
   }
   
   initScene() {
@@ -435,6 +464,12 @@ export class MotosaiGame {
   
   initDeathAnimation() {
     this.deathAnimation = new DeathAnimation(this.scene);
+  }
+  
+  initAudio() {
+    this.audioManager = new AudioManager();
+    // Start theme music
+    this.audioManager.playTheme();
   }
   
   initBloodTrackSystem() {
@@ -887,6 +922,15 @@ export class MotosaiGame {
     this.motorcycle.visible = false; // Hide motorcycle immediately
     this.rider.visible = false; // Hide rider immediately - they're now a puddle!
     
+    // Play death/explosion sound
+    if (this.audioManager) {
+      this.audioManager.play('explosionBloody', { clone: true, volume: 0.7 });
+      // Stop engine sound
+      if (this.audioManager.currentEngineSound) {
+        this.audioManager.stop(this.audioManager.currentEngineSound);
+      }
+    }
+    
     // Calculate collision direction from velocity - use pre-allocated vectors
     this._tempVelocity.set(
       state.velocity.x || 0,
@@ -920,6 +964,16 @@ export class MotosaiGame {
   respawnPlayer() {
     this.isDead = false;
     
+    // MEMORY LEAK FIX: Clean up death animation objects before respawn
+    if (this.deathAnimation) {
+      this.deathAnimation.cleanup();
+    }
+    
+    // MEMORY LEAK FIX: Clean up traffic system debris
+    if (this.trafficSystem) {
+      this.trafficSystem.cleanupDebris();
+    }
+    
     // Make everything visible again
     this.motorcycle.visible = true;
     this.rider.visible = true; // Rider is back from being a puddle!
@@ -929,8 +983,11 @@ export class MotosaiGame {
       child.visible = true;
     });
     
-    // Reset physics but keep position (player has fallen behind)
+    // Reset physics but keep Z position (player has fallen behind)
     const currentState = this.physics.getState();
+    this.physics.position.x = 0; // Reset to center of road
+    this.physics.position.y = 0.3; // Reset to proper height
+    // Keep Z position so player respawns where they died
     this.physics.speed = 20 / 2.237; // Start at low speed (20 mph)
     this.physics.velocity = { x: 0, y: 0, z: this.physics.speed };
     this.physics.rotation = { pitch: 0, yaw: 0, roll: 0 };
@@ -943,7 +1000,10 @@ export class MotosaiGame {
       lateralVelocity: 0,
       isCrashed: false,
       recoveryTime: 0,
-      invulnerableTime: 2.0 // 2 seconds of invulnerability after respawn
+      invulnerableTime: 2.0, // 2 seconds of invulnerability after respawn
+      isSlidingOnWall: false, // Clear wall sliding
+      wallSide: null,
+      slideTime: 0
     };
     
     // Reset visual elements
@@ -951,7 +1011,73 @@ export class MotosaiGame {
     this.frontWheel.rotation.x = 0;
     this.rearWheel.rotation.x = 0;
     
+    // Play rev engine sound on respawn
+    if (this.audioManager) {
+      this.audioManager.play('revEngine', { clone: true, volume: 0.4 });
+    }
+    
     console.log('Player respawned!');
+  }
+  
+  handleBarrierCollision(collision) {
+    // Handle different severity levels
+    switch(collision.severity) {
+      case 'bump':
+        // Low speed - just screen shake and tire screech
+        if (this.audioManager) {
+          this.audioManager.play('tireScreechShort', { clone: true, volume: 0.5 });
+        }
+        this.screenShake.intensity = 5;
+        this.screenShake.duration = 0.2;
+        console.log(`Barrier bump at ${collision.speedMph.toFixed(0)} mph`);
+        break;
+        
+      case 'explode':
+        // Medium speed - explosion effect
+        // Explosion effect happens with death animation
+        if (this.audioManager) {
+          this.audioManager.play('explosion', { clone: true, volume: 0.6 });
+        }
+        this.screenShake.intensity = 15;
+        this.screenShake.duration = 0.5;
+        console.log(`Barrier explosion at ${collision.speedMph.toFixed(0)} mph`);
+        break;
+        
+      case 'smear':
+        // High speed - explosion + blood smear on barrier
+        // Explosion effect happens with death animation
+        if (this.audioManager) {
+          this.audioManager.play('explosionBloody', { clone: true, volume: 0.8 });
+          this.audioManager.play('tireScreechLong', { clone: true, volume: 0.4 });
+        }
+        
+        if (this.bloodTrackSystem) {
+          // Create blood smear along the barrier (more blood, spread out)
+          for (let i = 0; i < 10; i++) {
+            const smearOffset = {
+              x: collision.position.x + (Math.random() - 0.5) * 0.5, // Keep close to barrier
+              y: collision.position.y + Math.random() * 2, // Vertical smear
+              z: collision.position.z + (Math.random() - 0.5) * 8 // Long smear along barrier
+            };
+            this.bloodTrackSystem.addBloodSplat(smearOffset, 3.0); // Extra large blood splats
+          }
+          
+          // Add additional blood trail effect
+          for (let i = 0; i < 5; i++) {
+            const trailOffset = {
+              x: collision.position.x,
+              y: 0.1,
+              z: collision.position.z - i * 2 // Trail behind impact point
+            };
+            this.bloodTrackSystem.addBloodSplat(trailOffset, 2.5);
+          }
+        }
+        
+        this.screenShake.intensity = 30;
+        this.screenShake.duration = 1.0;
+        console.log(`Barrier SMEAR at ${collision.speedMph.toFixed(0)} mph!`);
+        break;
+    }
   }
   
   handlePerformanceChange(event) {
@@ -1032,10 +1158,18 @@ export class MotosaiGame {
     this.animationId = requestAnimationFrame(() => this.animate());
     
     const currentTime = performance.now();
-    const deltaTime = (currentTime - this.lastTime) / 1000;
+    const deltaTime = Math.min((currentTime - this.lastTime) / 1000, 0.1); // Cap deltaTime
     this.lastTime = currentTime;
     
+    // Emergency brake: Stop if deltaTime is too large (indicates freeze)
+    if (deltaTime > 0.5) {
+      console.warn('Large deltaTime detected, skipping frame');
+      return;
+    }
+    
     if (!this.isPaused) {
+      // Wrap everything in try-catch to prevent crashes
+      try {
       // Get physics state first
       let state;
       
@@ -1069,9 +1203,16 @@ export class MotosaiGame {
         
         // Check for collision effects
         if (state.collision) {
-          // Check for crash (serious collision)
+          // Check for crash FIRST (serious collision)
           if (state.collision.isCrashed && !this.isDead) {
+            // Handle barrier-specific effects before death
+            if (state.collision.type === 'barrier') {
+              this.handleBarrierCollision(state.collision);
+            }
             this.triggerDeath(state);
+          } else if (state.collision.type === 'barrier') {
+            // Non-fatal barrier collision (shouldn't happen anymore but just in case)
+            this.handleBarrierCollision(state.collision);
           } else {
             // Minor collision - just wobble
             // Trigger screen shake on new collision
@@ -1103,11 +1244,34 @@ export class MotosaiGame {
       }
       
       // ALWAYS update traffic regardless of death state
-      this.traffic.update(deltaTime, state.position);
+      this.traffic.update(deltaTime, state.position, state.velocity);
       
       // Update blood track system
       if (this.bloodTrackSystem) {
         this.bloodTrackSystem.update(deltaTime);
+        
+        // Add blood while sliding on wall (high speed crashes)
+        if (state.collision && state.collision.isSlidingOnWall) {
+          // Add blood splat every few frames while sliding
+          if (!this.lastWallBloodTime) this.lastWallBloodTime = 0;
+          this.lastWallBloodTime += deltaTime;
+          
+          if (this.lastWallBloodTime > 0.05) { // Every 50ms
+            const wallX = state.collision.wallSide === 'right' ? 
+              Math.abs(state.position.x) - 0.5 : // Slightly off wall
+              -Math.abs(state.position.x) + 0.5;
+            
+            this.bloodTrackSystem.addBloodSplat({
+              x: wallX,
+              y: Math.random() * 1.5, // Vary height on wall
+              z: state.position.z + Math.random() * 2 - 1
+            }, 2.0); // Large splats
+            
+            this.lastWallBloodTime = 0;
+          }
+        } else {
+          this.lastWallBloodTime = 0;
+        }
       }
       
       // Update highway 
@@ -1135,16 +1299,10 @@ export class MotosaiGame {
         // Don't do any other updates when dead
       } else if (this.motorcycle) {
         // Only update when alive
-        // Handle invulnerability flashing
-        if (state.collision && state.collision.invulnerable) {
-          // Flashing during invulnerability
-          this.motorcycle.visible = Math.sin(Date.now() * 0.01) > 0;
-          this.rider.visible = this.motorcycle.visible;
-        } else {
-          // Normal visibility when alive
-          this.motorcycle.visible = true;
-          this.rider.visible = true;
-        }
+        // Handle invulnerability flashing - DISABLED to prevent flickering
+        // Just show normally even during invulnerability
+        this.motorcycle.visible = true;
+        this.rider.visible = true;
         
         // Update motorcycle position and rotation
         // Apply lean offset to make it rotate around ground contact point
@@ -1152,7 +1310,7 @@ export class MotosaiGame {
         
         this.motorcycle.position.set(
           state.position.x + leanOffset * Math.cos(state.rotation.yaw + Math.PI/2),
-          state.position.y,
+          0, // Force Y to 0 to prevent vertical vibration
           state.position.z + leanOffset * Math.sin(state.rotation.yaw + Math.PI/2)
         );
         
@@ -1171,21 +1329,22 @@ export class MotosaiGame {
         this.rider.rotation.x = state.rotation.pitch * 0.3;
       }
       
-      // Update backgrounds
+      // Update backgrounds with memory management
       if (this.backgrounds) {
         this.backgrounds.update(deltaTime, state.position);
-        // Update location based on absolute position
-        // this.distance is in feet, convert to meters
-        const absoluteZ = this.distance * 0.3048; // Convert feet to meters
-        const location = this.highway.getLocationAtPosition(absoluteZ);
         
-        // Debug: Log every 300 frames to reduce console overhead
-        if (!this.bgLogCounter) this.bgLogCounter = 0;
-        if (this.bgLogCounter++ % 300 === 0) {
-          console.log(`[DEBUG] Distance: ${(this.distance/5280).toFixed(2)}mi, absoluteZ: ${absoluteZ.toFixed(0)}m, location:`, location);
+        // Only update location every 600 frames (~10 seconds at 60fps) to prevent API spam
+        if (!this.bgUpdateCounter) this.bgUpdateCounter = 0;
+        this.bgUpdateCounter++;
+        
+        if (this.bgUpdateCounter >= 600) {
+          this.bgUpdateCounter = 0;
+          
+          // Update location based on absolute position
+          const absoluteZ = this.distance * 0.3048;
+          const location = this.highway.getLocationAtPosition(absoluteZ);
+          this.backgrounds.updateLocation(absoluteZ, location);
         }
-        
-        this.backgrounds.updateLocation(absoluteZ, location);
       }
       
       // Sky is now handled by BackgroundSystem
@@ -1207,6 +1366,13 @@ export class MotosaiGame {
           state.position.z + 50
         );
         this.sunLight.target.position.copy(state.position);
+        
+        // Update shadows less frequently for performance
+        this.shadowUpdateTimer += deltaTime;
+        if (this.shadowUpdateTimer >= this.shadowUpdateInterval && this.renderer.shadowMap.enabled) {
+          this.renderer.shadowMap.needsUpdate = true;
+          this.shadowUpdateTimer = 0;
+        }
       }
       
       // Update camera (includes FOV updates)
@@ -1215,12 +1381,53 @@ export class MotosaiGame {
       // Update HUD
       this.updateHUD();
       
+      // Update audio (engine sounds)
+      if (this.audioManager) {
+        this.audioManager.updateEngineSound(state.speed);
+      }
+      
       // Track distance
       this.distance += state.speed * deltaTime * 1.467; // mph to ft/s
       
       // Update performance manager
       if (this.performanceManager) {
         this.performanceManager.update(deltaTime);
+      }
+      
+      } catch (error) {
+        console.error('Animation loop error:', error);
+        // Don't crash the game, just log and continue
+      }
+    }
+    
+    // Memory management - gentler approach
+    if (!this.memoryCounter) this.memoryCounter = 0;
+    this.memoryCounter++;
+    
+    // Force cleanup every 5 seconds, less aggressive
+    if (this.memoryCounter >= 300) {
+      try {
+        // Only cleanup if we have WAY too many vehicles
+        if (this.traffic && this.traffic.vehicles.length > 25) {
+          console.log('Gentle traffic cleanup:', this.traffic.vehicles.length);
+          // Only remove vehicles that are far from player
+          const playerZ = this.physics.getState().position.z;
+          this.traffic.vehicles = this.traffic.vehicles.filter(vehicle => {
+            const distance = Math.abs(vehicle.position.z - playerZ);
+            if (distance > 300) {
+              this.scene.remove(vehicle.mesh);
+              return false; // Remove far vehicles
+            }
+            return true; // Keep nearby vehicles
+          });
+        }
+        
+        // Force garbage collection less frequently
+        if (window.gc) window.gc();
+        
+        this.memoryCounter = 0;
+      } catch (error) {
+        console.error('Memory cleanup error:', error);
       }
     }
     
@@ -1230,22 +1437,7 @@ export class MotosaiGame {
     } catch (error) {
       // Log the error once to avoid spamming console
       if (!this.shaderErrorLogged) {
-        console.error('Shader uniform error during render:', error);
-        
-        // Log all objects with materials to find the problematic one
-        this.scene.traverse((object) => {
-          if (object.material) {
-            console.log('Object with material:', {
-              name: object.name || 'unnamed',
-              type: object.type,
-              materialType: object.material.type,
-              fog: object.material.fog,
-              transparent: object.material.transparent,
-              hasFogUniforms: object.material.uniforms?.fogColor ? true : false
-            });
-          }
-        });
-        
+        console.error('Render error:', error);
         this.shaderErrorLogged = true;
       }
     }
@@ -1368,6 +1560,12 @@ export class MotosaiGame {
     window.removeEventListener('keydown', this.boundHandleKeyDown);
     window.removeEventListener('keyup', this.boundHandleKeyUp);
     window.removeEventListener('performanceChanged', this.boundHandlePerformanceChange);
+    
+    // Remove WebGL context event listeners
+    if (this.renderer && this.renderer.domElement) {
+      this.renderer.domElement.removeEventListener('webglcontextlost', this.boundHandleContextLost);
+      this.renderer.domElement.removeEventListener('webglcontextrestored', this.boundHandleContextRestored);
+    }
     
     // Remove touch event listeners if they exist
     if (this.renderer && this.renderer.domElement) {
