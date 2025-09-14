@@ -330,19 +330,19 @@ export class MultiplayerManager {
     };
 
     // Debug crash state
-    if (updateData.isCrashed || updateData.isDead) {
-      console.log(`🔍 SENDING CRASH/DEATH STATE:`, {
-        isCrashed: updateData.isCrashed,
-        isDead: updateData.isDead,
-        position: updateData.position,
-        velocity: updateData.velocity
-      });
-    }
+    // if (updateData.isCrashed || updateData.isDead) {
+    //   console.log(`🔍 SENDING CRASH/DEATH STATE:`, {
+    //     isCrashed: updateData.isCrashed,
+    //     isDead: updateData.isDead,
+    //     position: updateData.position,
+    //     velocity: updateData.velocity
+    //   });
+    // }
 
     // Debug occasional updates
-    if (Math.random() < 0.005) { // 0.5% of updates
-      console.log(`Sending update: pos(${updateData.position.x?.toFixed(1)}, ${updateData.position.z?.toFixed(1)}) speed=${updateData.speed?.toFixed(0)}`);
-    }
+    // if (Math.random() < 0.005) { // 0.5% of updates
+    //   console.log(`Sending update: pos(${updateData.position.x?.toFixed(1)}, ${updateData.position.z?.toFixed(1)}) speed=${updateData.speed?.toFixed(0)}`);
+    // }
 
     this.socket.emit('player-update', updateData);
   }
@@ -549,9 +549,22 @@ export class MultiplayerManager {
   }
 
   getPlayerList() {
-    const players = [{ id: this.playerId, username: this.username }];
+    const players = [{
+      id: this.playerId,
+      username: this.username,
+      state: null // Local player state is handled separately
+    }];
+
     this.otherPlayers.forEach((data, id) => {
-      players.push({ id, username: data.username });
+      players.push({
+        id,
+        username: data.username,
+        state: {
+          position: data.position,
+          speed: data.speed,
+          rotation: data.rotation
+        }
+      });
     });
     return players;
   }

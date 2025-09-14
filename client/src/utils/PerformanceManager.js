@@ -9,11 +9,11 @@ export class PerformanceManager {
     this.frameTimes = [];
     this.maxFrameHistory = 60; // Track last 60 frames
     
-    // Performance thresholds (ms per frame)
+    // Performance thresholds (ms per frame) - more conservative
     this.thresholds = {
-      low: 33.3,    // <30 FPS
-      medium: 20.0, // <50 FPS
-      high: 16.67   // 60+ FPS
+      low: 50.0,    // <20 FPS - emergency mode
+      medium: 33.3, // <30 FPS - needs help
+      high: 20.0    // 50+ FPS - running well
     };
     
     this.autoAdjustEnabled = true;
@@ -49,13 +49,14 @@ export class PerformanceManager {
     
     console.log('Hardware detection:', { renderer, vendor, isMobile, memory, cores });
     
-    // Performance classification
-    if (isMobile || memory < 4 || cores < 4) {
+    // Performance classification - more conservative
+    if (isMobile || memory <= 4 || cores <= 2) {
       this.performanceLevel = 'low';
-    } else if (memory < 8 || cores < 8) {
+    } else if (memory <= 8 || cores <= 4) {
       this.performanceLevel = 'medium';
     } else {
-      this.performanceLevel = 'high';
+      // Start at medium even for high-end hardware, let it scale up if performance is good
+      this.performanceLevel = 'medium';
     }
     
     // Check for integrated graphics (common indicators of lower performance)
@@ -93,7 +94,7 @@ export class PerformanceManager {
     const avgFrameTime = this.frameTimes.reduce((a, b) => a + b, 0) / this.frameTimes.length;
     const targetFrameTime = 16.67; // 60 FPS
     
-    console.log(`Average frame time: ${avgFrameTime.toFixed(2)}ms`);
+    // console.log(`Average frame time: ${avgFrameTime.toFixed(2)}ms`); // Commented - logs every frame!
     
     let newLevel = this.performanceLevel;
     
@@ -123,58 +124,58 @@ export class PerformanceManager {
   getConfig() {
     const configs = {
       low: {
-        shadowMapSize: 1024,
+        shadowMapSize: 512,  // Reduced from 1024
         shadowType: THREE.BasicShadowMap,
         pixelRatio: 1,
         antialias: false,
-        maxVehicles: 15,
-        spawnDistance: 150,
-        segmentCount: 10,
-        treeInstances: 50,
-        particleCount: 20,
+        maxVehicles: 10,  // Reduced from 15
+        spawnDistance: 100,  // Reduced from 150
+        segmentCount: 8,  // Reduced from 10
+        treeInstances: 30,  // Reduced from 50
+        particleCount: 10,  // Reduced from 20
         updateFrequency: 2, // Update every 2 frames
-        fogDistance: 500,
-        lodDistance: 100,
+        fogDistance: 300,  // Reduced from 500
+        lodDistance: 80,  // Reduced from 100
         physicallyCorrectLights: false,
-        toneMapping: THREE.LinearToneMapping,
+        toneMapping: THREE.NoToneMapping,  // Simplest tone mapping
         enableBloom: false,
         enableSSAO: false
       },
       medium: {
-        shadowMapSize: 2048,
+        shadowMapSize: 1024,  // Reduced from 2048
         shadowType: THREE.PCFShadowMap,
-        pixelRatio: 1.25,
+        pixelRatio: Math.min(1.25, window.devicePixelRatio),  // Cap properly
         antialias: true,
-        maxVehicles: 25,
-        spawnDistance: 200,
-        segmentCount: 15,
-        treeInstances: 100,
-        particleCount: 50,
+        maxVehicles: 15,  // Reduced from 25
+        spawnDistance: 150,  // Reduced from 200
+        segmentCount: 12,  // Reduced from 15
+        treeInstances: 60,  // Reduced from 100
+        particleCount: 30,  // Reduced from 50
         updateFrequency: 1, // Update every frame
-        fogDistance: 1000,
-        lodDistance: 150,
+        fogDistance: 600,  // Reduced from 1000
+        lodDistance: 120,  // Reduced from 150
         physicallyCorrectLights: false,
-        toneMapping: THREE.ACESFilmicToneMapping,
+        toneMapping: THREE.LinearToneMapping,  // Simpler tone mapping
         enableBloom: false,
         enableSSAO: false
       },
       high: {
-        shadowMapSize: 4096,
+        shadowMapSize: 2048,  // Reduced from 4096 - still high quality but much less memory
         shadowType: THREE.PCFSoftShadowMap,
-        pixelRatio: Math.min(window.devicePixelRatio, 2),
+        pixelRatio: Math.min(window.devicePixelRatio, 1.5),  // Cap at 1.5 instead of 2
         antialias: true,
-        maxVehicles: 40,
-        spawnDistance: 300,
-        segmentCount: 20,
-        treeInstances: 200,
-        particleCount: 100,
+        maxVehicles: 20,  // Reduced from 40
+        spawnDistance: 200,  // Reduced from 300
+        segmentCount: 15,  // Reduced from 20
+        treeInstances: 100,  // Reduced from 200
+        particleCount: 50,  // Reduced from 100
         updateFrequency: 1,
-        fogDistance: 2000,
-        lodDistance: 200,
-        physicallyCorrectLights: true,
+        fogDistance: 1000,  // Reduced from 2000
+        lodDistance: 150,  // Reduced from 200
+        physicallyCorrectLights: false,  // Disabled for performance
         toneMapping: THREE.ACESFilmicToneMapping,
-        enableBloom: true,
-        enableSSAO: true
+        enableBloom: false,  // Disabled - too expensive
+        enableSSAO: false  // Disabled - too expensive
       }
     };
     

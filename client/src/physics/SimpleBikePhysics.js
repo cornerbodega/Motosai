@@ -1,6 +1,8 @@
 // Simple Arcade-Style Motorcycle Physics
 // Built from scratch with step-by-step working demos
 
+import { ROAD_CONSTANTS } from '../game/RoadConstants.js';
+
 export class SimpleBikePhysics {
   constructor() {
     // Position and movement
@@ -8,14 +10,21 @@ export class SimpleBikePhysics {
     this.velocity = { x: 0, y: 0, z: 0 };
     this.rotation = { pitch: 0, yaw: 0, roll: 0 };
     
-    // Speed parameters
+    // Speed parameters - More realistic motorcycle physics
     this.speed = 0; // Current speed in m/s
     this.maxSpeed = Infinity; // No speed limit!
-    this.baseAcceleration = 20; // Higher actual acceleration for fun gameplay
-    this.acceleration = 20; // Current acceleration (increases over time)
+    this.baseAcceleration = 60; // Insane acceleration - like a drag bike!
+    this.acceleration = 60; // Current acceleration
     this.deceleration = 30; // m/s² (coasting)
-    this.brakeDeceleration = 60; // m/s² (braking)
+    this.brakeDeceleration = 90; // m/s² (sport bike brakes are powerful!)
     this.throttleHoldTime = 0; // How long throttle has been held
+    
+    // Aggressive torque curve - instant power!
+    this.powerBand = {
+      lowRPM: 0.95,  // Strong torque even at low RPM - instant response
+      midRPM: 1.0,  // Peak torque in mid-range
+      highRPM: 0.98 // Maintains power at redline
+    }
     
     // Turning parameters
     this.turnSpeed = 0; // Current turn rate (rad/s)
@@ -48,6 +57,9 @@ export class SimpleBikePhysics {
       isCrashed: false,
       recoveryTime: 0,
       invulnerableTime: 0, // Brief invulnerability after collision
+      isSlidingOnWall: false,
+      wallSide: null,
+      slideTime: 0
     };
     
     // Collision response parameters - balanced for lane splitting
@@ -90,10 +102,18 @@ export class SimpleBikePhysics {
     // STEP 3: Update position based on speed and direction
     this.updatePosition(deltaTime);
     
+    // STEP 4: Check barrier collisions - returns collision info for game to handle
+    const collisionInfo = this.checkBarrierCollisions();
+    
     // Update visual elements
     this.updateVisuals(deltaTime);
     
-    return this.getState();
+    const state = this.getState();
+    // Merge barrier collision info with existing collision state
+    if (collisionInfo) {
+      state.collision = { ...state.collision, ...collisionInfo };
+    }
+    return state;
   }
   
   updateSpeed(deltaTime) {
@@ -102,64 +122,61 @@ export class SimpleBikePhysics {
       // Track how long throttle is held
       this.throttleHoldTime += deltaTime;
       
-      // Continuous acceleration increase over time for infinite speed
-      // No cap on acceleration multiplier
-      const accelerationMultiplier = 1 + this.throttleHoldTime / 5; // Doubles every 5 seconds
-      this.acceleration = this.baseAcceleration * accelerationMultiplier;
+      // Calculate RPM-based torque multiplier for realistic power delivery
+      const rpmPercent = this.rpm / 15000; // 0 to 1 based on max RPM
+      let torqueMultiplier;
       
-      // Speed-based reduction - motorcycles accelerate fast at low speeds
-      const displaySpeedMPH = this.speed * 2.237 / 1.5; // Use display speed for scaling
-      let speedPenalty;
-      
-      if (displaySpeedMPH < 60) {
-        // 0-60mph: Full acceleration - motorcycles are quick here
-        speedPenalty = 1.0;
-      } else if (displaySpeedMPH < 80) {
-        // 60-80mph: Slight reduction
-        speedPenalty = 0.85;
-      } else if (displaySpeedMPH < 100) {
-        // 80-100mph: Moderate reduction
-        speedPenalty = 0.65;
-      } else if (displaySpeedMPH < 130) {
-        // 100-130mph: Heavy reduction
-        speedPenalty = 0.45;
-      } else if (displaySpeedMPH < 160) {
-        // 130-160mph: Very heavy reduction
-        speedPenalty = 0.3;
-      } else if (displaySpeedMPH < 200) {
-        // 160-200mph: Extreme reduction
-        speedPenalty = 0.2;
-      } else if (displaySpeedMPH < 240) {
-        // 200-240mph: Very extreme reduction
-        speedPenalty = 0.12;
-      } else if (displaySpeedMPH < 300) {
-        // 240-300mph: Very hard to accelerate
-        speedPenalty = 0.06;
-      } else if (displaySpeedMPH < 400) {
-        // 300-400mph: Extremely hard to accelerate
-        speedPenalty = 0.03;
-      } else if (displaySpeedMPH < 500) {
-        // 400-500mph: Nearly impossible
-        speedPenalty = 0.015;
-      } else if (displaySpeedMPH < 1000) {
-        // 500-1000mph: Requires extreme patience
-        speedPenalty = 0.008;
+      if (rpmPercent < 0.3) {
+        // Low RPM - already strong torque
+        torqueMultiplier = this.powerBand.lowRPM;
+      } else if (rpmPercent < 0.7) {
+        // Mid RPM - peak torque zone (4500-10500 RPM)
+        torqueMultiplier = this.powerBand.midRPM;
       } else {
-        // 1000+mph: Still possible but very slow
-        speedPenalty = 0.004;
+        // High RPM - maintains power
+        torqueMultiplier = this.powerBand.highRPM;
       }
       
-      const accelPower = this.controls.throttle * this.acceleration * speedPenalty;
+      // Realistic speed-based air resistance and power curve
+      const displaySpeedMPH = this.speed * 2.237; // Display speed in MPH
+      let dragCoefficient;
+      
+      if (displaySpeedMPH < 60) {
+        // 0-60mph: Minimal drag, full power
+        dragCoefficient = 1.0;
+      } else if (displaySpeedMPH < 100) {
+        // 60-100mph: Light drag
+        dragCoefficient = 0.9 - ((displaySpeedMPH - 60) / 40) * 0.15;
+      } else if (displaySpeedMPH < 150) {
+        // 100-150mph: Moderate drag (sport bike territory)
+        dragCoefficient = 0.75 - ((displaySpeedMPH - 100) / 50) * 0.2;
+      } else if (displaySpeedMPH < 200) {
+        // 150-200mph: Heavy drag (track speeds)
+        dragCoefficient = 0.55 - ((displaySpeedMPH - 150) / 50) * 0.2;
+      } else if (displaySpeedMPH < 300) {
+        // 200-300mph: Extreme drag (land speed record territory)
+        dragCoefficient = 0.35 - ((displaySpeedMPH - 200) / 100) * 0.15;
+      } else {
+        // 300+mph: Still good acceleration for infinite speed fun
+        // Keep reasonable acceleration at extreme speeds
+        dragCoefficient = Math.max(0.3, 0.5 * Math.exp(-displaySpeedMPH / 1000));
+      }
+      
+      // Add boost over time for achieving extreme speeds (game mechanic)
+      const timeBoost = 1 + Math.min(this.throttleHoldTime / 10, 2); // Max 3x after 20 seconds
+      
+      // Calculate final acceleration
+      const gearRatio = this.gear <= 3 ? 1.2 : (this.gear <= 5 ? 1.0 : 0.85); // Lower gears = more torque
+      const finalAcceleration = this.baseAcceleration * torqueMultiplier * dragCoefficient * gearRatio * timeBoost;
+      
+      // Apply acceleration with throttle control
+      const accelPower = this.controls.throttle * finalAcceleration;
       this.speed += accelPower * deltaTime;
       
-      // Tiny speed boosts at major milestones to help reach them
-      // (displaySpeedMPH already declared above)
-      if (displaySpeedMPH > 100 && displaySpeedMPH < 101) this.speed *= 1.01; // Tiny 100mph boost
-      if (displaySpeedMPH > 200 && displaySpeedMPH < 201) this.speed *= 1.01; // Tiny 200mph boost
-      if (displaySpeedMPH > 300 && displaySpeedMPH < 301) this.speed *= 1.008; // Tiny 300mph boost
-      if (displaySpeedMPH > 400 && displaySpeedMPH < 401) this.speed *= 1.006; // Tiny 400mph boost
-      if (displaySpeedMPH > 500 && displaySpeedMPH < 501) this.speed *= 1.005; // Tiny 500mph boost
-      if (displaySpeedMPH > 1000 && displaySpeedMPH < 1001) this.speed *= 1.003; // Tiny 1000mph boost
+      // Small boosts at milestones for game feel
+      if (displaySpeedMPH > 100 && displaySpeedMPH < 101) this.speed *= 1.005;
+      if (displaySpeedMPH > 200 && displaySpeedMPH < 201) this.speed *= 1.005;
+      if (displaySpeedMPH > 300 && displaySpeedMPH < 301) this.speed *= 1.003;
     }
     // Apply brakes
     else if (this.controls.brake > 0) {
@@ -167,41 +184,90 @@ export class SimpleBikePhysics {
       this.throttleHoldTime = 0;
       this.acceleration = this.baseAcceleration;
       
-      // Brake (scales with speed for more control at high speeds)
-      const brakePower = this.controls.brake * this.brakeDeceleration * (1 + this.speed / 100);
-      this.speed -= brakePower * deltaTime;
+      // Realistic brake physics with weight transfer
+      const speedFactor = Math.min(1.5, 1 + this.speed / 50); // More effective at higher speeds
+      const brakePower = this.controls.brake * this.brakeDeceleration * speedFactor;
       
-      // Don't go backwards from braking
+      // Apply braking with ABS simulation (prevents lockup)
+      const maxBraking = this.speed / deltaTime; // Can't brake more than current speed
+      const actualBraking = Math.min(brakePower * deltaTime, maxBraking * 0.95); // 95% to prevent instant stop
+      
+      this.speed -= actualBraking;
+      
+      // Engine braking when off throttle
+      if (this.speed > 0) {
+        const engineBraking = (this.rpm / 14000) * 5; // More engine braking at high RPM
+        this.speed -= engineBraking * deltaTime;
+      }
+      
+      // Don't go backwards
       if (this.speed < 0) this.speed = 0;
     }
-    // Coasting - maintain speed
+    // Coasting - minimal deceleration for fun gameplay
     else {
       // Reset throttle time
       this.throttleHoldTime = 0;
       this.acceleration = this.baseAcceleration;
       
-      // Coast with very slight deceleration (air resistance)
-      // More realistic coasting
-      if (this.speed > 50 / 2.237) { // Above 50mph
-        this.speed *= 0.998; // Tiny speed loss from air resistance
+      // Very minimal deceleration - mostly maintain speed
+      const displaySpeedMPH = this.speed * 2.237;
+      let coastDecel = 0.05; // Very light engine braking
+      
+      // Only add noticeable drag at extreme speeds
+      if (displaySpeedMPH > 200) {
+        coastDecel += (displaySpeedMPH - 200) * 0.001; // Tiny increase at high speeds
       }
-      // Otherwise maintain speed at low speeds
+      
+      // Apply very gradual deceleration
+      this.speed = Math.max(0, this.speed - coastDecel * deltaTime);
     }
     
     // No speed limit - infinite acceleration!
     // this.speed = Math.min(this.speed, this.maxSpeed);
     
-    // Update RPM (scales with speed, redlines at high speed)
-    this.rpm = Math.min(1000 + this.speed * 100, 15000);
+    // Realistic RPM and gear calculation
+    const displaySpeed = this.speed * 2.237; // Display speed in MPH
+    const actualSpeed = this.speed * 2.237; // Actual speed in MPH
     
-    // Simple automatic gear shifting - extended for extreme speeds
-    const displaySpeed = this.speed * 2.237 / 1.5;
-    if (displaySpeed < 30) this.gear = 1;
-    else if (displaySpeed < 60) this.gear = 2;
-    else if (displaySpeed < 100) this.gear = 3;
-    else if (displaySpeed < 150) this.gear = 4;
-    else if (displaySpeed < 250) this.gear = 5;
-    else this.gear = 6; // Top gear for everything above 250mph
+    // Sport bike gear ratios and shift points
+    const gearRatios = [0, 2.6, 1.9, 1.5, 1.25, 1.08, 0.96];
+    const idleRPM = 1200;
+    const redlineRPM = 14000;
+    
+    // Automatic transmission - shifts at optimal power band
+    if (displaySpeed < 20) {
+      this.gear = 1;
+    } else if (displaySpeed < 40) {
+      this.gear = 2;
+    } else if (displaySpeed < 65) {
+      this.gear = 3;  
+    } else if (displaySpeed < 95) {
+      this.gear = 4;
+    } else if (displaySpeed < 135) {
+      this.gear = 5;
+    } else {
+      this.gear = 6; // Top gear
+    }
+    
+    // Calculate realistic RPM based on gear and speed
+    const wheelCircumference = 2.0; // meters (realistic sport bike wheel)
+    const primaryRatio = 1.7; // Primary drive ratio
+    const finalDrive = 2.5; // Final drive ratio
+    
+    // RPM = (speed * gear_ratio * final_drive * 60) / wheel_circumference
+    const calculatedRPM = (this.speed * gearRatios[this.gear] * finalDrive * primaryRatio * 60) / wheelCircumference;
+    
+    // Smooth RPM changes and keep within realistic range
+    const targetRPM = Math.max(idleRPM, Math.min(calculatedRPM, redlineRPM));
+    
+    // Smooth RPM transitions during gear changes
+    const rpmDiff = targetRPM - this.rpm;
+    this.rpm += rpmDiff * 0.3; // Smooth transition
+    
+    // Add throttle response to RPM
+    if (this.controls.throttle > 0) {
+      this.rpm = Math.min(this.rpm + this.controls.throttle * 500, redlineRPM);
+    }
   }
   
   updateTurning(deltaTime) {
@@ -212,7 +278,7 @@ export class SimpleBikePhysics {
     }
     
     // Calculate turn rate based on display speed (realistic scaling)
-    const displaySpeedMPH = this.speed * 2.237 / 1.5; // Use display speed
+    const displaySpeedMPH = this.speed * 2.237; // Display speed in MPH
     let speedFactor = 1.0;
     if (displaySpeedMPH < 20) {
       speedFactor = 0.8; // Reduced turning at low speeds too
@@ -321,8 +387,9 @@ export class SimpleBikePhysics {
   updateVisuals(deltaTime) {
     // Add subtle pitch based on acceleration/braking
     if (this.controls.throttle > 0) {
-      // Wheelie effect (subtle)
-      const targetPitch = this.controls.throttle * 0.05 * (this.speed / this.maxSpeed);
+      // Wheelie effect (subtle) - based on acceleration intensity
+      const speedFactor = Math.min(1.0, this.speed / 100); // Normalize around 100 m/s
+      const targetPitch = this.controls.throttle * 0.05 * speedFactor;
       this.rotation.pitch += (targetPitch - this.rotation.pitch) * 5 * deltaTime;
     } else if (this.controls.brake > 0) {
       // Nose dive effect
@@ -334,11 +401,103 @@ export class SimpleBikePhysics {
     }
     
     // Add wobble effect from collision
-    if (this.collision.isWobbling) {
+    if (this.collision.isWobbling && this.collision.wobbleAmplitude > 0.01) {
       const wobbleFreq = 15; // Hz
       const wobble = Math.sin(Date.now() * 0.001 * wobbleFreq) * this.collision.wobbleAmplitude;
       this.rotation.roll = this.leanAngle + wobble;
+    } else {
+      // Ensure clean lean angle when not wobbling
+      this.rotation.roll = this.leanAngle;
     }
+  }
+  
+  checkBarrierCollisions() {
+    // Use shared road constants
+    const halfRoadWidth = ROAD_CONSTANTS.ROAD_HALF_WIDTH; 
+    const railingPosition = Math.abs(ROAD_CONSTANTS.LEFT_BARRIER_X); // Barrier position (both sides are symmetric)
+    
+    let collisionInfo = null;
+    
+    // Check if crossing white line (edge of road) - NO SHAKE, just slight speed loss
+    if (Math.abs(this.position.x) > halfRoadWidth) {
+      // Slight speed loss on shoulder (riding on rough surface)
+      this.speed *= 0.995; // Very minimal speed loss
+    }
+    
+    // Check if hitting the actual railings (much further out)
+    if (Math.abs(this.position.x) > railingPosition) {
+      // Calculate impact speed for collision effects
+      const impactSpeed = Math.abs(this.velocity.x) + Math.abs(this.velocity.z * 0.1); // Total impact velocity
+      const speedMph = (this.speed * 2.237); // Convert m/s to mph
+      
+      // Determine collision severity based on speed - but always fatal
+      let collisionSeverity = 'explode'; // Default to explosion
+      if (speedMph > 150) {
+        collisionSeverity = 'smear'; // Very high speed - blood smear on barrier
+      } else if (speedMph > 50) {
+        collisionSeverity = 'explode'; // Medium speed - explosion
+      } else {
+        collisionSeverity = 'explode'; // Even low speed is fatal against a wall
+      }
+      
+      // Create collision info for the game to handle effects
+      collisionInfo = {
+        type: 'barrier',
+        impactSpeed: impactSpeed,
+        speedMph: speedMph,
+        position: { x: this.position.x, y: this.position.y, z: this.position.z },
+        severity: collisionSeverity,
+        isHighSpeed: speedMph > 100 // Legacy flag for compatibility
+      };
+      
+      // Handle physics response - always splat along wall
+      if (this.position.x > railingPosition) {
+        // Right barrier collision - always slide and die
+        this.position.x = railingPosition;
+        this.velocity.x = 0; // Stop lateral movement - stuck to wall
+        this.rotation.yaw = 0; // Align with wall
+        
+        // Sliding speed based on impact speed
+        if (speedMph < 50) {
+          this.speed *= 0.3; // Slow speed - quick stop
+        } else {
+          this.speed *= 0.5; // Higher speed - slide further
+        }
+        
+        // Add sliding effect
+        this.collision.isSlidingOnWall = true;
+        this.collision.wallSide = 'right';
+        this.collision.slideTime = collisionSeverity === 'smear' ? 2.0 : 0.5;
+        
+      } else if (this.position.x < -railingPosition) {
+        // Left barrier collision - always slide and die
+        this.position.x = -railingPosition;
+        this.velocity.x = 0; // Stop lateral movement - stuck to wall
+        this.rotation.yaw = 0; // Align with wall
+        
+        // Sliding speed based on impact speed
+        if (speedMph < 50) {
+          this.speed *= 0.3; // Slow speed - quick stop
+        } else {
+          this.speed *= 0.5; // Higher speed - slide further
+        }
+        
+        // Add sliding effect
+        this.collision.isSlidingOnWall = true;
+        this.collision.wallSide = 'left';
+        this.collision.slideTime = collisionSeverity === 'smear' ? 2.0 : 0.5;
+      }
+      
+      // Always crash on wall collision - it's a solid barrier!
+      this.collision.isWobbling = true;
+      this.collision.wobbleTime = 0.5;
+      this.collision.wobbleAmplitude = 0.2;
+      this.collision.isCrashed = true;
+      collisionInfo.isCrashed = true; // Always fatal
+      
+    }
+    
+    return collisionInfo; // Return collision info for game to handle effects
   }
   
   getState() {
@@ -348,7 +507,7 @@ export class SimpleBikePhysics {
       position: this.position, // Direct reference, no clone
       velocity: this.velocity, // Direct reference, no clone
       rotation: this.rotation, // Direct reference, no clone
-      speed: this.speed * 2.237 / 1.5, // Display speed scaled down 1.5x for better feel
+      speed: this.speed * 2.237, // Display speed in MPH (m/s to mph)
       actualSpeed: this.speed, // Keep actual speed for physics
       rpm: Math.round(this.rpm),
       gear: this.gear,
@@ -369,15 +528,19 @@ export class SimpleBikePhysics {
     // Use small radius for lane splitting but not too small to miss collisions
     const collision = trafficSystem.checkCollision(this.position, 0.35); // Balanced for lane splitting
     if (collision) {
-      // ANY collision = instant death, no complex calculations needed
+      // Car collision - always lethal!
       this.collision.isCrashed = true;
       this.collision.recoveryTime = 2.0;
       
-      // Add some physics effects for visual feedback
-      const dx = collision.position.x - this.position.x;
-      const deflectionDir = Math.sign(dx) * -1;
-      this.collision.lateralVelocity = deflectionDir * 10;
-      this.speed *= 0.5; // Slow down but don't stop (death animation will handle it)
+      // Add wobble effect before death
+      this.collision.isWobbling = true;
+      this.collision.wobbleTime = 0.3;
+      this.collision.wobbleAmplitude = 0.3;
+      
+      // Physics response - collision is the vehicle object
+      const dx = this.position.x - collision.position.x;
+      this.velocity.x += dx * 10; // Strong lateral push away from vehicle
+      this.speed *= 0.3; // Major speed loss
     }
   }
   
@@ -440,8 +603,8 @@ export class SimpleBikePhysics {
     this.collision.invulnerableTime = 1.0; // 1 second of invulnerability
     
     // Check for crash - reasonable speed threshold
-    const displaySpeedMPH = this.speed * 2.237 / 1.5;
-    if (response.crash && displaySpeedMPH > 30) { // Crash at 30mph+ for better gameplay
+    const displaySpeedMPH = this.speed * 2.237;
+    if (response.crash && displaySpeedMPH > 20) { // Crash at 20mph+ for better gameplay
       this.collision.isCrashed = true;
       this.collision.recoveryTime = 2.0;
       // Don't set speed to 0 here - let the death animation handle it
@@ -463,6 +626,33 @@ export class SimpleBikePhysics {
       }
     }
     
+    // Update wall sliding
+    if (this.collision.isSlidingOnWall) {
+      this.collision.slideTime -= deltaTime;
+      
+      // Keep stuck to wall while sliding
+      const railingPosition = Math.abs(ROAD_CONSTANTS.LEFT_BARRIER_X);
+      if (this.collision.wallSide === 'right') {
+        this.position.x = railingPosition; // Stay glued to right wall
+        this.velocity.x = 0; // No lateral movement
+      } else if (this.collision.wallSide === 'left') {
+        this.position.x = -railingPosition; // Stay glued to left wall
+        this.velocity.x = 0; // No lateral movement
+      }
+      
+      // Gradually slow down while sliding
+      this.speed *= 0.98;
+      
+      // End sliding
+      if (this.collision.slideTime <= 0 || this.speed < 5) {
+        this.collision.isSlidingOnWall = false;
+        // Likely crashed after sliding
+        if (this.speed < 5) {
+          this.collision.isCrashed = true;
+        }
+      }
+    }
+    
     // Apply and decay lateral velocity
     if (Math.abs(this.collision.lateralVelocity) > 0.01) {
       this.position.x += this.collision.lateralVelocity * deltaTime;
@@ -479,7 +669,7 @@ export class SimpleBikePhysics {
   }
   
   reset() {
-    this.position = { x: 0, y: 0, z: 0 };
+    this.position = { x: 0, y: 0.3, z: 0 }; // Start at proper height
     this.velocity = { x: 0, y: 0, z: 0 };
     this.rotation = { pitch: 0, yaw: 0, roll: 0 };
     this.speed = 0;
@@ -498,6 +688,9 @@ export class SimpleBikePhysics {
       isCrashed: false,
       recoveryTime: 0,
       invulnerableTime: 0,
+      isSlidingOnWall: false,
+      wallSide: null,
+      slideTime: 0
     };
   }
 }

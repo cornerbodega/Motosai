@@ -131,16 +131,29 @@ export class BackgroundSystem {
   }
   
   async updateLocation(absolutePosition, location) {
-    // Calculate segment (every 0.5 mile for more frequent changes)
+    // Calculate segment (every 10 miles to prevent API spam)
+    // At 500mph, this is still only every 72 seconds
     // Use Math.max to ensure we never get negative segment IDs
-    const segmentId = Math.max(0, Math.floor(absolutePosition / 804.67)); // 0.5 mile in meters
+    const segmentId = Math.max(0, Math.floor(absolutePosition / 16093.4)); // 10 miles in meters
     
     // Debug logging
     const milesTravel = (absolutePosition / 1609.34).toFixed(2);
     
     if (segmentId !== this.currentSegment) {
-      console.log(`[BG] Segment change! Miles: ${milesTravel}, New segment: ${segmentId}, Location:`, location);
+      console.log(`[BG] Segment change at ${milesTravel} miles (segment ${segmentId}), Location:`, location);
+      
+      // Rate limit: Don't change backgrounds more than once every 30 seconds
+      const now = Date.now();
+      if (!this.lastBackgroundChange) this.lastBackgroundChange = 0;
+      const timeSinceLastChange = (now - this.lastBackgroundChange) / 1000;
+      
+      if (timeSinceLastChange < 30) {
+        console.log(`[BG] Skipping - only ${timeSinceLastChange.toFixed(1)}s since last change (min 30s)`);
+        return;
+      }
+      
       this.currentSegment = segmentId;
+      this.lastBackgroundChange = now;
       
       // SIMPLIFIED: Just load a new background, no complex caching
       await this.loadNewBackground(segmentId, location);
@@ -149,9 +162,28 @@ export class BackgroundSystem {
     // Position update is now handled in update() method to keep sphere centered on player
   }
   
+  cleanupOldTextures() {
+    // Dispose of old textures to prevent memory leaks
+    this.activeTextures.forEach(texture => {
+      if (texture && typeof texture.dispose === 'function') {
+        texture.dispose();
+      }
+    });
+    this.activeTextures.clear();
+    
+    // Limit background cache size
+    if (this.backgroundCache.size > this.maxCacheSize) {
+      const oldestKey = this.backgroundCache.keys().next().value;
+      this.backgroundCache.delete(oldestKey);
+    }
+  }
+  
   async loadNewBackground(segmentId, location) {
     try {
       console.log(`[BG] Loading segment ${segmentId}: ${location.name} (${location.lat.toFixed(2)}, ${location.lng.toFixed(2)})`);
+      
+      // Clean up old textures before loading new ones
+      this.cleanupOldTextures();
       
       // Fetch from API
       const photos = await this.photoService.fetchPhotosForLocation(

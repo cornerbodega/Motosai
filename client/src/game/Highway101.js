@@ -744,6 +744,28 @@ export class Highway101 {
     }
   }
   
+  reset() {
+    // Clear all existing segments
+    while (this.segments.length > 0) {
+      const segment = this.segments.pop();
+      this.disposeSegment(segment);
+    }
+    
+    // Reset to initial state
+    this.segments = [];
+    this.currentZ = 0;
+    this.numSegments = this.BASE_SEGMENTS;
+    this.segmentCleanupCounter = 0;
+    this.lastPlayerSpeed = 0;
+    
+    // Create initial segments around starting position
+    const startZ = -this.segmentLength * 2; // Start a bit behind
+    for (let i = 0; i < 5; i++) { // Create first 5 segments
+      const z = startZ + i * this.segmentLength;
+      this.createSegment(z);
+    }
+  }
+  
   emergencyCleanup(playerZ) {
     if (!this.segments || this.segments.length === 0) return;
     

@@ -12,13 +12,32 @@ import { MultiplayerManager } from '../multiplayer/MultiplayerManager.js';
 import { MotorcycleFactory } from './MotorcycleFactory.js';
 import { PerformanceManager } from '../utils/PerformanceManager.js';
 import { AudioManager } from './AudioManager.js';
+import { getStoppa } from '../utils/Stoppa.js';
+import { Minimap } from './Minimap.js';
 
 export class MotosaiGame {
   constructor(container, config = {}) {
     this.container = container;
     this.width = container.clientWidth;
     this.height = container.clientHeight;
-    
+
+    // Initialize Stoppa memory manager
+    this.stoppa = getStoppa({
+      enabled: true,
+      verbose: config.debug || false,
+      autoCleanup: true,
+      memoryThreshold: 400 * 1024 * 1024 // 400MB threshold
+    });
+
+    // Make Stoppa accessible from console for debugging
+    window.stoppa = this.stoppa;
+    console.log('🛡️ Stoppa Memory Manager initialized!');
+    console.log('Usage from console:');
+    console.log('  stoppa.getStats() - View memory statistics');
+    console.log('  stoppa.detectLeaks() - Check for memory leaks');
+    console.log('  stoppa.cleanup() - Force cleanup');
+    console.log('  stoppa.takeSnapshot() - Take memory snapshot');
+
     // Configuration options
     this.config = {
       riderColor: config.riderColor || 0x2a2a2a, // Default dark grey
@@ -104,6 +123,7 @@ export class MotosaiGame {
     this.initDeathAnimation();
     this.initAudio();
     this.initBloodTrackSystem();
+    this.initMinimap();
     
     // Initialize multiplayer first, then traffic (for synchronization)
     if (this.isMultiplayerEnabled) {
@@ -390,9 +410,9 @@ export class MotosaiGame {
         this.toggleCameraMode();
         return; // Don't process space as a regular key
       }
-      
+
       this.keys[e.code] = true;
-      
+
       // Gear shifting
       if (e.code === 'KeyQ') {
         this.physics.setControls({ gearDown: true });
@@ -475,17 +495,35 @@ export class MotosaiGame {
   initBloodTrackSystem() {
     this.bloodTrackSystem = new BloodTrackSystem(this.scene);
   }
+
+  initMinimap() {
+    this.minimap = new Minimap(this.container, {
+      width: 250,
+      height: 50,
+      position: { bottom: '80px', right: '20px' },
+      showVehicles: true,
+      viewDistance: 300
+    });
+
+    // Set local player ID (use a default for now, will be updated in multiplayer)
+    this.minimap.setLocalPlayer('local');
+  }
   
   async initMultiplayer() {
     if (!this.isMultiplayerEnabled) return;
-    
+
     this.multiplayer = new MultiplayerManager(this);
-    
+
     try {
       // Connect with a default username for now
       const playerInfo = await this.multiplayer.connect();
       console.log(`Connected to multiplayer as ${playerInfo.username}`);
-      
+
+      // Update minimap with correct player ID
+      if (this.minimap && this.multiplayer.playerId) {
+        this.minimap.setLocalPlayer(this.multiplayer.playerId);
+      }
+
       // Add multiplayer status to HUD
       this.updateMultiplayerHUD();
     } catch (error) {
@@ -627,15 +665,20 @@ export class MotosaiGame {
     this.hud.style.fontSize = '14px';
     this.hud.style.textShadow = '2px 2px 4px rgba(0,0,0,0.5)';
     this.container.appendChild(this.hud);
-    
+
     // Pre-create HUD elements to avoid innerHTML allocations
     this.hudElements = {};
-    const hudLines = ['camera', 'physics', 'gear', 'rpm', 'lean', 'turnRate', 'wobble', 'death', 'distance', 'score'];
+    const hudLines = ['fps', 'camera', 'physics', 'gear', 'rpm', 'lean', 'turnRate', 'wobble', 'death', 'distance', 'score', 'memoryUsage', 'activeResources', 'memoryLeaks'];
     hudLines.forEach(line => {
       const elem = document.createElement('div');
       this.hud.appendChild(elem);
       this.hudElements[line] = elem;
     });
+
+    // FPS tracking variables
+    this.fpsFrameCount = 0;
+    this.fpsLastTime = performance.now();
+    this.currentFPS = 0;
     
     // Speedometer
     this.speedometer = document.createElement('div');
@@ -840,29 +883,42 @@ export class MotosaiGame {
   
   updateHUD() {
     const state = this.physics.getState();
-    
+
     // Update speedometer
     this.speedometer.textContent = `${Math.round(state.speed)} MPH`;
-    
+
+    // Calculate FPS
+    this.fpsFrameCount++;
+    const currentTime = performance.now();
+    const deltaFPSTime = currentTime - this.fpsLastTime;
+
+    // Update FPS every 500ms for stable reading
+    if (deltaFPSTime >= 500) {
+      this.currentFPS = Math.round((this.fpsFrameCount * 1000) / deltaFPSTime);
+      this.fpsFrameCount = 0;
+      this.fpsLastTime = currentTime;
+    }
+
+    // Update FPS display with color coding
+    this.hudElements.fps.textContent = `FPS: ${this.currentFPS}`;
+    this.hudElements.fps.style.color = this.currentFPS >= 55 ? '#00ff00' : this.currentFPS >= 30 ? '#ffff00' : '#ff6600';
+    this.hudElements.fps.style.fontWeight = 'bold';
+
     // Determine physics mode label
     let physicsMode = 'Simple (Working)';
     if (!this.useSimplePhysics) {
       physicsMode = this.useV2Physics ? 'V2 (Complex)' : 'V1 (Complex)';
     }
-    
+
     // Update HUD elements directly without innerHTML
     this.hudElements.camera.textContent = `Camera: ${this.isFirstPerson ? 'First Person' : 'Third Person'} (Space)`;
     this.hudElements.physics.textContent = `Physics: ${physicsMode}`;
     
     // Add performance level color coding - with safety checks
-    if (this.performanceManager && this.hudElements.performance && this.hudElements.fps) {
+    if (this.performanceManager && this.hudElements.performance) {
       const perfLevel = this.performanceManager.performanceLevel;
       this.hudElements.performance.textContent = `Performance: ${perfLevel.toUpperCase()}`;
       this.hudElements.performance.style.color = perfLevel === 'high' ? '#00ff00' : perfLevel === 'medium' ? '#ffff00' : '#ff6600';
-      
-      const fps = Math.round(this.performanceManager.getAverageFPS());
-      this.hudElements.fps.textContent = `FPS: ${fps}`;
-      this.hudElements.fps.style.color = fps >= 55 ? '#00ff00' : fps >= 30 ? '#ffff00' : '#ff6600';
     }
     
     this.hudElements.gear.textContent = `Gear: ${state.gear || 'N/A'}`;
@@ -898,11 +954,39 @@ export class MotosaiGame {
     
     this.hudElements.distance.textContent = `Distance: ${(this.distance / 5280).toFixed(1)} mi`;
     this.hudElements.score.textContent = `Score: ${this.score}`;
+
+    // Memory stats from Stoppa
+    if (this.stoppa) {
+      const stats = this.stoppa.getStats();
+      const leaks = stats.leaks || [];
+
+      // Memory usage
+      if (stats.memoryUsage) {
+        const percentage = (stats.memoryUsage.used / stats.memoryUsage.limit * 100).toFixed(1);
+        this.hudElements.memoryUsage.textContent = `Memory: ${stats.memoryUsage.used}MB/${stats.memoryUsage.limit}MB (${percentage}%)`;
+        this.hudElements.memoryUsage.style.color = percentage > 80 ? '#ff6600' : percentage > 60 ? '#ffff00' : '#00ff00';
+      } else {
+        this.hudElements.memoryUsage.textContent = 'Memory: N/A';
+      }
+
+      // Active resources
+      this.hudElements.activeResources.textContent = `Resources: ${stats.activeResources}/${stats.totalResources}`;
+
+      // Memory leaks
+      if (leaks.length > 0) {
+        this.hudElements.memoryLeaks.textContent = `⚠️ Leaks: ${leaks.length}`;
+        this.hudElements.memoryLeaks.style.color = '#ff6600';
+        this.hudElements.memoryLeaks.style.fontWeight = 'bold';
+      } else {
+        this.hudElements.memoryLeaks.textContent = '✅ No leaks';
+        this.hudElements.memoryLeaks.style.color = '#00ff00';
+      }
+    }
   }
   
   toggleCameraMode() {
     this.isFirstPerson = !this.isFirstPerson;
-    
+
     // Switch camera offsets
     if (this.isFirstPerson) {
       this.cameraOffset = this.firstPersonOffset.clone();
@@ -913,6 +997,53 @@ export class MotosaiGame {
       this.cameraLookOffset = this.thirdPersonLookOffset.clone();
       console.log('Switched to Third Person view');
     }
+  }
+
+  showStoppaStats() {
+    if (!this.stoppa) return;
+
+    const stats = this.stoppa.getStats();
+    const leaks = stats.leaks;
+
+    // Log to console
+    console.log('═══════════════════════════════════════');
+    console.log('🛡️ STOPPA MEMORY STATISTICS');
+    console.log('═══════════════════════════════════════');
+    console.log(`Total Resources: ${stats.totalResources}`);
+    console.log(`Active Resources: ${stats.activeResources}`);
+    console.log(`Disposed Resources: ${stats.disposedResources}`);
+
+    if (stats.memoryUsage) {
+      console.log(`Memory Used: ${stats.memoryUsage.used}MB / ${stats.memoryUsage.limit}MB`);
+      const percentage = (stats.memoryUsage.used / stats.memoryUsage.limit * 100).toFixed(1);
+      console.log(`Memory Usage: ${percentage}%`);
+    }
+
+    console.log('\n📊 Resources by Type:');
+    Object.entries(stats.resourcesByType).forEach(([type, counts]) => {
+      console.log(`  ${type}: ${counts.active} active, ${counts.disposed} disposed`);
+    });
+
+    if (leaks.length > 0) {
+      console.log('\n⚠️ POTENTIAL MEMORY LEAKS:');
+      leaks.forEach(leak => {
+        console.log(`  - ${leak.type} (ID: ${leak.id}) - Age: ${leak.age}s`);
+      });
+    } else {
+      console.log('\n✅ No memory leaks detected');
+    }
+
+    console.log('═══════════════════════════════════════');
+
+    // Show in-game message
+    const memUsage = stats.memoryUsage ?
+      `${stats.memoryUsage.used}MB/${stats.memoryUsage.limit}MB` :
+      'N/A';
+
+    this.showGameMessage(
+      `Memory: ${memUsage} | Active: ${stats.activeResources} | Leaks: ${leaks.length}`,
+      leaks.length > 0 ? 'crash' : 'info'
+    );
   }
   
   triggerDeath(state) {
@@ -972,6 +1103,23 @@ export class MotosaiGame {
     // MEMORY LEAK FIX: Clean up traffic system debris
     if (this.trafficSystem) {
       this.trafficSystem.cleanupDebris();
+    }
+    
+    // Reset physics completely - back to start
+    this.physics.reset();
+    
+    // Reset distance and score
+    this.distance = 0;
+    this.score = 0;
+    
+    // Reset highway to starting position
+    if (this.highway) {
+      this.highway.reset();
+    }
+    
+    // Reset traffic
+    if (this.traffic) {
+      this.traffic.reset();
     }
     
     // Make everything visible again
@@ -1116,6 +1264,11 @@ export class MotosaiGame {
   }
   
   togglePhysicsVersion() {
+    // For now, only use Simple physics since V1/V2 have issues
+    console.log('Only Simple Physics is currently working. V1/V2 physics disabled.');
+    return;
+    
+    /* Disabled until V1/V2 are fixed
     // Save current state
     const currentState = this.physics.getState();
     
@@ -1150,6 +1303,7 @@ export class MotosaiGame {
     // Restore position and velocity
     this.physics.position = currentState.position;
     this.physics.velocity = currentState.velocity;
+    */
   }
   
   animate() {
@@ -1230,10 +1384,10 @@ export class MotosaiGame {
       if (this.multiplayer && this.multiplayer.isConnected) {
         // Send our state to other players
         this.multiplayer.sendPlayerUpdate(state);
-        
+
         // Update other players
         this.multiplayer.update();
-        
+
         // Update multiplayer HUD even less frequently to prevent DOM thrashing
         if (!this.multiplayerHUDUpdateTimer) this.multiplayerHUDUpdateTimer = 0;
         this.multiplayerHUDUpdateTimer += deltaTime;
@@ -1241,10 +1395,46 @@ export class MotosaiGame {
           this.updateMultiplayerHUD();
           this.multiplayerHUDUpdateTimer = 0;
         }
+
+        // Update minimap with multiplayer positions
+        if (this.minimap) {
+          // Update local player
+          const localId = this.multiplayer.playerId || 'local';
+          this.minimap.updatePlayer(localId, state.position, {
+            speed: state.speed,
+            name: 'You',
+            isDead: this.isDead
+          });
+
+          // Update other players
+          const players = this.multiplayer.getPlayerList();
+          players.forEach(player => {
+            if (player.id !== localId && player.state) {
+              this.minimap.updatePlayer(player.id, player.state.position, {
+                speed: player.state.speed,
+                name: player.username,
+                isDead: player.state.isDead || false
+              });
+            }
+          });
+        }
+      } else if (this.minimap) {
+        // Single player - just update local player
+        this.minimap.updatePlayer('local', state.position, {
+          speed: state.speed,
+          name: 'Player',
+          isDead: this.isDead
+        });
       }
       
       // ALWAYS update traffic regardless of death state
       this.traffic.update(deltaTime, state.position, state.velocity);
+
+      // Update minimap with traffic vehicles
+      if (this.minimap && this.traffic) {
+        this.minimap.updateVehicles(this.traffic.vehicles);
+        this.minimap.update(); // Draw the minimap
+      }
       
       // Update blood track system
       if (this.bloodTrackSystem) {
@@ -1474,18 +1664,25 @@ export class MotosaiGame {
   dispose() {
     // Mark as disposed to prevent further animation frames
     this.isDisposed = true;
-    
-    // Stop animation loop
+
+    // Stop animation loop FIRST
     if (this.animationId) {
       cancelAnimationFrame(this.animationId);
       this.animationId = null;
     }
-    
-    // Clear all active timers to prevent memory leaks
+
+    // Clear ALL timers to prevent memory leaks
     this.activeTimers.forEach(timer => clearTimeout(timer));
     this.activeTimers.clear();
     this.activeChatTimers.forEach(timer => clearTimeout(timer));
     this.activeChatTimers.clear();
+
+    // Clear other timer references
+    this.multiplayerHUDUpdateTimer = null;
+    this.bgUpdateCounter = 0;
+    this.memoryCounter = 0;
+    this.shadowUpdateTimer = 0;
+    this.lastWallBloodTime = 0;
     
     // Dispose of physics and input controller
     if (this.physics && typeof this.physics.dispose === 'function') {
@@ -1500,6 +1697,17 @@ export class MotosaiGame {
       this.multiplayer.disconnect();
     }
     
+    // Dispose of audio manager PROPERLY
+    if (this.audioManager) {
+      if (typeof this.audioManager.dispose === 'function') {
+        this.audioManager.dispose();
+      } else {
+        // Manual cleanup if no dispose method
+        this.audioManager.stopAll && this.audioManager.stopAll();
+      }
+      this.audioManager = null;
+    }
+
     // Dispose of game systems
     if (this.traffic && typeof this.traffic.dispose === 'function') {
       this.traffic.dispose();
@@ -1516,6 +1724,15 @@ export class MotosaiGame {
     if (this.bloodTrackSystem) {
       this.bloodTrackSystem.dispose();
     }
+    if (this.minimap) {
+      this.minimap.dispose();
+      this.minimap = null;
+    }
+
+    // Dispose performance manager
+    if (this.performanceManager && typeof this.performanceManager.dispose === 'function') {
+      this.performanceManager.dispose();
+    }
     
     // Dispose of renderer
     if (this.renderer) {
@@ -1525,7 +1742,7 @@ export class MotosaiGame {
       this.renderer = null;
     }
     
-    // Clean up scene
+    // Clean up scene MORE THOROUGHLY
     if (this.scene) {
       this.scene.traverse((object) => {
         if (object.geometry) {
@@ -1533,27 +1750,68 @@ export class MotosaiGame {
         }
         if (object.material) {
           if (Array.isArray(object.material)) {
-            object.material.forEach(mat => mat.dispose());
+            object.material.forEach(mat => {
+              // Dispose textures
+              if (mat.map) mat.map.dispose();
+              if (mat.normalMap) mat.normalMap.dispose();
+              if (mat.roughnessMap) mat.roughnessMap.dispose();
+              if (mat.metalnessMap) mat.metalnessMap.dispose();
+              if (mat.aoMap) mat.aoMap.dispose();
+              if (mat.emissiveMap) mat.emissiveMap.dispose();
+              if (mat.envMap) mat.envMap.dispose();
+              mat.dispose();
+            });
           } else {
+            if (object.material.map) object.material.map.dispose();
+            if (object.material.normalMap) object.material.normalMap.dispose();
+            if (object.material.roughnessMap) object.material.roughnessMap.dispose();
+            if (object.material.metalnessMap) object.material.metalnessMap.dispose();
+            if (object.material.aoMap) object.material.aoMap.dispose();
+            if (object.material.emissiveMap) object.material.emissiveMap.dispose();
+            if (object.material.envMap) object.material.envMap.dispose();
             object.material.dispose();
           }
         }
       });
+
+      // Clear scene fog
+      this.scene.fog = null;
+
+      // Remove all children
+      while (this.scene.children.length > 0) {
+        this.scene.remove(this.scene.children[0]);
+      }
     }
+
+    // Null out pre-allocated objects
+    this._cameraUpdateObjects = null;
+    this._tempVelocity = null;
+    this._tempDeathPosition = null;
     
-    // Remove HUD elements
+    // Remove HUD elements and null references
     if (this.hud) {
       this.hud.remove();
+      this.hud = null;
     }
     if (this.speedometer) {
       this.speedometer.remove();
+      this.speedometer = null;
     }
     if (this.multiplayerHUD) {
       this.multiplayerHUD.remove();
+      this.multiplayerHUD = null;
     }
     if (this.gameMessageContainer) {
+      // Remove all children first
+      while (this.gameMessageContainer.firstChild) {
+        this.gameMessageContainer.removeChild(this.gameMessageContainer.firstChild);
+      }
       this.gameMessageContainer.remove();
+      this.gameMessageContainer = null;
     }
+
+    // Null out HUD element references
+    this.hudElements = null;
     
     // Remove event listeners
     window.removeEventListener('resize', this.boundHandleResize);
@@ -1567,17 +1825,33 @@ export class MotosaiGame {
       this.renderer.domElement.removeEventListener('webglcontextrestored', this.boundHandleContextRestored);
     }
     
-    // Remove touch event listeners if they exist
-    if (this.renderer && this.renderer.domElement) {
-      if (this.boundHandleTouchStart) {
-        this.renderer.domElement.removeEventListener('touchstart', this.boundHandleTouchStart);
-      }
-      if (this.boundHandleTouchMove) {
-        this.renderer.domElement.removeEventListener('touchmove', this.boundHandleTouchMove);
-      }
-      if (this.boundHandleTouchEnd) {
-        this.renderer.domElement.removeEventListener('touchend', this.boundHandleTouchEnd);
-      }
+    // Remove touch event listeners - check for domElement first
+    if (this.boundHandleTouchStart && this.renderer && this.renderer.domElement) {
+      this.renderer.domElement.removeEventListener('touchstart', this.boundHandleTouchStart);
+    }
+    if (this.boundHandleTouchMove && this.renderer && this.renderer.domElement) {
+      this.renderer.domElement.removeEventListener('touchmove', this.boundHandleTouchMove);
+    }
+    if (this.boundHandleTouchEnd && this.renderer && this.renderer.domElement) {
+      this.renderer.domElement.removeEventListener('touchend', this.boundHandleTouchEnd);
+    }
+
+    // Null out all bound handlers
+    this.boundHandleResize = null;
+    this.boundHandleKeyDown = null;
+    this.boundHandleKeyUp = null;
+    this.boundHandlePerformanceChange = null;
+    this.boundHandleContextLost = null;
+    this.boundHandleContextRestored = null;
+    this.boundHandleTouchStart = null;
+    this.boundHandleTouchMove = null;
+    this.boundHandleTouchEnd = null;
+
+    // Use Stoppa to clean up any remaining resources
+    if (this.stoppa) {
+      const stats = this.stoppa.getStats();
+      console.log('[Stoppa] Final cleanup stats:', stats);
+      this.stoppa.cleanup();
     }
   }
 }

@@ -102,18 +102,10 @@ export class TrafficSystem {
   disposeVehicleMesh(mesh) {
     if (!mesh) return;
     
-    mesh.traverse((object) => {
-      if (object.geometry) {
-        object.geometry.dispose();
-      }
-      if (object.material) {
-        if (Array.isArray(object.material)) {
-          object.material.forEach(mat => mat.dispose());
-        } else {
-          object.material.dispose();
-        }
-      }
-    });
+    // Just remove children - don't dispose shared geometry or materials
+    while (mesh.children.length > 0) {
+      mesh.remove(mesh.children[0]);
+    }
   }
   
   setSpawnDistance(distance) {
@@ -208,8 +200,8 @@ export class TrafficSystem {
         behavior: vehicleData.behavior || TrafficIDM.generateBehavior(vehicleData.lane)
       };
     } else {
-      // Generate new vehicle (master client only)
-      if (!this.isMaster && this.multiplayerManager) return;
+      // Generate new vehicle (master client only, or no multiplayer)
+      if (this.multiplayerManager && !this.isMaster) return;
       
       const type = this.selectVehicleType();
       const lane = Math.floor(Math.random() * 3);
@@ -277,7 +269,7 @@ export class TrafficSystem {
     this.vehicles.push(vehicle);
     this.scene.add(vehicle.mesh);
     
-    // If master client, broadcast new vehicle
+    // Broadcast new vehicle spawn if master
     if (this.isMaster && this.multiplayerManager && !vehicleData) {
       this.broadcastVehicleSpawn(vehicle);
     }
@@ -386,6 +378,19 @@ export class TrafficSystem {
       }
     }
     
+    // Auto-become master if no traffic and multiplayer is enabled
+    if (this.multiplayerManager && !this.isMaster && this.vehicles.length === 0) {
+      // Wait a bit to see if we receive traffic from master
+      this.noTrafficTimer = (this.noTrafficTimer || 0) + deltaTime;
+      if (this.noTrafficTimer > 3) { // After 3 seconds with no traffic
+        console.log('No traffic received, becoming master');
+        this.setMaster(true);
+        this.noTrafficTimer = 0;
+      }
+    } else {
+      this.noTrafficTimer = 0;
+    }
+    
     // Update each vehicle with frustum culling
     this.vehicles.forEach(vehicle => {
       // Check if vehicle is in frustum or close to player
@@ -430,34 +435,39 @@ export class TrafficSystem {
       const distance = Math.abs(vehicle.position.z - playerPosition.z);
       if (distance > removalDistance) {
         this.scene.remove(vehicle.mesh);
-        // Properly dispose of all geometries and materials in the group
-        vehicle.mesh.traverse((object) => {
-          if (object.geometry) {
-            object.geometry.dispose();
-          }
-          // Don't dispose shared materials - they're reused
-        });
+        // PROPERLY dispose using the disposal function
+        this.disposeVehicleMesh(vehicle.mesh);
         return false;
       }
       return true;
     });
     
-    // Spawn new vehicles if needed (only for master client)
-    if (this.vehicles.length < this.maxVehicles && (!this.multiplayerManager || this.isMaster)) {
-      // Increase spawn rate at high speeds
-      const spawnChance = playerSpeed > 50 ? 0.15 : 0.08; // Higher chance at high speed
+    // Calculate distance-based traffic density
+    const distanceTraveled = Math.abs(playerPosition.z);
+    const distanceFactor = Math.min(3.0, 1.0 + distanceTraveled / 1000); // Up to 3x at 2km
+    
+    // Dynamic max vehicles based on distance
+    const currentMaxVehicles = Math.min(60, Math.floor(this.maxVehicles * distanceFactor));
+    
+    // Spawn new vehicles if needed (master only, or no multiplayer)
+    if (this.vehicles.length < currentMaxVehicles && (!this.multiplayerManager || this.isMaster)) {
+      // Increase spawn rate at high speeds and distances
+      const baseSpawnChance = playerSpeed > 50 ? 0.15 : 0.08;
+      const spawnChance = Math.min(0.3, baseSpawnChance * Math.sqrt(distanceFactor));
+      
       if (Math.random() < spawnChance) {
         this.spawnVehicle(playerPosition.z, dynamicSpawnDistance);
       }
     }
     
     // Also ensure minimum traffic near player
+    const minNearbyVehicles = Math.min(20, Math.floor(10 * distanceFactor)); // More cars nearby at distance
     const nearbyVehicles = this.vehicles.filter(v => 
       Math.abs(v.position.z - playerPosition.z) < 150 // Increased range
     ).length;
     
-    if (nearbyVehicles < 10 && this.vehicles.length < this.maxVehicles && (!this.multiplayerManager || this.isMaster)) {
-      // Force spawn if too few vehicles nearby (increased minimum from 5 to 10)
+    if (nearbyVehicles < minNearbyVehicles && this.vehicles.length < currentMaxVehicles && (!this.multiplayerManager || this.isMaster)) {
+      // Force spawn if too few vehicles nearby
       this.spawnVehicle(playerPosition.z, dynamicSpawnDistance);
     }
     
@@ -546,43 +556,85 @@ export class TrafficSystem {
   }
   
   updateAI(vehicle, playerPosition, deltaTime = 0.016) {
-    // Use IDM-based AI
-    TrafficIDM.updateAI(this, vehicle, playerPosition, deltaTime);
-    return;
-    
-    // OLD CODE (kept for reference, will be removed):
     vehicle.behavior.lastLaneChange += deltaTime;
     
-    // Check distance to player (for lane splitting awareness)
-    const playerDistance = Math.abs(vehicle.position.z - playerPosition.z);
-    const playerLateralDistance = Math.abs(vehicle.position.x - playerPosition.x);
+    // Calculate distance-based aggression (more lane changes as you go farther)
+    const distanceTraveled = Math.abs(playerPosition.z);
+    const aggressionFactor = Math.min(3.0, 1.0 + distanceTraveled / 500); // Up to 3x aggression at 1km
     
-    // If player is nearby and lane splitting
-    if (playerDistance < 20 && playerLateralDistance < 3) {
-      // Some vehicles move aside slightly (good drivers)
-      if (vehicle.behavior.aggressiveness < 0.3) {
-        // Move away from player slightly within lane
-        const avoidanceDirection = Math.sign(vehicle.position.x - playerPosition.x);
-        vehicle.position.x += avoidanceDirection * 0.01;
+    // Check if vehicle should pass slower traffic
+    if (vehicle.frontVehicle) {
+      const distance = vehicle.frontVehicle.position.z - vehicle.position.z;
+      const speedDiff = vehicle.baseSpeed - vehicle.frontVehicle.speed;
+      
+      // More aggressive passing at higher distances
+      const passingThreshold = 30 / aggressionFactor; // Closer following at distance
+      const minPassingGap = 10 / Math.sqrt(aggressionFactor);
+      
+      // If stuck behind slower vehicle and safe distance for passing
+      if (speedDiff > 5 && distance < passingThreshold && distance > minPassingGap) {
+        // Try to pass if haven't changed lanes recently
+        const laneChangeDelay = 2.0 / aggressionFactor; // Faster decisions at distance
+        if (vehicle.behavior.lastLaneChange > laneChangeDelay && vehicle.targetLane === vehicle.lane) {
+          // Prefer passing on the left (lane 0 is leftmost)
+          let passingLane = vehicle.lane - 1;
+          const requiredGap = 15 / Math.sqrt(aggressionFactor); // Smaller gaps at distance
+          
+          if (passingLane < 0 || !this.isLaneChangeSafe(vehicle, passingLane, 1, requiredGap)) {
+            // Can't pass on left, try right
+            passingLane = vehicle.lane + 1;
+          }
+          
+          if (passingLane >= 0 && passingLane <= 2) {
+            if (this.attemptLaneChange(vehicle, passingLane, requiredGap)) {
+              vehicle.behavior.lastLaneChange = 0;
+              vehicle.behavior.isPassing = true;
+              vehicle.behavior.originalLane = vehicle.lane;
+            }
+          }
+        }
       }
     }
     
-    // Random lane changes - only if enough time has passed and not currently changing lanes
-    if (vehicle.targetLane === vehicle.lane && // Not already changing lanes
-        vehicle.behavior.lastLaneChange > vehicle.behavior.minLaneChangeInterval && // Enough time passed
-        Math.random() < vehicle.behavior.laneChangeFrequency) {
-      if (this.attemptLaneChange(vehicle)) {
-        vehicle.behavior.lastLaneChange = 0; // Reset timer only if lane change started
+    // Return to original lane after passing (more aggressive at distance)
+    if (vehicle.behavior.isPassing && !vehicle.frontVehicle) {
+      const returnDelay = 3.0 / aggressionFactor;
+      if (vehicle.behavior.lastLaneChange > returnDelay) {
+        const returnGap = 10 / Math.sqrt(aggressionFactor);
+        if (this.isLaneChangeSafe(vehicle, vehicle.behavior.originalLane, 1, returnGap)) {
+          if (this.attemptLaneChange(vehicle, vehicle.behavior.originalLane, returnGap)) {
+            vehicle.behavior.isPassing = false;
+            vehicle.behavior.lastLaneChange = 0;
+          }
+        }
       }
+    }
+    
+    // More frequent lane changes at distance
+    const laneChangeWait = 10.0 / aggressionFactor; // From 10s to 3.3s at distance
+    const laneChangeProbability = 0.01 * aggressionFactor; // From 1% to 3% at distance
+    
+    if (!vehicle.behavior.isPassing && 
+        vehicle.targetLane === vehicle.lane &&
+        vehicle.behavior.lastLaneChange > laneChangeWait &&
+        Math.random() < laneChangeProbability) {
+      this.attemptLaneChange(vehicle);
+      vehicle.behavior.lastLaneChange = 0;
     }
     
     // Speed adjustment based on front vehicle
     if (vehicle.frontVehicle) {
       const distance = vehicle.frontVehicle.position.z - vehicle.position.z;
-      const safeDistance = vehicle.behavior.followDistance * vehicle.speed / 2.237;
+      const minSafeDistance = (vehicle.length + vehicle.frontVehicle.length) * 0.5 + 2; // Absolute minimum
+      const preferredDistance = vehicle.behavior.followDistance * vehicle.speed / 2.237;
+      const safeDistance = Math.max(minSafeDistance, preferredDistance);
       
-      if (distance < safeDistance) {
-        // Slow down
+      if (distance < minSafeDistance) {
+        // Emergency brake - too close!
+        vehicle.speed = Math.min(vehicle.frontVehicle.speed * 0.8, vehicle.speed * 0.5);
+        vehicle.isBraking = true;
+      } else if (distance < safeDistance) {
+        // Slow down smoothly
         vehicle.speed = Math.max(
           vehicle.frontVehicle.speed * 0.9,
           vehicle.speed - 20 * vehicle.behavior.reactionTime
@@ -673,6 +725,9 @@ export class TrafficSystem {
   }
   
   isLaneChangeSafe(vehicle, targetLane, targetSubLane, customGap = null) {
+    // Prevent invalid lanes (stay within 0-2)
+    if (targetLane < 0 || targetLane > 2) return false;
+    
     const safeDistance = customGap || 8; // meters - slightly more aggressive
     
     for (const other of this.vehicles) {
@@ -686,13 +741,23 @@ export class TrafficSystem {
       const otherSubLane = other.targetLane === targetLane ? other.targetSubLane : other.subLane;
       const subLaneDiff = Math.abs(otherSubLane - targetSubLane);
       
-      // Adjust safe distance based on sub-lane difference
-      const adjustedSafeDistance = subLaneDiff === 0 ? safeDistance : safeDistance * 0.7;
-      
-      const distance = Math.abs(other.position.z - vehicle.position.z);
-      if (distance < adjustedSafeDistance) {
-        return false;
+      // If vehicles would be in exact same sub-lane, need more space
+      if (subLaneDiff === 0) {
+        const distance = Math.abs(other.position.z - vehicle.position.z);
+        // Need at least combined vehicle lengths plus buffer
+        const minSafeDistance = Math.max(safeDistance, (vehicle.length + other.length) * 0.5 + 3);
+        if (distance < minSafeDistance) {
+          return false; // Would collide or be too close
+        }
+      } else if (subLaneDiff === 1) {
+        // Adjacent sub-lanes - allow closer spacing but still safe
+        const adjustedSafeDistance = safeDistance * 0.7;
+        const distance = Math.abs(other.position.z - vehicle.position.z);
+        if (distance < adjustedSafeDistance) {
+          return false;
+        }
       }
+      // Sub-lanes 2 apart are generally safe
     }
     
     return true;
@@ -859,7 +924,8 @@ export class TrafficSystem {
     // Check if vehicle already exists
     if (this.vehicles.find(v => v.id === vehicleData.id)) return;
     
-    this.spawnVehicle(0, vehicleData);
+    // Spawn the synced vehicle
+    this.spawnVehicle(vehicleData.position?.z || 0, null, vehicleData);
   }
 
   onTrafficUpdate(trafficData) {
@@ -908,14 +974,7 @@ export class TrafficSystem {
     // Remove all vehicles from scene
     this.vehicles.forEach(vehicle => {
       if (vehicle.mesh) {
-        // Dispose of geometries in the group
-        vehicle.mesh.traverse((object) => {
-          if (object.geometry) {
-            object.geometry.dispose();
-          }
-          // Don't dispose shared materials here - they're disposed below
-        });
-        // Remove from scene
+        // Just remove from scene - don't dispose shared geometry
         this.scene.remove(vehicle.mesh);
       }
     });
