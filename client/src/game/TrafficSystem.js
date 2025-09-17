@@ -206,17 +206,20 @@ export class TrafficSystem {
       const type = this.selectVehicleType();
       const lane = Math.floor(Math.random() * 3);
       
-      // Choose strategic sub-lane based on lane
+      // Cars should strongly prefer center of lane
       let subLane = 1; // Default center
-      if (lane === 0) {
-        // Left lane: prefer left or center sub-lane for passing
-        subLane = Math.random() < 0.7 ? 0 : 1;
-      } else if (lane === 2) {
-        // Right lane: prefer right or center sub-lane for merging
-        subLane = Math.random() < 0.7 ? 2 : 1;
+      // 90% chance to stay in center, only 10% to use other sub-lanes
+      if (Math.random() < 0.9) {
+        subLane = 1; // Center sub-lane
       } else {
-        // Middle lane: use all sub-lanes
-        subLane = Math.floor(Math.random() * 3);
+        // Occasionally use other sub-lanes based on lane position
+        if (lane === 0) {
+          subLane = 0; // Left sub-lane in left lane
+        } else if (lane === 2) {
+          subLane = 2; // Right sub-lane in right lane
+        } else {
+          subLane = Math.random() < 0.5 ? 0 : 2; // Either side in middle lane
+        }
       }
       
       vehicle = {
@@ -567,18 +570,18 @@ export class TrafficSystem {
       const distance = vehicle.frontVehicle.position.z - vehicle.position.z;
       const speedDiff = vehicle.baseSpeed - vehicle.frontVehicle.speed;
       
-      // More aggressive passing at higher distances
-      const passingThreshold = 30 / aggressionFactor; // Closer following at distance
-      const minPassingGap = 10 / Math.sqrt(aggressionFactor);
-      
-      // If stuck behind slower vehicle and safe distance for passing
-      if (speedDiff > 5 && distance < passingThreshold && distance > minPassingGap) {
+      // Less aggressive passing - only pass if significantly slower
+      const passingThreshold = 40; // Need to be closer to consider passing
+      const minPassingGap = 15; // Need more space
+
+      // Only pass if vehicle is significantly slower (10+ mph difference)
+      if (speedDiff > 10 && distance < passingThreshold && distance > minPassingGap) {
         // Try to pass if haven't changed lanes recently
-        const laneChangeDelay = 2.0 / aggressionFactor; // Faster decisions at distance
+        const laneChangeDelay = 5.0; // Wait at least 5 seconds between passes
         if (vehicle.behavior.lastLaneChange > laneChangeDelay && vehicle.targetLane === vehicle.lane) {
           // Prefer passing on the left (lane 0 is leftmost)
           let passingLane = vehicle.lane - 1;
-          const requiredGap = 15 / Math.sqrt(aggressionFactor); // Smaller gaps at distance
+          const requiredGap = 20; // Require good spacing for passing
           
           if (passingLane < 0 || !this.isLaneChangeSafe(vehicle, passingLane, 1, requiredGap)) {
             // Can't pass on left, try right
@@ -596,11 +599,11 @@ export class TrafficSystem {
       }
     }
     
-    // Return to original lane after passing (more aggressive at distance)
+    // Return to original lane after passing
     if (vehicle.behavior.isPassing && !vehicle.frontVehicle) {
-      const returnDelay = 3.0 / aggressionFactor;
+      const returnDelay = 5.0; // Wait 5 seconds after passing
       if (vehicle.behavior.lastLaneChange > returnDelay) {
-        const returnGap = 10 / Math.sqrt(aggressionFactor);
+        const returnGap = 15; // Safe gap for returning
         if (this.isLaneChangeSafe(vehicle, vehicle.behavior.originalLane, 1, returnGap)) {
           if (this.attemptLaneChange(vehicle, vehicle.behavior.originalLane, returnGap)) {
             vehicle.behavior.isPassing = false;
@@ -610,11 +613,11 @@ export class TrafficSystem {
       }
     }
     
-    // More frequent lane changes at distance
-    const laneChangeWait = 10.0 / aggressionFactor; // From 10s to 3.3s at distance
-    const laneChangeProbability = 0.01 * aggressionFactor; // From 1% to 3% at distance
-    
-    if (!vehicle.behavior.isPassing && 
+    // Much less frequent random lane changes
+    const laneChangeWait = 30.0; // Wait at least 30 seconds between random changes
+    const laneChangeProbability = 0.002; // Only 0.2% chance per frame
+
+    if (!vehicle.behavior.isPassing &&
         vehicle.targetLane === vehicle.lane &&
         vehicle.behavior.lastLaneChange > laneChangeWait &&
         Math.random() < laneChangeProbability) {
@@ -660,8 +663,8 @@ export class TrafficSystem {
   }
   
   attemptLaneChange(vehicle, targetLane = null, requiredGap = null) {
-    // First, consider sub-lane changes within current lane (more frequent)
-    if (Math.random() < 0.3) { // 30% chance to change sub-lane instead of full lane
+    // First, consider sub-lane changes within current lane (much less frequent)
+    if (Math.random() < 0.05) { // Only 5% chance to change sub-lane instead of full lane
       return this.attemptSubLaneChange(vehicle);
     }
     
@@ -684,18 +687,8 @@ export class TrafficSystem {
     // Check if lane change is safe
     if (targetLane >= 0 && targetLane <= 2 && targetLane !== vehicle.lane) {
       
-      // Choose sub-lane strategically for new lane
-      let targetSubLane = 1; // Default center
-      if (targetLane === 0) {
-        // Moving to left lane - prefer left sub-lane for passing
-        targetSubLane = Math.random() < 0.6 ? 0 : 1;
-      } else if (targetLane === 2) {
-        // Moving to right lane - prefer right sub-lane
-        targetSubLane = Math.random() < 0.6 ? 2 : 1;
-      } else {
-        // Middle lane - any sub-lane
-        targetSubLane = Math.floor(Math.random() * 3);
-      }
+      // Always prefer center sub-lane when changing lanes
+      let targetSubLane = 1; // Always center for better lane discipline
       
       if (this.isLaneChangeSafe(vehicle, targetLane, targetSubLane, requiredGap)) {
         vehicle.targetLane = targetLane;

@@ -425,19 +425,18 @@ export class SimpleBikePhysics {
     }
     
     // Check if hitting the actual railings (much further out)
-    if (Math.abs(this.position.x) > railingPosition) {
+    // Even touching the barrier slightly is fatal
+    if (Math.abs(this.position.x) >= railingPosition - 0.2) { // Small buffer for instant death
       // Calculate impact speed for collision effects
       const impactSpeed = Math.abs(this.velocity.x) + Math.abs(this.velocity.z * 0.1); // Total impact velocity
       const speedMph = (this.speed * 2.237); // Convert m/s to mph
-      
-      // Determine collision severity based on speed - but always fatal
+
+      // ALWAYS FATAL - concrete barrier at any speed kills you
       let collisionSeverity = 'explode'; // Default to explosion
       if (speedMph > 150) {
         collisionSeverity = 'smear'; // Very high speed - blood smear on barrier
-      } else if (speedMph > 50) {
-        collisionSeverity = 'explode'; // Medium speed - explosion
       } else {
-        collisionSeverity = 'explode'; // Even low speed is fatal against a wall
+        collisionSeverity = 'explode'; // Any other speed - instant death explosion
       }
       
       // Create collision info for the game to handle effects

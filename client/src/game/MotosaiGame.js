@@ -421,6 +421,9 @@ export class MotosaiGame {
       } else if (e.code === 'KeyV') {
         // Toggle physics version
         this.togglePhysicsVersion();
+      } else if (e.code === 'KeyM') {
+        // Toggle mute
+        this.toggleMute();
       }
     };
     
@@ -913,14 +916,14 @@ export class MotosaiGame {
     // Update HUD elements directly without innerHTML
     this.hudElements.camera.textContent = `Camera: ${this.isFirstPerson ? 'First Person' : 'Third Person'} (Space)`;
     this.hudElements.physics.textContent = `Physics: ${physicsMode}`;
-    
+
     // Add performance level color coding - with safety checks
     if (this.performanceManager && this.hudElements.performance) {
       const perfLevel = this.performanceManager.performanceLevel;
       this.hudElements.performance.textContent = `Performance: ${perfLevel.toUpperCase()}`;
       this.hudElements.performance.style.color = perfLevel === 'high' ? '#00ff00' : perfLevel === 'medium' ? '#ffff00' : '#ff6600';
     }
-    
+
     this.hudElements.gear.textContent = `Gear: ${state.gear || 'N/A'}`;
     this.hudElements.rpm.textContent = `RPM: ${state.rpm || 'N/A'}`;
     this.hudElements.lean.textContent = `Lean: ${state.leanAngle !== undefined ? state.leanAngle.toFixed(1) : '0.0'}°`;
@@ -997,6 +1000,18 @@ export class MotosaiGame {
       this.cameraLookOffset = this.thirdPersonLookOffset.clone();
       console.log('Switched to Third Person view');
     }
+  }
+
+  toggleMute() {
+    if (!this.audioManager) return;
+
+    // Toggle the audio state
+    const isEnabled = !this.audioManager.isEnabled;
+    this.audioManager.setEnabled(isEnabled);
+
+    console.log(`Sound ${isEnabled ? 'enabled' : 'muted'}`);
+
+    // HUD will update automatically in updateHUD()
   }
 
   showStoppaStats() {
@@ -1576,8 +1591,10 @@ export class MotosaiGame {
         this.audioManager.updateEngineSound(state.speed);
       }
       
-      // Track distance
-      this.distance += state.speed * deltaTime * 1.467; // mph to ft/s
+      // Track distance correctly
+      // state.speed is in MPH, deltaTime is in seconds
+      // Convert: MPH * seconds * (5280 feet/mile) / (3600 seconds/hour) = feet
+      this.distance += state.speed * deltaTime * (5280 / 3600); // Correct: 1.4667 ft/s per mph
       
       // Update performance manager
       if (this.performanceManager) {
