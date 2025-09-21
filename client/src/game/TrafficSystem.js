@@ -106,8 +106,26 @@ export class TrafficSystem {
   
   disposeVehicleMesh(mesh) {
     if (!mesh) return;
-    
-    // Just remove children - don't dispose shared geometry or materials
+
+    // Properly dispose of any cloned materials in children
+    mesh.traverse(child => {
+      if (child.isMesh && child.material) {
+        // Check if this material is not from the shared pool
+        const isSharedMaterial = Object.values(this.vehicleMaterials).some(matArray => {
+          if (Array.isArray(matArray)) {
+            return matArray.includes(child.material);
+          }
+          return matArray === child.material;
+        });
+
+        // Only dispose if it's not a shared material
+        if (!isSharedMaterial && child.material.dispose) {
+          child.material.dispose();
+        }
+      }
+    });
+
+    // Remove all children
     while (mesh.children.length > 0) {
       mesh.remove(mesh.children[0]);
     }
@@ -444,6 +462,11 @@ export class TrafficSystem {
       const distance = Math.abs(vehicle.position.z - playerPosition.z);
       if (distance > removalDistance) {
         this.scene.remove(vehicle.mesh);
+        // Clear blood trail status before removal
+        if (vehicle.isCreatingBloodTrail && this.bloodTrackSystem) {
+          this.bloodTrackSystem.clearVehicleBloodTrail(vehicle.id);
+          vehicle.isCreatingBloodTrail = false;
+        }
         // PROPERLY dispose using the disposal function
         this.disposeVehicleMesh(vehicle.mesh);
         return false;
@@ -532,17 +555,24 @@ export class TrafficSystem {
     // Update position
     vehicle.position.z += vehicle.velocity.z * deltaTime;
     
-    // Check for blood contact and create tire tracks
+    // Check for blood contact and create continuous tire tracks
     if (this.bloodTrackSystem) {
       const bloodContact = this.bloodTrackSystem.checkVehicleBloodContact(vehicle.position, vehicle.width);
+
       if (bloodContact) {
-        // Create tire tracks when driving through blood
-        this.bloodTrackSystem.createTireTracks(vehicle.position, vehicle.velocity, vehicle.width);
-        
-        // Add some blood staining to the vehicle (optional visual effect)
-        if (!vehicle.hasBloodStains) {
-          vehicle.hasBloodStains = true;
-          vehicle.bloodStainTimer = 0;
+        // Start or continue blood trail
+        if (!vehicle.isCreatingBloodTrail) {
+          // Vehicle just entered blood - start new trail
+          this.bloodTrackSystem.startVehicleBloodTrail(vehicle.id, bloodContact);
+          vehicle.isCreatingBloodTrail = true;
+        }
+      }
+
+      // Update blood trail if vehicle is creating one
+      if (vehicle.isCreatingBloodTrail) {
+        const stillTrailing = this.bloodTrackSystem.updateVehicleBloodTrail(vehicle);
+        if (!stillTrailing) {
+          vehicle.isCreatingBloodTrail = false;
         }
       }
     }
@@ -863,12 +893,20 @@ export class TrafficSystem {
   }
   
   reset() {
-    // Remove all vehicles
+    // Remove all vehicles and clear their blood trail status
     this.vehicles.forEach(vehicle => {
       this.scene.remove(vehicle.mesh);
+      // Clear blood trail status
+      if (vehicle.isCreatingBloodTrail && this.bloodTrackSystem) {
+        this.bloodTrackSystem.clearVehicleBloodTrail(vehicle.id);
+        vehicle.isCreatingBloodTrail = false;
+      }
     });
     this.vehicles = [];
-    
+
+    // Note: Don't clear all blood data here - that's handled by the main game on respawn
+    // This reset is for traffic system resets, not player death/respawn
+
     // Spawn initial traffic
     this.spawn(20);
   }
@@ -961,6 +999,11 @@ export class TrafficSystem {
     if (vehicleIndex >= 0) {
       const vehicle = this.vehicles[vehicleIndex];
       this.scene.remove(vehicle.mesh);
+      // Clear blood trail status
+      if (vehicle.isCreatingBloodTrail && this.bloodTrackSystem) {
+        this.bloodTrackSystem.clearVehicleBloodTrail(vehicle.id);
+        vehicle.isCreatingBloodTrail = false;
+      }
       // DON'T dispose geometry - it's shared by all vehicles!
       // Just remove the mesh from scene
       this.vehicles.splice(vehicleIndex, 1);
@@ -968,26 +1011,37 @@ export class TrafficSystem {
   }
 
   dispose() {
-    // Remove all vehicles from scene
+    // Remove all vehicles from scene and properly dispose
     this.vehicles.forEach(vehicle => {
       if (vehicle.mesh) {
-        // Just remove from scene - don't dispose shared geometry
         this.scene.remove(vehicle.mesh);
+        this.disposeVehicleMesh(vehicle.mesh);
       }
     });
 
     // Clear vehicles array
     this.vehicles = [];
 
+    // Dispose shared geometries (they were created in constructor)
+    if (this.sharedGeometry) {
+      Object.values(this.sharedGeometry).forEach(geometry => {
+        if (geometry && geometry.dispose) {
+          geometry.dispose();
+        }
+      });
+      this.sharedGeometry = null;
+    }
+
     // Materials are managed by MaterialManager - don't dispose them here
     // They will be disposed when MaterialManager.dispose() is called
-    
+
     // Clear references
     this.scene = null;
     this.highway = null;
     this.camera = null;
     this.vehicleMaterials = null;
     this.multiplayerManager = null;
+    this.bloodTrackSystem = null;
   }
   
   // MEMORY LEAK FIX: Clean up any debris or crash-related objects

@@ -64,9 +64,9 @@ export class DeathAnimation {
     // PRE-CREATE SHARED GEOMETRIES to prevent memory leaks!
     // These are reused for every death instead of creating new ones
     this.sharedGeometries = {
-      largeSplatter: new THREE.PlaneGeometry(3, 3),
-      smallSplatter: new THREE.CircleGeometry(0.5, 8),
-      bloodPool: new THREE.CircleGeometry(2, 16),
+      largeSplatter: new THREE.PlaneGeometry(1.5, 1.5), // Much smaller - 1.5x1.5m
+      smallSplatter: new THREE.CircleGeometry(0.3, 8),  // Smaller secondary splatters
+      bloodPool: new THREE.CircleGeometry(1.0, 16),     // Smaller blood pool visual
       skull: new THREE.SphereGeometry(0.35, 8, 6),
       ribcage: new THREE.BoxGeometry(0.6, 0.5, 0.3),
       femur: new THREE.CylinderGeometry(0.1, 0.1, 0.6, 6),
@@ -142,15 +142,8 @@ export class DeathAnimation {
   }
   
   createBloodSplatter(position, direction) {
-    // Main splatter on impact surface
-    const splatterGeo = new THREE.PlaneGeometry(3, 3);
-    const splatterMat = new THREE.MeshBasicMaterial({
-      color: 0x880000,
-      transparent: true,
-      opacity: 0.7,
-      side: THREE.DoubleSide
-    });
-    const splatter = new THREE.Mesh(splatterGeo, splatterMat);
+    // Main splatter on impact surface - USE SHARED GEOMETRY AND MATERIAL
+    const splatter = new THREE.Mesh(this.sharedGeometries.largeSplatter, this.splatterMaterial.clone());
     
     // Position splatter on impact surface
     splatter.position.copy(position);
@@ -163,29 +156,25 @@ export class DeathAnimation {
     this.scene.add(splatter);
     this.bloodSplatters.push({
       mesh: splatter,
-      geometry: splatterGeo,
-      material: splatterMat,
       age: 0,
       maxAge: 5
     });
     
-    // Additional smaller splatters
-    for (let i = 0; i < 5; i++) {
-      const smallSplatterGeo = new THREE.CircleGeometry(Math.random() * 0.5 + 0.2, 8);
-      const smallSplatter = new THREE.Mesh(smallSplatterGeo, splatterMat);
-      
+    // Additional smaller splatters - keep them closer together
+    for (let i = 0; i < 3; i++) {
+      const smallSplatter = new THREE.Mesh(this.sharedGeometries.smallSplatter, this.splatterMaterial.clone());
+      smallSplatter.scale.setScalar(Math.random() * 0.3 + 0.2); // Smaller scale
+
       smallSplatter.position.set(
-        position.x + (Math.random() - 0.5) * 4,
+        position.x + (Math.random() - 0.5) * 2, // Much tighter spread
         0.01,
-        position.z + (Math.random() - 0.5) * 4
+        position.z + (Math.random() - 0.5) * 2
       );
       smallSplatter.rotation.x = -Math.PI / 2;
       
       this.scene.add(smallSplatter);
       this.bloodSplatters.push({
         mesh: smallSplatter,
-        geometry: smallSplatterGeo,
-        material: splatterMat,
         age: 0,
         maxAge: 5
       });
@@ -244,13 +233,7 @@ export class DeathAnimation {
   }
   
   createFlyingBones(position, direction, velocity) {
-    const boneTypes = [
-      { name: 'skull', size: [0.35, 0.4, 0.35] },     // Bigger skull
-      { name: 'ribcage', size: [0.6, 0.5, 0.3] },    // Bigger ribcage
-      { name: 'femur', size: [0.1, 0.6, 0.1] },      // Thicker, longer femur
-      { name: 'arm', size: [0.08, 0.5, 0.08] },      // Bigger arm bones
-      { name: 'spine', size: [0.15, 0.7, 0.15] }     // Bigger spine
-    ];
+    const boneTypes = ['skull', 'ribcage', 'femur', 'arm', 'spine'];
     
     const speed = Math.min(velocity.length(), 50);
     
@@ -259,22 +242,10 @@ export class DeathAnimation {
     
     for (let i = 0; i < boneCount; i++) {
       const boneType = boneTypes[Math.floor(Math.random() * boneTypes.length)];
-      
-      let boneGeo;
-      if (boneType.name === 'skull') {
-        boneGeo = new THREE.SphereGeometry(boneType.size[0], 8, 6);
-      } else if (boneType.name === 'ribcage') {
-        boneGeo = new THREE.BoxGeometry(...boneType.size);
-      } else {
-        boneGeo = new THREE.CylinderGeometry(
-          boneType.size[0], 
-          boneType.size[0], 
-          boneType.size[1], 
-          6
-        );
-      }
-      
-      const bone = new THREE.Mesh(boneGeo, this.boneMaterial);
+
+      // Use shared geometry based on type
+      const boneGeo = this.sharedGeometries[boneType];
+      const bone = new THREE.Mesh(boneGeo, this.boneMaterial.clone());
       bone.position.copy(position);
       bone.position.y += 0.5;
       
@@ -321,22 +292,20 @@ export class DeathAnimation {
   
   createBloodPool(position) {
     // Growing blood pool on ground - USE SHARED GEOMETRY
-    const pool = new THREE.Mesh(this.sharedGeometries.bloodPool, this.poolMaterial);
-    pool.scale.set(0.05, 0.05, 1); // Start small, will grow over time
-    
+    const pool = new THREE.Mesh(this.sharedGeometries.bloodPool, this.poolMaterial.clone());
+    pool.scale.set(0.1, 0.1, 1); // Start slightly bigger
+
     pool.position.copy(position);
     pool.position.y = 0.005; // Just above ground
     pool.rotation.x = -Math.PI / 2;
-    
+
     this.scene.add(pool);
     this.bloodSplatters.push({
       mesh: pool,
-      geometry: poolGeo,
-      material: poolMat,
       age: 0,
       maxAge: 5,
       isPool: true,
-      targetScale: 3
+      targetScale: 1.5  // Smaller max size - only 1.5m radius
     });
   }
   
@@ -374,16 +343,11 @@ export class DeathAnimation {
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     
-    // Use existing blood particle material but make particles smaller
-    const bloodTrailMaterial = new THREE.PointsMaterial({
-      color: 0xaa0000,
-      size: 0.15,
-      transparent: true,
-      opacity: 0.8,
-      vertexColors: true,
-      blending: THREE.AdditiveBlending
-    });
-    
+    // Clone the blood trail material for individual opacity control
+    const bloodTrailMaterial = this.bloodTrailMaterial.clone();
+    bloodTrailMaterial.size = 0.15;
+    bloodTrailMaterial.opacity = 0.8;
+
     const particles = new THREE.Points(geometry, bloodTrailMaterial);
     this.scene.add(particles);
     
@@ -400,16 +364,11 @@ export class DeathAnimation {
   
   createBikeExplosion(position, velocity) {
     const speed = velocity.length();
-    
-    // Create explosion flash (bright expanding sphere)
-    const flashGeo = new THREE.SphereGeometry(0.1, 8, 6);
-    const flashMat = new THREE.MeshBasicMaterial({
-      color: 0xffaa00,
-      transparent: true,
-      opacity: 1.0,
-      emissive: 0xffaa00
-    });
-    const flash = new THREE.Mesh(flashGeo, flashMat);
+
+    // Create explosion flash using shared geometry
+    const flashMat = this.flashMaterial.clone();
+    flashMat.opacity = 1.0;
+    const flash = new THREE.Mesh(this.sharedGeometries.flash, flashMat);
     flash.position.copy(position);
     flash.position.y += 0.3;
     
@@ -503,14 +462,16 @@ export class DeathAnimation {
       const debris = debrisTypes[Math.floor(Math.random() * debrisTypes.length)];
       const material = debris.material === 'metal' ? this.metalDebrisMaterial : this.plasticDebrisMaterial;
       
-      let debrisGeo;
-      if (debris.type === 'wheel') {
-        debrisGeo = new THREE.CylinderGeometry(debris.size[0], debris.size[0], debris.size[1], 8);
-      } else {
-        debrisGeo = new THREE.BoxGeometry(...debris.size);
-      }
+      // Use shared geometry for debris
+      const debrisGeo = debris.type === 'wheel' ? this.sharedGeometries.debrisCylinder : this.sharedGeometries.debrisBox;
       
-      const debrisMesh = new THREE.Mesh(debrisGeo, material);
+      const debrisMesh = new THREE.Mesh(debrisGeo, material.clone());
+      // Scale the shared geometry to match the debris size
+      if (debris.type === 'wheel') {
+        debrisMesh.scale.set(debris.size[0] * 6, debris.size[1] * 10, debris.size[0] * 6);
+      } else {
+        debrisMesh.scale.set(debris.size[0] * 10, debris.size[1] * 10, debris.size[2] * 10);
+      }
       debrisMesh.position.copy(position);
       debrisMesh.position.y += 0.2;
       
@@ -905,7 +866,10 @@ export class DeathAnimation {
     // Clean up bike debris
     for (const debris of this.bikeDebris) {
       this.scene.remove(debris.mesh);
-      // DON'T dispose shared geometry or material!
+      // Dispose cloned material
+      if (debris.mesh.material && debris.mesh.material.dispose) {
+        debris.mesh.material.dispose();
+      }
       // Clean up Vector3 objects properly
       if (debris.velocity) { debris.velocity.x = null; debris.velocity.y = null; debris.velocity.z = null; debris.velocity = null; }
       if (debris.angularVelocity) { debris.angularVelocity.x = null; debris.angularVelocity.y = null; debris.angularVelocity.z = null; debris.angularVelocity = null; }
@@ -915,7 +879,10 @@ export class DeathAnimation {
     // Clean up bones
     for (const bone of this.bones) {
       this.scene.remove(bone.mesh);
-      // DON'T dispose shared geometry or material!
+      // Dispose cloned material
+      if (bone.mesh.material && bone.mesh.material.dispose) {
+        bone.mesh.material.dispose();
+      }
       // Clean up Vector3 objects properly
       if (bone.velocity) { bone.velocity.x = null; bone.velocity.y = null; bone.velocity.z = null; bone.velocity = null; }
       if (bone.angularVelocity) { bone.angularVelocity.x = null; bone.angularVelocity.y = null; bone.angularVelocity.z = null; bone.angularVelocity = null; }
@@ -936,7 +903,10 @@ export class DeathAnimation {
     // Clean up blood splatters
     for (const splatter of this.bloodSplatters) {
       this.scene.remove(splatter.mesh);
-      // DON'T dispose shared geometry or material!
+      // Dispose cloned materials
+      if (splatter.mesh.material && splatter.mesh.material.dispose) {
+        splatter.mesh.material.dispose();
+      }
     }
     this.bloodSplatters = [];
   }

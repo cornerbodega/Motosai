@@ -58,9 +58,10 @@ export class MaterialManager {
     // Particle materials
     this.particleMaterials = {
       blood: new THREE.MeshBasicMaterial({
-        color: 0xff0000,
+        color: 0x660000,  // Darker red for better visibility
         transparent: true,
-        opacity: 0.8
+        opacity: 0.9,
+        side: THREE.DoubleSide  // Visible from both sides
       }),
       smoke: new THREE.MeshBasicMaterial({
         color: 0x333333,

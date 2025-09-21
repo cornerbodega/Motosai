@@ -1141,6 +1141,11 @@ export class MotosaiGame {
     if (this.trafficSystem) {
       this.trafficSystem.cleanupDebris();
     }
+
+    // MEMORY LEAK FIX: Clear all blood data from previous deaths
+    if (this.bloodTrackSystem) {
+      this.bloodTrackSystem.clearAllBloodData();
+    }
     
     // Reset physics completely - back to start
     this.physics.reset();
