@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { ROAD_CONSTANTS } from './RoadConstants.js';
+import { getMaterialManager } from '../utils/MaterialManager.js';
 
 export class Highway101 {
   constructor(scene) {
@@ -8,73 +9,75 @@ export class Highway101 {
     this.segmentLength = 200; // Doubled from 100 to 200 meters per segment
     this.numSegments = 15; // Further reduced for lower-end machines
     this.currentZ = 0;
-    
+
     // MEMORY LEAK FIX: Dynamic segment limits based on speed
     this.BASE_SEGMENTS = 15;
     this.MAX_SEGMENTS = 50; // Hard limit to prevent crashes
     this.MIN_COVERAGE_DISTANCE = 1000; // Always cover at least 1km ahead
     this.segmentCleanupCounter = 0;
     this.lastPlayerSpeed = 0;
-    
+
     // Highway parameters - using shared constants
     this.laneWidth = ROAD_CONSTANTS.LANE_WIDTH;
     this.numLanes = ROAD_CONSTANTS.NUM_LANES;
     this.shoulderWidth = ROAD_CONSTANTS.SHOULDER_WIDTH;
     this.totalWidth = ROAD_CONSTANTS.TOTAL_WIDTH;
-    
+
+    // Use centralized material manager
+    this.materialManager = getMaterialManager();
+
     // Materials
-    this.createMaterials();
+    this.initMaterials();
     
     // Instanced meshes for trees
     this.initInstancedTrees();
   }
   
-  createMaterials() {
-    // Asphalt - very rough, completely non-reflective surface
-    this.asphaltMat = new THREE.MeshStandardMaterial({ 
-      color: 0x2a2a2a,
-      roughness: 1.0,  // Maximum roughness for completely matte
-      metalness: 0,
-      bumpScale: 0.002
-    });
-    
-    // Lane markings - slightly reflective paint
-    this.whiteMat = new THREE.MeshStandardMaterial({ 
-      color: 0xffffff,
-      roughness: 0.6,
-      metalness: 0.1,
-      emissive: 0xffffff,
-      emissiveIntensity: 0.05
-    });
-    
-    this.yellowMat = new THREE.MeshStandardMaterial({ 
+  initMaterials() {
+    // Use shared materials from MaterialManager
+    this.asphaltMat = this.materialManager.getRoadMaterial('asphalt');
+    this.whiteMat = this.materialManager.getRoadMaterial('whiteLine');
+    this.yellowMat = this.materialManager.getMaterial('standard', { 
       color: 0xffcc00,
       roughness: 0.6,
       metalness: 0.1,
       emissive: 0xffcc00,
       emissiveIntensity: 0.05
     });
-    
-    // Shoulder - worn concrete
-    this.shoulderMat = new THREE.MeshStandardMaterial({ 
-      color: 0x4a4a4a,
-      roughness: 0.9,
-      metalness: 0
-    });
-    
-    // Grass - soft, non-reflective
-    this.grassMat = new THREE.MeshStandardMaterial({ 
+
+    // Shoulder - use MaterialManager
+    this.shoulderMat = this.materialManager.getRoadMaterial('shoulder');
+
+    // Grass - use MaterialManager
+    this.grassMat = this.materialManager.getMaterial('standard', {
       color: 0x7cae3f,
       roughness: 1,
       metalness: 0
     });
-    
-    // Concrete barrier - weathered concrete
-    this.barrierMat = new THREE.MeshStandardMaterial({ 
+
+    // Concrete barrier - use MaterialManager
+    this.barrierMat = this.materialManager.getMaterial('standard', {
       color: 0x8a8a8a,
       roughness: 0.85,
       metalness: 0
     });
+
+    // Create reusable materials for props (trees, signs, etc.)
+    this.propMaterials = {
+      trunk: this.materialManager.getMaterial('lambert', { color: 0x8B4513 }),
+      foliage: this.materialManager.getMaterial('lambert', { color: 0x228B22 }),
+      pole: this.materialManager.getMaterial('lambert', { color: 0x666666 }),
+      sign: this.materialManager.getMaterial('lambert', { color: 0x006600 }),
+      signLarge: this.materialManager.getMaterial('lambert', { color: 0x006633 }),
+      support: this.materialManager.getMaterial('lambert', { color: 0x444444 }),
+      stripReflective: this.materialManager.getMaterial('standard', {
+        color: 0xffffff,
+        emissive: 0xffffff,
+        emissiveIntensity: 0.2,
+        metalness: 0.9,
+        roughness: 0.1
+      })
+    };
   }
   
   initInstancedTrees() {
@@ -673,30 +676,17 @@ export class Highway101 {
           if (object.geometry) {
             object.geometry.dispose();
           }
-          if (object.material) {
-            if (Array.isArray(object.material)) {
-              object.material.forEach(mat => mat.dispose());
-            } else {
-              object.material.dispose();
-            }
-          }
+          // DON'T dispose materials - they're managed by MaterialManager
         });
         this.scene.remove(segment.group);
       }
     });
-    
+
     // Clear segments array
     this.segments = [];
-    
-    // Dispose of materials
-    if (this.asphaltMat) this.asphaltMat.dispose();
-    if (this.whiteMat) this.whiteMat.dispose();
-    if (this.yellowMat) this.yellowMat.dispose();
-    if (this.shoulderMat) this.shoulderMat.dispose();
-    if (this.grassMat) this.grassMat.dispose();
-    if (this.barrierMat) this.barrierMat.dispose();
-    if (this.rockMat) this.rockMat.dispose();
-    if (this.guardrailMat) this.guardrailMat.dispose();
+
+    // Materials are managed by MaterialManager - don't dispose them here
+    // They will be disposed when MaterialManager.dispose() is called
     
     // Dispose of instanced tree meshes
     if (this.treeMesh) {

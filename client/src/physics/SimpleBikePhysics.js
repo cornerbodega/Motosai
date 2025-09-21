@@ -5,18 +5,18 @@ import { ROAD_CONSTANTS } from '../game/RoadConstants.js';
 
 export class SimpleBikePhysics {
   constructor() {
-    // Position and movement
-    this.position = { x: 0, y: 0.3, z: 0 }; // Start at wheel height to prevent clipping
+    // Position and movement - start on left shoulder
+    this.position = { x: -8.5, y: 0.3, z: 0 }; // Left shoulder position (road half-width is 6.75, shoulder is 2.5 more)
     this.velocity = { x: 0, y: 0, z: 0 };
     this.rotation = { pitch: 0, yaw: 0, roll: 0 };
     
     // Speed parameters - More realistic motorcycle physics
     this.speed = 0; // Current speed in m/s
     this.maxSpeed = Infinity; // No speed limit!
-    this.baseAcceleration = 60; // Insane acceleration - like a drag bike!
-    this.acceleration = 60; // Current acceleration
-    this.deceleration = 30; // m/s² (coasting)
-    this.brakeDeceleration = 90; // m/s² (sport bike brakes are powerful!)
+    this.baseAcceleration = 12; // Strong but realistic acceleration (~1.2G)
+    this.acceleration = 12; // Current acceleration
+    this.deceleration = 3; // m/s² (coasting/engine braking)
+    this.brakeDeceleration = 10; // m/s² (sport bike brakes ~1G)
     this.throttleHoldTime = 0; // How long throttle has been held
     
     // Aggressive torque curve - instant power!
@@ -39,7 +39,9 @@ export class SimpleBikePhysics {
     // Controls
     this.controls = {
       throttle: 0,    // 0 to 1
-      brake: 0,       // 0 to 1
+      brake: 0,       // 0 to 1 (combined brake force)
+      frontBrake: 0,  // 0 to 1 (for pitch effect)
+      rearBrake: 0,   // 0 to 1 (for pitch effect)
       steer: 0,       // -1 (left) to 1 (right)
     };
     
@@ -74,10 +76,33 @@ export class SimpleBikePhysics {
   setControls(controls) {
     // Update controls
     if (controls.throttle !== undefined) this.controls.throttle = Math.max(0, Math.min(1, controls.throttle));
-    if (controls.brake !== undefined) this.controls.brake = Math.max(0, Math.min(1, controls.brake));
     if (controls.steer !== undefined) this.controls.steer = Math.max(-1, Math.min(1, controls.steer));
-    if (controls.frontBrake !== undefined) this.controls.brake = Math.max(this.controls.brake, controls.frontBrake);
-    if (controls.rearBrake !== undefined) this.controls.brake = Math.max(this.controls.brake, controls.rearBrake * 0.7);
+
+    // Fix: Properly handle brake inputs - don't use Math.max which keeps brakes stuck on
+    // Instead, set brake to the maximum of the current frame's front and rear brake values
+    let currentBrake = 0;
+    let frontBrake = 0;
+    let rearBrake = 0;
+
+    if (controls.frontBrake !== undefined) {
+      frontBrake = controls.frontBrake;
+      currentBrake = Math.max(currentBrake, frontBrake);
+    }
+    if (controls.rearBrake !== undefined) {
+      rearBrake = controls.rearBrake;
+      currentBrake = Math.max(currentBrake, rearBrake * 0.7);
+    }
+    if (controls.brake !== undefined) {
+      // Generic brake applies both front and rear
+      frontBrake = controls.brake * 0.7;  // 70% front
+      rearBrake = controls.brake * 0.3;   // 30% rear
+      currentBrake = Math.max(currentBrake, controls.brake);
+    }
+
+    this.controls.brake = Math.max(0, Math.min(1, currentBrake));
+    this.controls.frontBrake = Math.max(0, Math.min(1, frontBrake));
+    this.controls.rearBrake = Math.max(0, Math.min(1, rearBrake));
+
     if (controls.lean !== undefined) this.controls.steer = controls.lean; // Map lean to steer
   }
   
@@ -194,12 +219,7 @@ export class SimpleBikePhysics {
       
       this.speed -= actualBraking;
       
-      // Engine braking when off throttle
-      if (this.speed > 0) {
-        const engineBraking = (this.rpm / 14000) * 5; // More engine braking at high RPM
-        this.speed -= engineBraking * deltaTime;
-      }
-      
+      // No engine braking - coast freely
       // Don't go backwards
       if (this.speed < 0) this.speed = 0;
     }
@@ -211,13 +231,13 @@ export class SimpleBikePhysics {
       
       // Very minimal deceleration - mostly maintain speed
       const displaySpeedMPH = this.speed * 2.237;
-      let coastDecel = 0.05; // Very light engine braking
-      
+      let coastDecel = 0.01; // Almost no deceleration - just air resistance
+
       // Only add noticeable drag at extreme speeds
       if (displaySpeedMPH > 200) {
-        coastDecel += (displaySpeedMPH - 200) * 0.001; // Tiny increase at high speeds
+        coastDecel += (displaySpeedMPH - 200) * 0.0005; // Even less drag increase
       }
-      
+
       // Apply very gradual deceleration
       this.speed = Math.max(0, this.speed - coastDecel * deltaTime);
     }
@@ -392,8 +412,19 @@ export class SimpleBikePhysics {
       const targetPitch = this.controls.throttle * 0.05 * speedFactor;
       this.rotation.pitch += (targetPitch - this.rotation.pitch) * 5 * deltaTime;
     } else if (this.controls.brake > 0) {
-      // Nose dive effect
-      const targetPitch = -this.controls.brake * 0.08;
+      // Nose dive effect - different for front vs rear brake
+      let targetPitch = 0;
+
+      // Front brake causes forward pitch (nose dive)
+      if (this.controls.frontBrake > 0) {
+        targetPitch -= this.controls.frontBrake * 0.12; // Strong nose dive
+      }
+
+      // Rear brake causes slight backward pitch (squat) or stays level
+      if (this.controls.rearBrake > 0) {
+        targetPitch += this.controls.rearBrake * 0.02; // Slight rear squat
+      }
+
       this.rotation.pitch += (targetPitch - this.rotation.pitch) * 5 * deltaTime;
     } else {
       // Return to neutral
@@ -668,7 +699,7 @@ export class SimpleBikePhysics {
   }
   
   reset() {
-    this.position = { x: 0, y: 0.3, z: 0 }; // Start at proper height
+    this.position = { x: -8.5, y: 0.3, z: 0 }; // Left shoulder position
     this.velocity = { x: 0, y: 0, z: 0 };
     this.rotation = { pitch: 0, yaw: 0, roll: 0 };
     this.speed = 0;

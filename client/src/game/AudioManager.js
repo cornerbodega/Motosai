@@ -2,7 +2,7 @@ export class AudioManager {
   constructor() {
     this.sounds = {};
     this.currentEngineSound = null;
-    this.isEnabled = true;
+    this.isEnabled = false; // Muted by default
     this.volume = 1.0;
     this.lastCollisionTime = 0;
     this.collisionCooldown = 500; // ms between collision sounds

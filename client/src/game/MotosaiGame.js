@@ -14,6 +14,8 @@ import { PerformanceManager } from '../utils/PerformanceManager.js';
 import { AudioManager } from './AudioManager.js';
 import { getStoppa } from '../utils/Stoppa.js';
 import { Minimap } from './Minimap.js';
+import { MemoryProfiler } from '../utils/MemoryProfiler.js';
+import { getMaterialManager, resetMaterialManager } from '../utils/MaterialManager.js';
 
 export class MotosaiGame {
   constructor(container, config = {}) {
@@ -28,6 +30,9 @@ export class MotosaiGame {
       autoCleanup: true,
       memoryThreshold: 400 * 1024 * 1024 // 400MB threshold
     });
+
+    // Initialize Material Manager (singleton)
+    this.materialManager = getMaterialManager();
 
     // Make Stoppa accessible from console for debugging
     window.stoppa = this.stoppa;
@@ -231,7 +236,7 @@ export class MotosaiGame {
   initScene() {
     this.scene = new THREE.Scene();
     this.scene.fog = new THREE.Fog(0x87CEEB, 200, 3000); // Extended fog distance from 1000 to 3000
-    
+
     // Ensure sky object is null to prevent shader errors
     this.sky = null;
     
@@ -301,6 +306,20 @@ export class MotosaiGame {
   }
   
   initLights() {
+    // Initialize comprehensive memory profiler after scene and camera are ready
+    const profilerConfig = {
+      enableServerLogging: true,
+      sessionId: this.config.sessionId || `game-${Date.now()}`,
+      playerId: this.config.playerId || `player-${Math.random().toString(36).substring(7)}`,
+      serverUrl: window.location.hostname === 'localhost'
+        ? 'http://localhost:8080'
+        : 'https://motosai-websocket-9z3mknbcfa-uw.a.run.app'
+    };
+
+    this.memoryProfiler = new MemoryProfiler(this.renderer, this.scene, this.camera, profilerConfig);
+    console.log('%c🔍 Memory Profiler Active - Access via window.memoryProfiler', 'color: #00ff00; font-weight: bold');
+    console.log('%c📡 Real-time monitoring enabled', 'color: #00ff00');
+
     // Softer ambient light with warm tint
     const ambient = new THREE.AmbientLight(0xfff5e6, 0.4);
     this.scene.add(ambient);
@@ -711,8 +730,11 @@ export class MotosaiGame {
     // Brakes (removed Space since it's now camera toggle)
     if (this.keys['KeyS'] || this.keys['ArrowDown']) {
       controls.brake = 1;
+    } else if (this.keys['ShiftLeft'] || this.keys['ShiftRight']) {
+      // Shift keys for front brake
+      controls.brake = 1;
     }
-    
+
     // Steering (left/right)
     if (this.keys['KeyA'] || this.keys['ArrowLeft']) {
       controls.steer = -1;  // Left
@@ -1215,8 +1237,8 @@ export class MotosaiGame {
         }
         
         if (this.bloodTrackSystem) {
-          // Create blood smear along the barrier (more blood, spread out)
-          for (let i = 0; i < 10; i++) {
+          // Reduce blood splats to prevent lag - create just a few immediate splats
+          for (let i = 0; i < 3; i++) {
             const smearOffset = {
               x: collision.position.x + (Math.random() - 0.5) * 0.5, // Keep close to barrier
               y: collision.position.y + Math.random() * 2, // Vertical smear
@@ -1224,16 +1246,10 @@ export class MotosaiGame {
             };
             this.bloodTrackSystem.addBloodSplat(smearOffset, 3.0); // Extra large blood splats
           }
-          
-          // Add additional blood trail effect
-          for (let i = 0; i < 5; i++) {
-            const trailOffset = {
-              x: collision.position.x,
-              y: 0.1,
-              z: collision.position.z - i * 2 // Trail behind impact point
-            };
-            this.bloodTrackSystem.addBloodSplat(trailOffset, 2.5);
-          }
+
+          // Register crash site for continuous blood generation during slide
+          // This will be handled by the blood track system over time, not all at once
+          this.bloodTrackSystem.registerCrashSite(collision.position);
         }
         
         this.screenShake.intensity = 30;
@@ -1374,11 +1390,24 @@ export class MotosaiGame {
         if (state.collision) {
           // Check for crash FIRST (serious collision)
           if (state.collision.isCrashed && !this.isDead) {
-            // Handle barrier-specific effects before death
-            if (state.collision.type === 'barrier') {
-              this.handleBarrierCollision(state.collision);
-            }
+            // Trigger death immediately to prevent lag
             this.triggerDeath(state);
+            // Handle barrier-specific effects AFTER death animation starts
+            if (state.collision.type === 'barrier') {
+              // Copy collision data to avoid closure memory leak
+              const collisionCopy = {
+                type: state.collision.type,
+                severity: state.collision.severity,
+                position: {...state.collision.position},
+                speedMph: state.collision.speedMph
+              };
+              // Use setTimeout to defer blood effects slightly
+              const barrierTimer = setTimeout(() => {
+                this.handleBarrierCollision(collisionCopy);
+                this.activeTimers.delete(barrierTimer);
+              }, 50);
+              this.activeTimers.add(barrierTimer);
+            }
           } else if (state.collision.type === 'barrier') {
             // Non-fatal barrier collision (shouldn't happen anymore but just in case)
             this.handleBarrierCollision(state.collision);
@@ -1750,7 +1779,20 @@ export class MotosaiGame {
     if (this.performanceManager && typeof this.performanceManager.dispose === 'function') {
       this.performanceManager.dispose();
     }
-    
+
+    // Dispose memory profiler
+    if (this.memoryProfiler && typeof this.memoryProfiler.dispose === 'function') {
+      this.memoryProfiler.dispose();
+      this.memoryProfiler = null;
+    }
+
+    // Dispose Material Manager - MUST be done after all systems dispose
+    // This will clean up all pooled and shared materials
+    if (this.materialManager) {
+      this.materialManager.dispose();
+      resetMaterialManager(); // Reset singleton for next game
+    }
+
     // Dispose of renderer
     if (this.renderer) {
       this.renderer.dispose();

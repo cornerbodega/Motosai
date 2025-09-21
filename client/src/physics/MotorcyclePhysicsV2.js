@@ -11,9 +11,9 @@ export class MotorcyclePhysicsV2 {
     this.rake = 24 * Math.PI / 180; // Fork rake angle (24 degrees typical for sport bike)
     this.trail = 0.09; // meters (90mm trail)
     
-    // State variables
-    this.position = { x: 0, y: 0, z: 0 };
-    this.velocity = { x: 0, y: 0, z: 0 };
+    // State variables - start on right shoulder at traffic speed
+    this.position = { x: 5.5, y: 0, z: 0 }; // Right shoulder position
+    this.velocity = { x: 0, y: 0, z: 29 }; // ~65 mph forward (29 m/s)
     this.acceleration = { x: 0, y: 0, z: 0 };
     this.rotation = { pitch: 0, yaw: 0, roll: 0 }; // lean is roll
     this.angularVelocity = { pitch: 0, yaw: 0, roll: 0 };
@@ -79,12 +79,14 @@ export class MotorcyclePhysicsV2 {
       idleRPM: 1000,
       gearRatios: [3.5, 2.5, 1.8, 1.4, 1.15, 0.95], // More aggressive ratios
       finalDrive: 3.5, // Higher final drive for more acceleration
-      engineBraking: 0.3 // Engine braking coefficient
+      engineBraking: 0.1, // Engine braking coefficient (reduced for better coasting)
+      isBurnouting: false, // Track burnout state
+      burnoutSmoke: 0 // Amount of smoke (0-1)
     };
     
     // Aerodynamics
     this.aero = {
-      dragCoefficient: 0.6,
+      dragCoefficient: 0.35, // Reduced for better coasting (was 0.6)
       frontalArea: 0.6, // m²
       airDensity: 1.225, // kg/m³
       liftCoefficient: -0.05 // Slight downforce
@@ -107,6 +109,13 @@ export class MotorcyclePhysicsV2 {
     // Physics constants
     this.gravity = 9.81;
     this.dt = 1/60; // 60 FPS physics
+
+    // Collision state (compatibility with game)
+    this.collision = {
+      isWobbling: false,
+      isCrashed: false,
+      type: null
+    };
     
     // Turning system parameters
     this.turning = {
@@ -122,11 +131,24 @@ export class MotorcyclePhysicsV2 {
       progressiveLeanFactor: 0, // 0 to 1, increases with hold time
       maxHoldTime: 1.5, // Max time for full lean progression (seconds) (reduced for quicker max)
       holdTimeDecay: 4.0, // How fast hold time decays when not turning (per second)
-      sharpTurnMultiplier: 2.5 // Additional multiplier for very sharp turns
+      sharpTurnMultiplier: 2.5, // Additional multiplier for very sharp turns
+
+      // Tap-then-hold sharp turning
+      tapTime: 0, // When the last tap occurred
+      tapDirection: 0, // Direction of last tap
+      tapWindow: 800, // ms - window after tap to start holding for sharp turn (more forgiving)
+      sharpTurnActive: false, // Is sharp turn mode active
+      sharpTurnBoost: 6.0, // Multiplier for sharp turns when tap-then-hold (MUCH stronger)
+
+      // Brake-based sharp turning
+      brakeHoldTime: 0, // How long brake has been held
+      brakeTurnBoost: 0, // Current boost from braking (0 to 1)
+      maxBrakeHoldTime: 2.0, // Seconds to reach max brake turn boost
+      brakeTurnMultiplier: 4.0 // Max multiplier from brake turning
     };
   }
   
-  update(deltaTime) {
+  update(deltaTime, trafficSystem = null) {
     this.dt = deltaTime || 1/60;
     
     // Update engine
@@ -250,48 +272,98 @@ export class MotorcyclePhysicsV2 {
   
   calculateTireForcesV2(speed) {
     const forces = { x: 0, y: 0, z: 0 };
-    
+
+    // Check for burnout conditions (keyboard gives 0 or 1, not percentages)
+    const isBurnoutCondition = (
+      this.controls.throttle > 0 &&  // Any throttle
+      this.controls.rearBrake > 0 &&  // Any rear brake
+      speed < 10 // Can only burnout at low speeds
+    );
+
     // Weight distribution with dynamic transfer
     const longAccel = this.acceleration.z;
     const latAccel = this.acceleration.x;
-    
+
     // Longitudinal weight transfer
     const longTransfer = longAccel * this.mass * this.cogHeight / this.wheelbase;
-    
+
     // Lateral weight transfer (affects grip during lean)
     const latTransfer = latAccel * this.mass * this.cogHeight / this.wheelbase * 0.3;
-    
+
     // Calculate wheel loads
     this.frontWheel.load = (this.mass * this.gravity * 0.45) - longTransfer - latTransfer;
     this.rearWheel.load = (this.mass * this.gravity * 0.55) + longTransfer + latTransfer;
-    
+
     // Ensure positive loads
     this.frontWheel.load = Math.max(10, this.frontWheel.load);
     this.rearWheel.load = Math.max(10, this.rearWheel.load);
-    
-    // Drive force from rear wheel
-    if (this.rearWheel.load > 0) {
+
+    // Handle burnout
+    if (isBurnoutCondition) {
+      this.engine.isBurnouting = true;
+      this.engine.burnoutSmoke = Math.min(1, this.engine.burnoutSmoke + this.dt * 2); // Ramp up smoke
+
+      // During burnout, rear wheel spins but provides minimal forward force
       const driveForce = (this.rearWheel.torque / this.rearWheel.radius);
-      const maxForce = this.rearWheel.load * this.rearWheel.grip * 1.8; // Much higher peak grip for acceleration
-      const actualForce = Math.min(Math.abs(driveForce), maxForce) * Math.sign(driveForce);
+      const burnoutForce = driveForce * 0.1; // Only 10% of force translates to motion
 
-      // Apply force in bike direction
-      forces.x += actualForce * Math.sin(this.rotation.yaw);
-      forces.z += actualForce * Math.cos(this.rotation.yaw);
+      // Apply minimal forward force
+      forces.x += burnoutForce * Math.sin(this.rotation.yaw);
+      forces.z += burnoutForce * Math.cos(this.rotation.yaw);
 
-      // Rear wheel torque creates a straightening moment when leaned
-      // This simulates the real effect where acceleration helps stand the bike up
-      if (Math.abs(this.rotation.roll) > 0.05 && this.controls.throttle > 0.1) {
-        // The rear wheel pushing forward while leaned creates a torque that reduces lean
-        const straighteningMoment = actualForce * Math.abs(this.rotation.roll) * 0.15;
-        forces.roll -= straighteningMoment * Math.sign(this.rotation.roll);
+      // Spin up the rear wheel fast
+      this.rearWheel.angularVelocity = this.engine.rpm * 0.2; // Wheel spins with engine
+      this.rearWheel.slip = 0.9; // High slip ratio
+
+      // Rev the engine high
+      this.engine.rpm = Math.min(this.engine.maxRPM - 500, this.engine.rpm + this.dt * 8000);
+
+    } else {
+      // Normal driving
+      this.engine.isBurnouting = false;
+      this.engine.burnoutSmoke = Math.max(0, this.engine.burnoutSmoke - this.dt * 4); // Fade smoke quickly
+
+      // Drive force from rear wheel
+      if (this.rearWheel.load > 0) {
+        const driveForce = (this.rearWheel.torque / this.rearWheel.radius);
+        const maxForce = this.rearWheel.load * this.rearWheel.grip * 1.8; // Much higher peak grip for acceleration
+        const actualForce = Math.min(Math.abs(driveForce), maxForce) * Math.sign(driveForce);
+
+        // Apply force in bike direction
+        forces.x += actualForce * Math.sin(this.rotation.yaw);
+        forces.z += actualForce * Math.cos(this.rotation.yaw);
+
+        // Rear wheel torque creates a straightening moment when leaned
+        // This simulates the real effect where acceleration helps stand the bike up
+        if (Math.abs(this.rotation.roll) > 0.05 && this.controls.throttle > 0) {
+          // The rear wheel pushing forward while leaned creates a torque that reduces lean
+          const straighteningMoment = actualForce * Math.abs(this.rotation.roll) * 0.15;
+          forces.roll -= straighteningMoment * Math.sign(this.rotation.roll);
+        }
       }
     }
-    
-    // Braking forces
-    const frontBrakeForce = this.controls.frontBrake * this.frontWheel.load * 1.5;
-    const rearBrakeForce = this.controls.rearBrake * this.rearWheel.load * 0.8;
-    
+
+    // Braking forces - MUCH more powerful for collision avoidance with ABS-like behavior
+    let frontBrakeForce = this.controls.frontBrake * this.frontWheel.load * 4.5; // Tripled from 1.5
+    let rearBrakeForce = this.controls.rearBrake * this.rearWheel.load * 2.4; // Tripled from 0.8
+
+    // Debug log if brakes are stuck
+    if ((this.controls.frontBrake > 0 || this.controls.rearBrake > 0) && Math.random() < 0.05) {
+      console.log('Brake values:', this.controls.frontBrake, this.controls.rearBrake);
+    }
+
+    // ABS-like behavior - prevent wheel lockup at high brake pressure
+    // Maximum deceleration is about 1.2g for sport bike with good tires
+    const maxDeceleration = 1.2 * this.gravity * this.mass;
+    const totalBrakeForce = frontBrakeForce + rearBrakeForce;
+
+    if (totalBrakeForce > maxDeceleration) {
+      // Scale down to prevent lockup but maintain ratio
+      const scale = maxDeceleration / totalBrakeForce;
+      frontBrakeForce *= scale;
+      rearBrakeForce *= scale;
+    }
+
     // Apply braking in opposite direction of motion
     if (speed > 0.1) {
       const brakingX = -(this.velocity.x / speed) * (frontBrakeForce + rearBrakeForce);
@@ -324,7 +396,7 @@ export class MotorcyclePhysicsV2 {
     // Calculate required centripetal force for the turn
     if (Math.abs(leanAngle) > 0.01) {
       // Check if we're accelerating or coasting/braking
-      const isAccelerating = this.controls.throttle > 0.1;
+      const isAccelerating = this.controls.throttle > 0;
       const isBraking = this.controls.frontBrake > 0 || this.controls.rearBrake > 0;
 
       // MUCH tighter turns when not accelerating
@@ -425,7 +497,7 @@ export class MotorcyclePhysicsV2 {
 
     // Acceleration-based gyroscopic straightening
     // When accelerating, increased wheel speed creates more gyroscopic stability
-    if (this.controls.throttle > 0.1) {
+    if (this.controls.throttle > 0) {
       const accelerationStability = this.controls.throttle * (frontWheelGyro + rearWheelGyro) * 0.2;
       // This force opposes any lean angle, helping to straighten the bike
       torques.roll -= this.rotation.roll * accelerationStability;
@@ -440,9 +512,20 @@ export class MotorcyclePhysicsV2 {
     // Update turn hold time tracking
     this.updateTurnHoldTime();
 
+    // Update brake hold time for brake-turning
+    this.updateBrakeHoldTime();
+
     // Check throttle state for turning modifiers
-    const isAccelerating = this.controls.throttle > 0.1;
+    const isAccelerating = this.controls.throttle > 0;
     const throttleModifier = isAccelerating ? (1.0 - this.controls.throttle * 0.2) : 1.5; // Better turning off throttle
+
+    // Apply sharp turn boost from tap-then-hold OR brake-turning
+    // Brake turn boost: 1.0 + (boost * multiplier)
+    const brakeTurnBoost = 1.0 + (this.turning.brakeTurnBoost * this.turning.brakeTurnMultiplier);
+    const tapTurnBoost = this.turning.sharpTurnActive ? this.turning.sharpTurnBoost : 1.0;
+
+    // Use the higher of the two boosts
+    const sharpTurnMultiplier = Math.max(tapTurnBoost, brakeTurnBoost);
 
     // Throttle straightening effect - acceleration wants to stand the bike up
     if (isAccelerating && Math.abs(this.rotation.roll) > 0.05) {
@@ -458,14 +541,14 @@ export class MotorcyclePhysicsV2 {
 
       // Progressive steering torque with sharp initial response
       // Start at 85% strength immediately for VERY sharp turn-in
-      const progressiveMultiplier = (0.85 + 0.15 * this.turning.progressiveLeanFactor) * throttleModifier;
+      const progressiveMultiplier = (0.85 + 0.15 * this.turning.progressiveLeanFactor) * throttleModifier * sharpTurnMultiplier;
       const steerTorque = this.controls.steerInput * 25000 * (speed / 25) * progressiveMultiplier; // MUCH higher torque
       torques.roll -= steerTorque; // Negative because counter-steering
 
       // Lean angle creates yaw (turning) - enhanced by hold time and throttle state
       const leanAngle = this.rotation.roll;
       const turnRate = Math.sin(leanAngle) * Math.sqrt(this.gravity / (speed + 0.5)); // Less speed denominator
-      const turnEnhancement = (1.5 + this.turning.progressiveLeanFactor * 1.0) * throttleModifier; // Start at 1.5x
+      const turnEnhancement = (1.5 + this.turning.progressiveLeanFactor * 1.0) * throttleModifier * sharpTurnMultiplier; // Start at 1.5x
       torques.yaw = turnRate * 15000 * turnEnhancement; // MUCH higher base yaw torque
 
       // Trail effect (self-centering) - reduced with longer hold for committed turns
@@ -485,29 +568,54 @@ export class MotorcyclePhysicsV2 {
     // Target lean from control input - enhanced by hold time and throttle state
     // Reduce target lean when accelerating hard (throttle wants to stand bike up)
     const throttleLeanReduction = isAccelerating ? (1.0 - this.controls.throttle * 0.2) : 1.0; // Less reduction
-    const progressiveLeanMultiplier = (1.5 + this.turning.progressiveLeanFactor * 1.2) * throttleModifier * throttleLeanReduction;
+    const progressiveLeanMultiplier = (1.5 + this.turning.progressiveLeanFactor * 1.2) * throttleModifier * throttleLeanReduction * sharpTurnMultiplier;
     const targetLean = this.controls.lean * this.maxLeanAngle * progressiveLeanMultiplier;
     const leanError = targetLean - this.rotation.roll;
 
     // Speed-dependent lean response with progressive factor
     const speedFactor = Math.min(1, speed / 10); // Reaches max at even lower speed
-    const progressiveResponse = (2.0 + this.turning.progressiveLeanFactor * 1.5) * throttleModifier; // MUCH more aggressive
+    const progressiveResponse = (2.0 + this.turning.progressiveLeanFactor * 1.5) * throttleModifier * sharpTurnMultiplier; // MUCH more aggressive
     const leanCorrection = leanError * 10000 * speedFactor * progressiveResponse; // MUCH higher response
 
     torques.roll += leanCorrection;
 
     // Damping to prevent oscillation - much less to allow sharp transitions
-    const dampingReduction = (1 - this.turning.progressiveLeanFactor * 0.5) * (isAccelerating ? 0.7 : 0.5);
+    // Almost no damping when sharp turn is active
+    const sharpTurnDampingMultiplier = this.turning.sharpTurnActive ? 0.1 : 1.0;
+    const dampingReduction = (1 - this.turning.progressiveLeanFactor * 0.5) * (isAccelerating ? 0.7 : 0.5) * sharpTurnDampingMultiplier;
     torques.roll -= this.angularVelocity.roll * 800 * dampingReduction; // Reduced damping
     torques.yaw -= this.angularVelocity.yaw * 300 * dampingReduction; // Reduced damping
 
     return torques;
   }
 
+  updateBrakeHoldTime() {
+    // Check if any brake is being applied
+    const isBraking = (this.controls.frontBrake > 0 || this.controls.rearBrake > 0);
+
+    if (isBraking) {
+      // Increase brake hold time
+      this.turning.brakeHoldTime = Math.min(
+        this.turning.maxBrakeHoldTime,
+        this.turning.brakeHoldTime + this.dt
+      );
+    } else {
+      // Decay brake hold time quickly
+      this.turning.brakeHoldTime = Math.max(
+        0,
+        this.turning.brakeHoldTime - this.dt * 3 // Fast decay
+      );
+    }
+
+    // Calculate brake turn boost (0 to 1, with exponential curve)
+    const normalized = this.turning.brakeHoldTime / this.turning.maxBrakeHoldTime;
+    this.turning.brakeTurnBoost = Math.pow(normalized, 0.7); // Exponential curve for progressive feel
+  }
+
   updateTurnHoldTime() {
     const currentTurnDirection = Math.sign(this.controls.lean);
 
-    if (Math.abs(this.controls.lean) > 0.1) {
+    if (Math.abs(this.controls.lean) > 0) {
       // Currently turning
       if (currentTurnDirection === this.turning.lastTurnDirection || this.turning.lastTurnDirection === 0) {
         // Same direction or starting new turn - increase hold time
@@ -698,11 +806,11 @@ export class MotorcyclePhysicsV2 {
         this.engine.rpm + throttle * 5000 * this.dt
       );
     } else {
-      // Engine braking
-      const engineBrake = this.engine.engineBraking * this.engine.clutch;
+      // Coasting - RPM matches wheel speed (like automatic transmission)
+      // This prevents engine braking and maintains momentum
       this.engine.rpm = Math.max(
         this.engine.idleRPM,
-        this.engine.rpm - 2000 * this.dt * (1 + engineBrake)
+        Math.min(this.engine.maxRPM, targetRPM)
       );
     }
     
@@ -743,6 +851,8 @@ export class MotorcyclePhysicsV2 {
     this.controls.lastThrottle = throttle;
 
     const torque = this.calculateEngineTorque(this.engine.rpm) * throttleResponse;
+
+    // No engine braking - coasts freely like automatic or with clutch in
     this.rearWheel.torque = torque * gearRatio * this.engine.finalDrive * this.engine.clutch;
   }
   
@@ -823,8 +933,32 @@ export class MotorcyclePhysicsV2 {
   }
   
   setControls(controls) {
+    // Detect tap-then-hold for sharp turning
+    if (controls.lean !== undefined) {
+      const currentTime = Date.now();
+      const leanDirection = Math.sign(controls.lean);
+      const previousDirection = Math.sign(this.controls.lean);
+
+      // Detect tap (going from neutral to turning)
+      if (leanDirection !== 0 && previousDirection === 0) {
+        this.turning.tapTime = currentTime;
+        this.turning.tapDirection = leanDirection;
+        this.turning.sharpTurnActive = false;
+      }
+      // Check if holding after a recent tap in same direction
+      else if (leanDirection !== 0 &&
+               leanDirection === this.turning.tapDirection &&
+               currentTime - this.turning.tapTime < this.turning.tapWindow) {
+        this.turning.sharpTurnActive = true;
+      }
+      // Deactivate sharp turn if direction changes or released
+      else if (leanDirection !== this.turning.tapDirection) {
+        this.turning.sharpTurnActive = false;
+      }
+    }
+
     this.controls = { ...this.controls, ...controls };
-    
+
     // Map lean control to steering input for counter-steering
     const speed = Math.sqrt(this.velocity.x ** 2 + this.velocity.z ** 2);
     if (speed > this.turning.counterSteerThreshold) {
@@ -848,8 +982,14 @@ export class MotorcyclePhysicsV2 {
       rpm: Math.round(this.engine.rpm),
       gear: this.engine.gear,
       leanAngle: this.rotation.roll * 180 / Math.PI,
+      sharpTurnActive: this.turning.sharpTurnActive, // Add sharp turn status
       steerAngle: this.frontWheel.steerAngle * 180 / Math.PI,
       wheelie: this.rotation.pitch > 0.1,
+      isBurnouting: this.engine.isBurnouting,
+      burnoutSmoke: this.engine.burnoutSmoke,
+      brakeLight: this.controls.frontBrake > 0 || this.controls.rearBrake > 0, // Brake light state
+      frontBrakeAmount: this.controls.frontBrake, // Debug: actual brake value
+      rearBrakeAmount: this.controls.rearBrake, // Debug: actual brake value
       frontSuspension: this.suspension.front.compression,
       rearSuspension: this.suspension.rear.compression,
       frontWheelSlip: this.frontWheel.slip,
@@ -858,18 +998,19 @@ export class MotorcyclePhysicsV2 {
       rearGrip: this.rearWheel.grip,
       isCounterSteering: speed > this.turning.counterSteerThreshold,
       turnHoldTime: this.turning.turnHoldTime,
-      progressiveLeanFactor: this.turning.progressiveLeanFactor
+      progressiveLeanFactor: this.turning.progressiveLeanFactor,
+      collision: this.collision // For game compatibility
     };
   }
   
   reset() {
-    this.position = { x: 0, y: 0, z: 0 };
-    this.velocity = { x: 0, y: 0, z: 0 };
+    this.position = { x: 5.5, y: 0, z: 0 }; // Right shoulder position
+    this.velocity = { x: 0, y: 0, z: 29 }; // ~65 mph forward
     this.acceleration = { x: 0, y: 0, z: 0 };
     this.rotation = { pitch: 0, yaw: 0, roll: 0 };
     this.angularVelocity = { pitch: 0, yaw: 0, roll: 0 };
-    this.engine.rpm = this.engine.idleRPM;
-    this.engine.gear = 1;
+    this.engine.rpm = 6000; // Cruising RPM at 65mph
+    this.engine.gear = 4; // 4th gear for highway cruising
     this.frontWheel.steerAngle = 0;
   }
 }

@@ -5,6 +5,12 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { supabase } from './utils/supabase.js';
 import { v4 as uuidv4 } from 'uuid';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 dotenv.config();
 
@@ -308,7 +314,106 @@ io.on('connection', (socket) => {
   socket.on('ping', (timestamp) => {
     socket.emit('pong', timestamp);
   });
-  
+
+  // Handle memory profiler logs
+  socket.on('memory-log', (data) => {
+    const { sessionId, playerId, logEntry } = data;
+
+    // Create logs directory if it doesn't exist
+    const logsDir = path.join(__dirname, 'memory-logs');
+    if (!fs.existsSync(logsDir)) {
+      fs.mkdirSync(logsDir, { recursive: true });
+    }
+
+    // Create filename with date and session
+    const date = new Date();
+    const dateStr = date.toISOString().split('T')[0];
+    const filename = `memory-${dateStr}-${sessionId || 'unknown'}.jsonl`;
+    const filepath = path.join(logsDir, filename);
+
+    // Append log entry as JSON line
+    const logLine = JSON.stringify({
+      ...logEntry,
+      serverTimestamp: date.toISOString(),
+      playerId,
+      sessionId,
+      socketId: socket.id
+    }) + '\n';
+
+    // Write to file asynchronously
+    fs.appendFile(filepath, logLine, (err) => {
+      if (err) {
+        console.error('Error writing memory log:', err);
+        socket.emit('memory-log-error', { error: err.message });
+      }
+    });
+
+    // Broadcast to monitoring tools
+    io.emit('memory-log-broadcast', { playerId, sessionId, logEntry });
+
+    // Log critical issues to console
+    if (logEntry.leaks && logEntry.leaks.length > 0) {
+      console.warn(`⚠️ Memory leak detected for player ${playerId}:`, logEntry.leaks);
+    }
+  });
+
+  // Handle memory profiler snapshots (larger data)
+  socket.on('memory-snapshot', (data) => {
+    const { sessionId, playerId, snapshot } = data;
+
+    // Check if snapshot data exists
+    if (!snapshot) {
+      console.error('Memory snapshot received with no data');
+      socket.emit('memory-snapshot-error', { error: 'No snapshot data provided' });
+      return;
+    }
+
+    const logsDir = path.join(__dirname, 'memory-logs', 'snapshots');
+    if (!fs.existsSync(logsDir)) {
+      fs.mkdirSync(logsDir, { recursive: true });
+    }
+
+    const timestamp = Date.now();
+    const filename = `snapshot-${timestamp}-${playerId || 'unknown'}.json`;
+    const filepath = path.join(logsDir, filename);
+
+    fs.writeFile(filepath, JSON.stringify(snapshot, null, 2), (err) => {
+      if (err) {
+        console.error('Error writing memory snapshot:', err);
+        socket.emit('memory-snapshot-error', { error: err.message });
+      } else {
+        console.log(`Memory snapshot saved: ${filename}`);
+        socket.emit('memory-snapshot-saved', { filename, timestamp });
+      }
+    });
+  });
+
+  // Handle memory profiler alerts
+  socket.on('memory-alert', (data) => {
+    const { sessionId, playerId, alert } = data;
+
+    console.error(`🚨 MEMORY ALERT from ${playerId}:`, alert);
+
+    // Log alerts to separate file for critical issues
+    const logsDir = path.join(__dirname, 'memory-logs');
+    const alertFile = path.join(logsDir, 'alerts.jsonl');
+
+    const alertEntry = JSON.stringify({
+      timestamp: new Date().toISOString(),
+      playerId,
+      sessionId,
+      socketId: socket.id,
+      alert
+    }) + '\n';
+
+    fs.appendFile(alertFile, alertEntry, (err) => {
+      if (err) console.error('Error logging alert:', err);
+    });
+
+    // Broadcast to monitoring tools
+    io.emit('memory-alert-broadcast', { playerId, sessionId, alert });
+  });
+
   socket.on('disconnect', async () => {
     console.log('Client disconnected:', socket.id);
     

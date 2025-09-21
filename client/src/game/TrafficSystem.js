@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { ROAD_CONSTANTS } from './RoadConstants.js';
 import { TrafficIDM } from './TrafficSystemIDM.js';
+import { getMaterialManager } from '../utils/MaterialManager.js';
 
 export class TrafficSystem {
   constructor(scene, highway, camera, bloodTrackSystem = null, multiplayerManager = null) {
@@ -12,6 +13,9 @@ export class TrafficSystem {
     this.vehicles = [];
     this.maxVehicles = 30; // Optimized for lower-end machines
     this.spawnDistance = 200; // Reduced spawn distance for performance
+
+    // Use centralized material manager
+    this.materialManager = getMaterialManager();
     
     // Create shared geometry ONCE for all vehicles to prevent memory leaks
     // Using unit cubes to scale per vehicle type
@@ -41,7 +45,8 @@ export class TrafficSystem {
       { type: 'sports', probability: 0.05, length: 4.2, width: 1.8, height: 1.2, speed: 80 } // 80 mph (sports cars faster)
     ];
     
-    this.createMaterials();
+    // Materials are now managed by MaterialManager - no need to create them here
+    this.initMaterials();
   }
   
   setMaxVehicles(count) {
@@ -125,36 +130,32 @@ export class TrafficSystem {
     return Math.min(dynamicDistance, 400);
   }
   
-  createMaterials() {
+  initMaterials() {
+    // Use materials from the MaterialManager pool
+    const vehicleColors = [
+      0xff0000, // Red
+      0x0000ff, // Blue
+      0xffffff, // White
+      0xffff00, // Yellow
+      0x00ff00, // Green
+      0xff8800, // Orange
+      0x8888ff, // Light blue
+      0xcccccc  // Silver
+    ];
+
+    // Reference to material manager's pooled materials
     this.vehicleMaterials = {
-      car: [
-        new THREE.MeshStandardMaterial({ color: 0xff0000, metalness: 0.8, roughness: 0.2 }), // Red - shiny
-        new THREE.MeshStandardMaterial({ color: 0x0000ff, metalness: 0.8, roughness: 0.2 }), // Blue - shiny
-        new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.9, roughness: 0.1 }), // White - very shiny
-        new THREE.MeshStandardMaterial({ color: 0xffff00, metalness: 0.7, roughness: 0.25 }), // Yellow - shiny
-        new THREE.MeshStandardMaterial({ color: 0x00ff00, metalness: 0.8, roughness: 0.2 }), // Green - shiny
-        new THREE.MeshStandardMaterial({ color: 0xff8800, metalness: 0.8, roughness: 0.2 }), // Orange - shiny
-        new THREE.MeshStandardMaterial({ color: 0x8888ff, metalness: 0.8, roughness: 0.2 }), // Light blue - shiny
-        new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.95, roughness: 0.05 })  // Silver - extremely shiny
-      ],
-      glass: new THREE.MeshStandardMaterial({ 
-        color: 0x222244,
-        metalness: 0.1,
-        roughness: 0,
-        transparent: true,
-        opacity: 0.5
-      }),
-      wheel: new THREE.MeshStandardMaterial({ 
-        color: 0x1a1a1a,
-        roughness: 0.9,
-        metalness: 0
-      }),
-      lights: new THREE.MeshStandardMaterial({ 
+      car: vehicleColors.map(color =>
+        this.materialManager.getVehicleMaterial(color, 'body')
+      ),
+      glass: this.materialManager.getVehicleMaterial(0x222244, 'window'),
+      wheel: this.materialManager.getVehicleMaterial(0x1a1a1a, 'wheel'),
+      lights: this.materialManager.getMaterial('standard', {
         color: 0xffff00,
         emissive: 0xffff00,
         emissiveIntensity: 0.5
       }),
-      brake: new THREE.MeshStandardMaterial({ 
+      brake: this.materialManager.getMaterial('standard', {
         color: 0xff0000,
         emissive: 0xff0000,
         emissiveIntensity: 0.3
@@ -251,18 +252,23 @@ export class TrafficSystem {
       const laneX = ROAD_CONSTANTS.getExactPosition(vehicle.lane, vehicle.subLane);
       // Use dynamic spawn distance if provided, otherwise fall back to base distance
       const effectiveSpawnDistance = dynamicSpawnDistance || this.spawnDistance;
-      
+
+      // Define a safe zone around the player where cars shouldn't spawn
+      const MIN_SAFE_DISTANCE = 50; // Minimum 50 meters away from player
+
       const spawnAhead = Math.random() > 0.3;
       let spawnOffset;
       if (spawnAhead) {
-        // Spawn further ahead at higher speeds
-        spawnOffset = effectiveSpawnDistance - Math.random() * 100;
+        // Spawn ahead but not too close - ensure minimum safe distance
+        const minAheadDistance = Math.max(MIN_SAFE_DISTANCE, effectiveSpawnDistance - 100);
+        spawnOffset = minAheadDistance + Math.random() * 100;
       } else {
-        // Spawn behind player (less important, keep smaller range)
-        spawnOffset = -effectiveSpawnDistance/3 + Math.random() * 100;
+        // Spawn behind player but also maintain safe distance
+        const maxBehindDistance = Math.min(-effectiveSpawnDistance/3, -MIN_SAFE_DISTANCE - 50);
+        spawnOffset = maxBehindDistance - Math.random() * 50;
       }
       const spawnZ = playerZ + spawnOffset;
-      
+
       vehicle.position.set(laneX, 0.5, spawnZ);
       vehicle.velocity.z = vehicle.speed / 2.237;
     }
@@ -971,27 +977,12 @@ export class TrafficSystem {
         this.scene.remove(vehicle.mesh);
       }
     });
-    
+
     // Clear vehicles array
     this.vehicles = [];
-    
-    // Dispose of shared materials
-    if (this.vehicleMaterials) {
-      // Dispose car materials array
-      if (this.vehicleMaterials.car) {
-        this.vehicleMaterials.car.forEach(mat => {
-          if (mat && typeof mat.dispose === 'function') {
-            mat.dispose();
-          }
-        });
-      }
-      // Dispose other shared materials
-      ['glass', 'wheel', 'lights', 'brake'].forEach(key => {
-        if (this.vehicleMaterials[key] && typeof this.vehicleMaterials[key].dispose === 'function') {
-          this.vehicleMaterials[key].dispose();
-        }
-      });
-    }
+
+    // Materials are managed by MaterialManager - don't dispose them here
+    // They will be disposed when MaterialManager.dispose() is called
     
     // Clear references
     this.scene = null;

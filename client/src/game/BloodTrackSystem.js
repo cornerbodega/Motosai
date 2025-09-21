@@ -1,16 +1,22 @@
 import * as THREE from 'three';
+import { getMaterialManager } from '../utils/MaterialManager.js';
 
 export class BloodTrackSystem {
   constructor(scene) {
     this.scene = scene;
     this.bloodStains = []; // Active bloodstains on the ground
     this.bloodTracks = []; // Active tire tracks
-    this.trackMaterial = new THREE.MeshBasicMaterial({
-      color: 0x880000,
-      transparent: true,
-      opacity: 0.7,
-      side: THREE.DoubleSide
-    });
+
+    // Use MaterialManager for materials
+    this.materialManager = getMaterialManager();
+    this.trackMaterial = this.materialManager.getParticleMaterial('blood');
+
+    // Reusable geometry for all tracks
+    this.trackGeometry = new THREE.PlaneGeometry(0.3, 1.0);
+
+    // Pool of reusable track meshes
+    this.trackPool = [];
+    this.maxTracks = 100; // Limit total tracks to prevent memory issues
   }
 
   // Register a bloodstain from crash site
@@ -56,10 +62,26 @@ export class BloodTrackSystem {
   createSingleTrack(position, velocity, width) {
     // Create a small track segment
     const trackLength = 1.0; // Length of each track segment
-    
-    // Create geometry for track
-    const trackGeo = new THREE.PlaneGeometry(width, trackLength);
-    const track = new THREE.Mesh(trackGeo, this.trackMaterial);
+
+    // Reuse track from pool or create new if needed
+    let track;
+    if (this.trackPool.length > 0) {
+      // Reuse from pool
+      track = this.trackPool.pop();
+      track.visible = true;
+    } else if (this.bloodTracks.length < this.maxTracks) {
+      // Create new track with SHARED geometry and material
+      track = new THREE.Mesh(this.trackGeometry, this.trackMaterial);
+    } else {
+      // At max capacity - reuse oldest track
+      const oldestTrack = this.bloodTracks.shift();
+      if (oldestTrack) {
+        track = oldestTrack.mesh;
+        // Don't dispose geometry - it's shared!
+      } else {
+        return; // Can't create track
+      }
+    }
     
     // Position track on ground
     track.position.copy(position);
@@ -75,7 +97,7 @@ export class BloodTrackSystem {
 
     const trackData = {
       mesh: track,
-      geometry: trackGeo,
+      // No individual geometry - using shared
       position: position.clone(),
       age: 0,
       maxAge: 15, // Tracks fade after 15 seconds
@@ -103,13 +125,18 @@ export class BloodTrackSystem {
       track.age += deltaTime;
       
       if (track.age > track.maxAge) {
-        // Remove expired track
+        // Remove expired track and return to pool
         this.scene.remove(track.mesh);
-        track.geometry.dispose();
+        track.mesh.visible = false;
+        // Don't dispose geometry - it's shared!
+        // Return mesh to pool for reuse
+        this.trackPool.push(track.mesh);
         this.bloodTracks.splice(i, 1);
       } else if (track.age > track.fadeStartAge) {
         // Fade out track
         const fadeProgress = (track.age - track.fadeStartAge) / (track.maxAge - track.fadeStartAge);
+        // Can't modify shared material opacity - use mesh opacity instead
+        track.mesh.material.transparent = true;
         track.mesh.material.opacity = 0.7 * (1 - fadeProgress);
       }
     }
@@ -134,16 +161,27 @@ export class BloodTrackSystem {
 
   // Clean up all resources
   dispose() {
-    // Remove all tracks
+    // Remove all tracks from scene
     for (const track of this.bloodTracks) {
       this.scene.remove(track.mesh);
-      track.geometry.dispose();
+      // Don't dispose geometry - it's shared!
     }
+
+    // Remove pooled tracks from scene
+    for (const track of this.trackPool) {
+      this.scene.remove(track);
+    }
+
+    // Dispose shared geometry
+    if (this.trackGeometry) {
+      this.trackGeometry.dispose();
+    }
+
+    // Clear arrays
     this.bloodTracks = [];
     this.bloodStains = [];
-    
-    if (this.trackMaterial) {
-      this.trackMaterial.dispose();
-    }
+    this.trackPool = [];
+
+    // Material is managed by MaterialManager - don't dispose it here
   }
 }
