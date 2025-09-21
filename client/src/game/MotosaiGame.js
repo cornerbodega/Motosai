@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { MaterialTracker } from '../utils/MaterialTracker.js'; // MUST BE FIRST to intercept THREE.js
 import { SimpleBikePhysics } from '../physics/SimpleBikePhysics.js';
 import { MotorcyclePhysics } from '../physics/MotorcyclePhysics.js';
 import { MotorcyclePhysicsV2 } from '../physics/MotorcyclePhysicsV2.js';
@@ -42,6 +43,18 @@ export class MotosaiGame {
     console.log('  stoppa.detectLeaks() - Check for memory leaks');
     console.log('  stoppa.cleanup() - Force cleanup');
     console.log('  stoppa.takeSnapshot() - Take memory snapshot');
+
+    // Material tracking for debugging
+    this.materialTrackingInterval = setInterval(() => {
+      if (window.materialTracker) {
+        window.materialTracker.logStats();
+        const stats = window.materialTracker.getStats();
+        if (stats.currentUndisposed > 200) {
+          console.log('%c🚨 FINDING LEAK SOURCE...', 'color: #ff0000; font-weight: bold');
+          window.materialTracker.findLeakSource();
+        }
+      }
+    }, 5000); // Every 5 seconds
 
     // Configuration options
     this.config = {
@@ -316,8 +329,9 @@ export class MotosaiGame {
         : 'https://motosai-websocket-9z3mknbcfa-uw.a.run.app'
     };
 
-    this.memoryProfiler = new MemoryProfiler(this.renderer, this.scene, this.camera, profilerConfig);
-    console.log('%c🔍 Memory Profiler Active - Access via window.memoryProfiler', 'color: #00ff00; font-weight: bold');
+    // 🚨 EMERGENCY: Memory Profiler disabled - may be causing its own leak
+    console.error('🚨 MemoryProfiler DISABLED due to catastrophic leak');
+    // this.memoryProfiler = new MemoryProfiler(this.renderer, this.scene, this.camera, profilerConfig);
     console.log('%c📡 Real-time monitoring enabled', 'color: #00ff00');
 
     // Softer ambient light with warm tint
@@ -1114,7 +1128,7 @@ export class MotosaiGame {
     );
     
     this.deathAnimation.trigger(this._tempDeathPosition, this._tempVelocity);
-    
+
     // Register crash site with blood track system
     if (this.bloodTrackSystem) {
       this.bloodTrackSystem.registerCrashSite(this._tempDeathPosition);
@@ -1910,6 +1924,12 @@ export class MotosaiGame {
     this.boundHandleTouchStart = null;
     this.boundHandleTouchMove = null;
     this.boundHandleTouchEnd = null;
+
+    // Clean up material tracking interval
+    if (this.materialTrackingInterval) {
+      clearInterval(this.materialTrackingInterval);
+      this.materialTrackingInterval = null;
+    }
 
     // Use Stoppa to clean up any remaining resources
     if (this.stoppa) {

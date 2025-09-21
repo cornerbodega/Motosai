@@ -17,10 +17,35 @@ export class BloodTrackSystem {
     // Reusable geometry for all tracks - bigger and more visible
     this.trackGeometry = new THREE.PlaneGeometry(0.8, 2.0);
 
-    // Pool of reusable track meshes
+    // Pool of reusable track meshes AND materials - NO CLONING!
     this.trackPool = [];
-    this.maxTracks = 500; // More tracks for longer trails
+    this.materialPool = []; // Pool of materials with different opacities
+    this.maxTracks = 200; // Reduced to prevent memory issues
     this.trackSpacing = 0.3; // Smaller spacing for continuous trails
+
+    // Pre-create a pool of materials with different opacities to avoid cloning
+    this.initMaterialPool();
+  }
+
+  // Pre-create materials with different opacity levels
+  initMaterialPool() {
+    // Create 10 materials with different opacity levels (0.1 to 1.0)
+    for (let i = 1; i <= 10; i++) {
+      const opacity = i / 10;
+      const material = new THREE.MeshBasicMaterial({
+        color: 0x660000,
+        transparent: true,
+        opacity: opacity,
+        side: THREE.DoubleSide
+      });
+      this.materialPool.push(material);
+    }
+  }
+
+  // Get material with closest opacity from pool
+  getMaterialForOpacity(targetOpacity) {
+    const index = Math.max(0, Math.min(9, Math.round(targetOpacity * 10) - 1));
+    return this.materialPool[index];
   }
 
   // Register a bloodstain from crash site
@@ -114,7 +139,7 @@ export class BloodTrackSystem {
           const intermediatePos = status.lastTrackPosition.clone().add(
             direction.clone().multiplyScalar(i * this.trackSpacing)
           );
-          this.createTireTracks(intermediatePos, vehicle.velocity, vehicle.width, status.bloodIntensity);
+          this.createTireTracks(intermediatePos, vehicle.velocity, vehicle.width, status.bloodIntensity, vehicle.id);
         }
       }
 
@@ -133,7 +158,7 @@ export class BloodTrackSystem {
 
     // Create new track segment
     if (status.bloodIntensity > 0.1) {
-      this.createTireTracks(vehicle.position, vehicle.velocity, vehicle.width, status.bloodIntensity);
+      this.createTireTracks(vehicle.position, vehicle.velocity, vehicle.width, status.bloodIntensity, vehicle.id);
       status.lastTrackPosition = vehicle.position.clone();
     }
 
@@ -141,7 +166,7 @@ export class BloodTrackSystem {
   }
 
   // Create tire tracks when vehicle drives through blood
-  createTireTracks(vehiclePosition, vehicleVelocity, vehicleWidth = 2, intensity = 1.0) {
+  createTireTracks(vehiclePosition, vehicleVelocity, vehicleWidth = 2, intensity = 1.0, vehicleId = null) {
     // Create tracks for left and right tires
     const trackWidth = 0.3; // Width of each tire track
     const tireSpacing = vehicleWidth * 0.8; // Distance between left and right tires
@@ -152,12 +177,18 @@ export class BloodTrackSystem {
     const rightTirePos = vehiclePosition.clone();
     rightTirePos.x += tireSpacing / 2;
 
-    // Create track segments with intensity
-    this.createSingleTrack(leftTirePos, vehicleVelocity, trackWidth, intensity);
-    this.createSingleTrack(rightTirePos, vehicleVelocity, trackWidth, intensity);
+    // Get distance from source for this vehicle
+    let distanceFromSource = 0;
+    if (vehicleId && this.vehicleBloodStatus.has(vehicleId)) {
+      distanceFromSource = this.vehicleBloodStatus.get(vehicleId).totalDistance;
+    }
+
+    // Create track segments with intensity and distance info
+    this.createSingleTrack(leftTirePos, vehicleVelocity, trackWidth, intensity, distanceFromSource);
+    this.createSingleTrack(rightTirePos, vehicleVelocity, trackWidth, intensity, distanceFromSource);
   }
 
-  createSingleTrack(position, velocity, width, intensity = 1.0) {
+  createSingleTrack(position, velocity, width, intensity = 1.0, distanceFromSource = 0) {
     // Create a small track segment
     const trackLength = 1.0; // Length of each track segment
 
@@ -168,23 +199,23 @@ export class BloodTrackSystem {
       track = this.trackPool.pop();
       track.visible = true;
     } else if (this.bloodTracks.length < this.maxTracks) {
-      // Create new track with SHARED geometry and material (clone for individual opacity)
-      track = new THREE.Mesh(this.trackGeometry, this.trackMaterial.clone());
-      track.material.transparent = true;
+      // Create new track with SHARED geometry and pooled material - NO CLONING!
+      const material = this.getMaterialForOpacity(intensity);
+      track = new THREE.Mesh(this.trackGeometry, material);
     } else {
       // At max capacity - reuse oldest track
       const oldestTrack = this.bloodTracks.shift();
       if (oldestTrack) {
         track = oldestTrack.mesh;
-        // Reset material properties
-        track.material.opacity = 0.7 * intensity;
+        // Get new material from pool for different opacity
+        const newMaterial = this.getMaterialForOpacity(0.7 * intensity);
+        track.material = newMaterial;
       } else {
         return; // Can't create track
       }
     }
 
-    // Set initial opacity based on intensity - make it more visible
-    track.material.opacity = Math.max(0.4, 0.9 * intensity);
+    // Material opacity is already set by pool selection - no need to modify
 
     // Position track on ground
     track.position.copy(position);
@@ -205,7 +236,9 @@ export class BloodTrackSystem {
       age: 0,
       maxAge: 30, // Tracks last much longer
       fadeStartAge: 20, // Start fading much later
-      initialIntensity: intensity
+      initialIntensity: intensity,
+      distanceFromSource: distanceFromSource,
+      creationTime: Date.now() // Track when this segment was created
     };
 
     this.bloodTracks.push(trackData);
@@ -236,25 +269,39 @@ export class BloodTrackSystem {
       }
     }
 
-    // Update tire tracks
-    for (let i = this.bloodTracks.length - 1; i >= 0; i--) {
-      const track = this.bloodTracks[i];
-      track.age += deltaTime;
-      
-      if (track.age > track.maxAge) {
-        // Remove expired track and return to pool
-        this.scene.remove(track.mesh);
-        track.mesh.visible = false;
-        // Don't dispose geometry - it's shared!
-        // Return mesh to pool for reuse
-        this.trackPool.push(track.mesh);
-        this.bloodTracks.splice(i, 1);
-      } else if (track.age > track.fadeStartAge) {
-        // Fade out track
-        const fadeProgress = (track.age - track.fadeStartAge) / (track.maxAge - track.fadeStartAge);
-        // Modify individual material opacity (each track has its own material clone)
-        const baseOpacity = 0.7 * (track.initialIntensity || 1.0);
-        track.mesh.material.opacity = baseOpacity * (1 - fadeProgress);
+    // Update tire tracks - despawn from furthest distance back to source
+    if (this.bloodTracks.length > 0) {
+      // Find the maximum distance from source among all tracks
+      const maxDistance = Math.max(...this.bloodTracks.map(t => t.distanceFromSource));
+
+      for (let i = this.bloodTracks.length - 1; i >= 0; i--) {
+        const track = this.bloodTracks[i];
+        track.age += deltaTime;
+
+        // Calculate when this track should start fading based on its distance
+        // Furthest tracks start fading immediately, closest tracks fade last
+        const distanceRatio = maxDistance > 0 ? track.distanceFromSource / maxDistance : 0;
+        const fadeStartDelay = (1 - distanceRatio) * 10; // Closer tracks wait up to 10 seconds
+        const adjustedFadeStartAge = fadeStartDelay;
+
+        // Check if track should be removed (based on distance-adjusted timing)
+        const distanceAdjustedAge = track.age - fadeStartDelay;
+        if (distanceAdjustedAge > 20) { // 20 seconds after its fade start
+          // Remove expired track and return to pool
+          this.scene.remove(track.mesh);
+          track.mesh.visible = false;
+          // Reset to default material before returning to pool
+          track.mesh.material = this.materialPool[9]; // Use highest opacity material
+          // Return mesh to pool for reuse
+          this.trackPool.push(track.mesh);
+          this.bloodTracks.splice(i, 1);
+        } else if (track.age > adjustedFadeStartAge) {
+          // Fade out based on how long after the adjusted fade start
+          const fadeProgress = Math.max(0, Math.min(1, (track.age - adjustedFadeStartAge) / 20));
+          const baseOpacity = 0.7 * (track.initialIntensity || 1.0);
+          const targetOpacity = baseOpacity * (1 - fadeProgress);
+          track.mesh.material = this.getMaterialForOpacity(targetOpacity);
+        }
       }
     }
   }
@@ -336,27 +383,28 @@ export class BloodTrackSystem {
 
   // Clean up all resources
   dispose() {
-    // Remove all tracks from scene and dispose individual material clones
+    // Remove all tracks from scene - NO material disposal needed (they're shared)
     for (const track of this.bloodTracks) {
       this.scene.remove(track.mesh);
-      // Dispose the cloned material
-      if (track.mesh.material && track.mesh.material !== this.trackMaterial) {
-        track.mesh.material.dispose();
-      }
+      // Don't dispose materials - they're from the shared pool
     }
 
-    // Remove pooled tracks from scene and dispose their materials
+    // Remove pooled tracks from scene - NO material disposal needed
     for (const track of this.trackPool) {
       this.scene.remove(track);
-      if (track.material && track.material !== this.trackMaterial) {
-        track.material.dispose();
-      }
+      // Don't dispose materials - they're from the shared pool
     }
 
     // Dispose shared geometry
     if (this.trackGeometry) {
       this.trackGeometry.dispose();
     }
+
+    // Dispose material pool
+    for (const material of this.materialPool) {
+      material.dispose();
+    }
+    this.materialPool = [];
 
     // Remove debug markers
     for (const marker of this.debugMarkers) {
@@ -372,6 +420,6 @@ export class BloodTrackSystem {
     this.trackPool = [];
     this.debugMarkers = [];
 
-    // Material is managed by MaterialManager - don't dispose the original
+    // Original material is managed by MaterialManager - don't dispose it
   }
 }

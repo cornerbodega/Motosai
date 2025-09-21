@@ -134,17 +134,36 @@ export class MaterialManager {
    * Get or create a shared material
    */
   getMaterial(type, options = {}) {
-    const key = `${type}_${JSON.stringify(options)}`;
+    // Re-enable with proper caching and THREE.Color fix
+    const normalizedOptions = this.normalizeOptions(options);
+    const key = `${type}_${JSON.stringify(normalizedOptions)}`;
 
     if (!this.sharedMaterials.has(key)) {
       const material = this.createMaterial(type, options);
       this.sharedMaterials.set(key, material);
       this.stats.shared++;
+      console.log(`Created material: ${key}`); // Debug logging
     } else {
       this.stats.reused++;
     }
 
     return this.sharedMaterials.get(key);
+  }
+
+  // Convert THREE.Color objects to hex numbers for consistent caching
+  normalizeOptions(options) {
+    const normalized = { ...options };
+
+    // Convert color properties that might be THREE.Color objects
+    for (const key in normalized) {
+      const value = normalized[key];
+      if (value && typeof value === 'object' && value.isColor) {
+        // Convert THREE.Color to hex number
+        normalized[key] = value.getHex();
+      }
+    }
+
+    return normalized;
   }
 
   /**

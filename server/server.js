@@ -45,11 +45,55 @@ app.get('/', (req, res) => {
 
 // Hello World REST endpoint
 app.get('/api/hello', (req, res) => {
-  res.json({ 
+  res.json({
     message: 'Hello World from Motosai!',
     server: 'motosai-websocket',
     time: new Date().toISOString()
   });
+});
+
+// Debug report endpoint for memory leak tracking
+app.post('/api/save-debug-report', async (req, res) => {
+  try {
+    const { filename, data, reportType, size } = req.body;
+
+    // Create reports directory if it doesn't exist
+    const reportsDir = path.join(__dirname, 'debug-reports');
+    if (!fs.existsSync(reportsDir)) {
+      fs.mkdirSync(reportsDir, { recursive: true });
+    }
+
+    // Save the report
+    const filePath = path.join(reportsDir, filename);
+    fs.writeFileSync(filePath, data, 'utf8');
+
+    console.log(`📄 Debug report saved: ${filename} (${(size / 1024).toFixed(1)}KB)`);
+
+    // Also log a summary for immediate visibility
+    if (reportType === 'memory-leak') {
+      try {
+        const reportData = JSON.parse(data);
+        console.log(`🚨 MEMORY LEAK REPORT: ${reportData.totalUndisposed} undisposed materials`);
+        console.log(`Top leak source: ${reportData.topLeakSources[0]?.[1]}x from ${reportData.topLeakSources[0]?.[0]}`);
+      } catch (e) {
+        console.log('🚨 Memory leak report saved but could not parse summary');
+      }
+    }
+
+    res.json({
+      success: true,
+      filename: filename,
+      size: size,
+      path: filePath
+    });
+
+  } catch (error) {
+    console.error('Error saving debug report:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
 });
 
 // In-memory storage fallback (when Supabase tables don't exist)

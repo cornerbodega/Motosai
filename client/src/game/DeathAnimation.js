@@ -77,6 +77,9 @@ export class DeathAnimation {
       debrisCylinder: new THREE.CylinderGeometry(0.05, 0.05, 0.1, 8)
     };
 
+    // Create material pools for different opacity levels to avoid cloning
+    this.materialPools = this.createMaterialPools();
+
     // Pre-create shared materials for splatters/pools
     this.splatterMaterial = new THREE.MeshBasicMaterial({
       color: 0x880000,
@@ -108,6 +111,93 @@ export class DeathAnimation {
       sizeAttenuation: true,
       depthWrite: false
     });
+  }
+
+  // Create material pools with different opacity levels to avoid cloning
+  createMaterialPools() {
+    const pools = {};
+
+    // Create splatter material pool (10 opacity levels)
+    pools.splatter = [];
+    for (let i = 1; i <= 10; i++) {
+      const opacity = i / 10;
+      pools.splatter.push(new THREE.MeshBasicMaterial({
+        color: 0x880000,
+        transparent: true,
+        opacity: opacity,
+        side: THREE.DoubleSide
+      }));
+    }
+
+    // Create pool material pool
+    pools.pool = [];
+    for (let i = 1; i <= 10; i++) {
+      const opacity = i / 10;
+      pools.pool.push(new THREE.MeshBasicMaterial({
+        color: 0x440000,
+        transparent: true,
+        opacity: opacity,
+        side: THREE.DoubleSide
+      }));
+    }
+
+    // Create bone material pool
+    pools.bone = [];
+    for (let i = 1; i <= 10; i++) {
+      const opacity = i / 10;
+      pools.bone.push(new THREE.MeshStandardMaterial({
+        color: 0xEEEECC,
+        transparent: true,
+        opacity: opacity,
+        roughness: 0.8,
+        metalness: 0.1
+      }));
+    }
+
+    // Create debris material pools
+    pools.metal = [];
+    pools.plastic = [];
+    for (let i = 1; i <= 10; i++) {
+      const opacity = i / 10;
+      pools.metal.push(new THREE.MeshStandardMaterial({
+        color: 0x666666,
+        transparent: true,
+        opacity: opacity,
+        metalness: 0.8,
+        roughness: 0.3
+      }));
+      pools.plastic.push(new THREE.MeshStandardMaterial({
+        color: 0x333333,
+        transparent: true,
+        opacity: opacity,
+        metalness: 0.1,
+        roughness: 0.7
+      }));
+    }
+
+    // Create flash material pool
+    pools.flash = [];
+    for (let i = 1; i <= 10; i++) {
+      const opacity = i / 10;
+      pools.flash.push(new THREE.MeshBasicMaterial({
+        color: 0xFFFF00,
+        transparent: true,
+        opacity: opacity,
+        emissive: 0xFFFF00,
+        emissiveIntensity: 0.3
+      }));
+    }
+
+    return pools;
+  }
+
+  // Get material with closest opacity from pool
+  getMaterialFromPool(poolName, targetOpacity) {
+    const pool = this.materialPools[poolName];
+    if (!pool) return this.splatterMaterial; // fallback
+
+    const index = Math.max(0, Math.min(9, Math.round(targetOpacity * 10) - 1));
+    return pool[index];
   }
   
   trigger(position, velocity, collisionNormal = null) {
@@ -142,8 +232,8 @@ export class DeathAnimation {
   }
   
   createBloodSplatter(position, direction) {
-    // Main splatter on impact surface - USE SHARED GEOMETRY AND MATERIAL
-    const splatter = new THREE.Mesh(this.sharedGeometries.largeSplatter, this.splatterMaterial.clone());
+    // Main splatter on impact surface - USE SHARED GEOMETRY AND POOLED MATERIAL
+    const splatter = new THREE.Mesh(this.sharedGeometries.largeSplatter, this.getMaterialFromPool('splatter', 0.7));
     
     // Position splatter on impact surface
     splatter.position.copy(position);
@@ -162,7 +252,7 @@ export class DeathAnimation {
     
     // Additional smaller splatters - keep them closer together
     for (let i = 0; i < 3; i++) {
-      const smallSplatter = new THREE.Mesh(this.sharedGeometries.smallSplatter, this.splatterMaterial.clone());
+      const smallSplatter = new THREE.Mesh(this.sharedGeometries.smallSplatter, this.getMaterialFromPool('splatter', 0.6));
       smallSplatter.scale.setScalar(Math.random() * 0.3 + 0.2); // Smaller scale
 
       smallSplatter.position.set(
@@ -245,7 +335,7 @@ export class DeathAnimation {
 
       // Use shared geometry based on type
       const boneGeo = this.sharedGeometries[boneType];
-      const bone = new THREE.Mesh(boneGeo, this.boneMaterial.clone());
+      const bone = new THREE.Mesh(boneGeo, this.getMaterialFromPool('bone', 1.0));
       bone.position.copy(position);
       bone.position.y += 0.5;
       
@@ -292,7 +382,7 @@ export class DeathAnimation {
   
   createBloodPool(position) {
     // Growing blood pool on ground - USE SHARED GEOMETRY
-    const pool = new THREE.Mesh(this.sharedGeometries.bloodPool, this.poolMaterial.clone());
+    const pool = new THREE.Mesh(this.sharedGeometries.bloodPool, this.getMaterialFromPool('pool', 0.8));
     pool.scale.set(0.1, 0.1, 1); // Start slightly bigger
 
     pool.position.copy(position);
@@ -344,7 +434,7 @@ export class DeathAnimation {
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     
     // Clone the blood trail material for individual opacity control
-    const bloodTrailMaterial = this.bloodTrailMaterial.clone();
+    const bloodTrailMaterial = this.bloodTrailMaterial;
     bloodTrailMaterial.size = 0.15;
     bloodTrailMaterial.opacity = 0.8;
 
@@ -366,9 +456,7 @@ export class DeathAnimation {
     const speed = velocity.length();
 
     // Create explosion flash using shared geometry
-    const flashMat = this.flashMaterial.clone();
-    flashMat.opacity = 1.0;
-    const flash = new THREE.Mesh(this.sharedGeometries.flash, flashMat);
+    const flash = new THREE.Mesh(this.sharedGeometries.flash, this.getMaterialFromPool('flash', 1.0));
     flash.position.copy(position);
     flash.position.y += 0.3;
     
@@ -465,7 +553,8 @@ export class DeathAnimation {
       // Use shared geometry for debris
       const debrisGeo = debris.type === 'wheel' ? this.sharedGeometries.debrisCylinder : this.sharedGeometries.debrisBox;
       
-      const debrisMesh = new THREE.Mesh(debrisGeo, material.clone());
+      const poolType = debris.type === 'wheel' ? 'plastic' : 'metal';
+      const debrisMesh = new THREE.Mesh(debrisGeo, this.getMaterialFromPool(poolType, 1.0));
       // Scale the shared geometry to match the debris size
       if (debris.type === 'wheel') {
         debrisMesh.scale.set(debris.size[0] * 6, debris.size[1] * 10, debris.size[0] * 6);
@@ -545,7 +634,8 @@ export class DeathAnimation {
         explosion.mesh.scale.setScalar(scale);
         
         // Fade out quickly
-        explosion.mesh.material.opacity = 1 - (explosion.age / explosion.maxAge);
+        const targetOpacity = 1 - (explosion.age / explosion.maxAge);
+        explosion.mesh.material = this.getMaterialFromPool('flash', targetOpacity);
       } else if (explosion.type === 'particles') {
         // Update explosion particle positions
         const positions = explosion.geometry.attributes.position.array;
@@ -574,7 +664,8 @@ export class DeathAnimation {
         const fadeStart = explosion.maxAge * 0.3;
         if (explosion.age > fadeStart) {
           const fadeProgress = (explosion.age - fadeStart) / (explosion.maxAge - fadeStart);
-          explosion.mesh.material.opacity = 1 - fadeProgress;
+          const targetOpacity = 1 - fadeProgress;
+          explosion.mesh.material = this.getMaterialFromPool('flash', targetOpacity);
         }
       }
     }
@@ -627,8 +718,9 @@ export class DeathAnimation {
       // Fade out near end
       if (debris.age > debris.maxAge - 1.5) {
         const fadeProgress = (debris.age - (debris.maxAge - 1.5)) / 1.5;
-        debris.mesh.material.opacity = 1 - fadeProgress;
-        debris.mesh.material.transparent = true;
+        const targetOpacity = 1 - fadeProgress;
+        const poolType = debris.type === 'wheel' ? 'plastic' : 'metal';
+        debris.mesh.material = this.getMaterialFromPool(poolType, targetOpacity);
       }
     }
     
@@ -777,15 +869,15 @@ export class DeathAnimation {
           
           // Fade out blood trail
           const fadeProgress = bone.bloodParticles.age / bone.bloodParticles.maxAge;
-          bone.bloodParticles.material.opacity = 0.8 * (1 - fadeProgress);
+          // Blood particles material opacity is managed by PointsMaterial - keep as is for now
         }
       }
       
       // Fade out near end (last 2 seconds)
       if (bone.age > bone.maxAge - 2) {
         const fadeProgress = (bone.age - (bone.maxAge - 2)) / 2;
-        bone.mesh.material.opacity = 1 - fadeProgress;
-        bone.mesh.material.transparent = true;
+        const targetOpacity = 1 - fadeProgress;
+        bone.mesh.material = this.getMaterialFromPool('bone', targetOpacity);
       }
     }
     
@@ -810,7 +902,8 @@ export class DeathAnimation {
       
       // Fade out near end
       if (splatter.age > splatter.maxAge - 1) {
-        splatter.mesh.material.opacity *= 0.9;
+        const currentOpacity = splatter.mesh.material.opacity * 0.9;
+        splatter.mesh.material = this.getMaterialFromPool('splatter', currentOpacity);
       }
     }
     
@@ -867,9 +960,7 @@ export class DeathAnimation {
     for (const debris of this.bikeDebris) {
       this.scene.remove(debris.mesh);
       // Dispose cloned material
-      if (debris.mesh.material && debris.mesh.material.dispose) {
-        debris.mesh.material.dispose();
-      }
+      // Material disposal is handled by pool cleanup - no individual disposal needed
       // Clean up Vector3 objects properly
       if (debris.velocity) { debris.velocity.x = null; debris.velocity.y = null; debris.velocity.z = null; debris.velocity = null; }
       if (debris.angularVelocity) { debris.angularVelocity.x = null; debris.angularVelocity.y = null; debris.angularVelocity.z = null; debris.angularVelocity = null; }
@@ -880,9 +971,7 @@ export class DeathAnimation {
     for (const bone of this.bones) {
       this.scene.remove(bone.mesh);
       // Dispose cloned material
-      if (bone.mesh.material && bone.mesh.material.dispose) {
-        bone.mesh.material.dispose();
-      }
+      // Material disposal is handled by pool cleanup - no individual disposal needed
       // Clean up Vector3 objects properly
       if (bone.velocity) { bone.velocity.x = null; bone.velocity.y = null; bone.velocity.z = null; bone.velocity = null; }
       if (bone.angularVelocity) { bone.angularVelocity.x = null; bone.angularVelocity.y = null; bone.angularVelocity.z = null; bone.angularVelocity = null; }
@@ -904,9 +993,7 @@ export class DeathAnimation {
     for (const splatter of this.bloodSplatters) {
       this.scene.remove(splatter.mesh);
       // Dispose cloned materials
-      if (splatter.mesh.material && splatter.mesh.material.dispose) {
-        splatter.mesh.material.dispose();
-      }
+      // Material disposal is handled by pool cleanup - no individual disposal needed
     }
     this.bloodSplatters = [];
   }
@@ -960,6 +1047,11 @@ export class DeathAnimation {
     this.poolMaterial.dispose();
     this.flashMaterial.dispose();
     this.bloodTrailMaterial.dispose();
+
+    // Dispose all material pools
+    Object.values(this.materialPools).forEach(pool => {
+      pool.forEach(material => material.dispose());
+    });
 
     // Dispose all shared geometries
     Object.values(this.sharedGeometries).forEach(geo => geo.dispose());
