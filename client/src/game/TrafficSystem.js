@@ -36,13 +36,13 @@ export class TrafficSystem {
     this.frustum = new THREE.Frustum();
     this.cameraMatrix = new THREE.Matrix4();
     
-    // Vehicle types (realistic highway speeds in MPH)
+    // Vehicle types (realistic highway speeds in m/s)
     this.vehicleTypes = [
-      { type: 'car', probability: 0.5, length: 4.5, width: 1.8, height: 1.4, speed: 70 }, // 70 mph
-      { type: 'suv', probability: 0.2, length: 5, width: 2, height: 1.8, speed: 65 }, // 65 mph
-      { type: 'truck', probability: 0.15, length: 6, width: 2.2, height: 2.5, speed: 60 }, // 60 mph (trucks slower)
-      { type: 'van', probability: 0.1, length: 5.5, width: 2, height: 2, speed: 65 }, // 65 mph
-      { type: 'sports', probability: 0.05, length: 4.2, width: 1.8, height: 1.2, speed: 80 } // 80 mph (sports cars faster)
+      { type: 'car', probability: 0.5, length: 4.5, width: 1.8, height: 1.4, speed: 31 }, // ~70 mph
+      { type: 'suv', probability: 0.2, length: 5, width: 2, height: 1.8, speed: 29 }, // ~65 mph
+      { type: 'truck', probability: 0.15, length: 6, width: 2.2, height: 2.5, speed: 27 }, // ~60 mph (trucks slower)
+      { type: 'van', probability: 0.1, length: 5.5, width: 2, height: 2, speed: 29 }, // ~65 mph
+      { type: 'sports', probability: 0.05, length: 4.2, width: 1.8, height: 1.2, speed: 36 } // ~80 mph (sports cars faster)
     ];
     
     // Materials are now managed by MaterialManager - no need to create them here
@@ -235,7 +235,7 @@ export class TrafficSystem {
         laneChangeSpeed: 1.5 + Math.random() * 0.5, // Variable smooth lane changes (1.5-2.0 seconds)
         position: new THREE.Vector3(),
         velocity: new THREE.Vector3(),
-        speed: type.speed + (Math.random() - 0.5) * 10,
+        speed: type.speed + (Math.random() - 0.5) * 4, // ±~10 mph variation
         baseSpeed: type.speed,
         length: type.length,
         width: type.width,
@@ -270,7 +270,7 @@ export class TrafficSystem {
       const spawnZ = playerZ + spawnOffset;
 
       vehicle.position.set(laneX, 0.5, spawnZ);
-      vehicle.velocity.z = vehicle.speed / 2.237;
+      vehicle.velocity.z = vehicle.speed; // Already in m/s
     }
     
     vehicle.mesh.position.copy(vehicle.position);
@@ -580,8 +580,8 @@ export class TrafficSystem {
       const passingThreshold = 40; // Need to be closer to consider passing
       const minPassingGap = 15; // Need more space
 
-      // Only pass if vehicle is significantly slower (10+ mph difference)
-      if (speedDiff > 10 && distance < passingThreshold && distance > minPassingGap) {
+      // Only pass if vehicle is significantly slower (4+ m/s difference, ~10 mph)
+      if (speedDiff > 4 && distance < passingThreshold && distance > minPassingGap) {
         // Try to pass if haven't changed lanes recently
         const laneChangeDelay = 5.0; // Wait at least 5 seconds between passes
         if (vehicle.behavior.lastLaneChange > laneChangeDelay && vehicle.targetLane === vehicle.lane) {
@@ -664,8 +664,7 @@ export class TrafficSystem {
     }
     
     // Update velocity based on speed (all same direction)
-    const speedMS = vehicle.speed / 2.237;
-    vehicle.velocity.z = speedMS;
+    vehicle.velocity.z = vehicle.speed; // Already in m/s
   }
   
   attemptLaneChange(vehicle, targetLane = null, requiredGap = null) {
@@ -962,9 +961,8 @@ export class TrafficSystem {
     if (vehicleIndex >= 0) {
       const vehicle = this.vehicles[vehicleIndex];
       this.scene.remove(vehicle.mesh);
-      vehicle.mesh.traverse((object) => {
-        if (object.geometry) object.geometry.dispose();
-      });
+      // DON'T dispose geometry - it's shared by all vehicles!
+      // Just remove the mesh from scene
       this.vehicles.splice(vehicleIndex, 1);
     }
   }

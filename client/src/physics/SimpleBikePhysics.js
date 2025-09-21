@@ -13,10 +13,10 @@ export class SimpleBikePhysics {
     // Speed parameters - More realistic motorcycle physics
     this.speed = 0; // Current speed in m/s
     this.maxSpeed = Infinity; // No speed limit!
-    this.baseAcceleration = 12; // Strong but realistic acceleration (~1.2G)
-    this.acceleration = 12; // Current acceleration
-    this.deceleration = 3; // m/s² (coasting/engine braking)
-    this.brakeDeceleration = 10; // m/s² (sport bike brakes ~1G)
+    this.baseAcceleration = 60; // Back to original - it was tuned correctly
+    this.acceleration = 60; // Current acceleration
+    this.deceleration = 30; // m/s² (coasting) - original values
+    this.brakeDeceleration = 90; // m/s² (sport bike brakes are powerful!)
     this.throttleHoldTime = 0; // How long throttle has been held
     
     // Aggressive torque curve - instant power!
@@ -229,16 +229,15 @@ export class SimpleBikePhysics {
       this.throttleHoldTime = 0;
       this.acceleration = this.baseAcceleration;
       
-      // Very minimal deceleration - mostly maintain speed
-      const displaySpeedMPH = this.speed * 2.237;
-      let coastDecel = 0.01; // Almost no deceleration - just air resistance
+      // Minimal coasting deceleration - bike should maintain speed
+      let coastDecel = 0.1; // Almost no deceleration
 
-      // Only add noticeable drag at extreme speeds
-      if (displaySpeedMPH > 200) {
-        coastDecel += (displaySpeedMPH - 200) * 0.0005; // Even less drag increase
+      // Only add noticeable drag at very high speeds
+      if (this.speed > 100) { // Above ~220 mph
+        coastDecel += (this.speed - 100) * 0.001; // Minimal drag increase
       }
 
-      // Apply very gradual deceleration
+      // Apply minimal deceleration
       this.speed = Math.max(0, this.speed - coastDecel * deltaTime);
     }
     
@@ -433,8 +432,8 @@ export class SimpleBikePhysics {
     
     // Add wobble effect from collision
     if (this.collision.isWobbling && this.collision.wobbleAmplitude > 0.01) {
-      const wobbleFreq = 15; // Hz
-      const wobble = Math.sin(Date.now() * 0.001 * wobbleFreq) * this.collision.wobbleAmplitude;
+      const wobbleFreq = 3; // Reduced from 15 Hz to 3 Hz for smoother wobble
+      const wobble = Math.sin(Date.now() * 0.001 * wobbleFreq) * this.collision.wobbleAmplitude * 0.3; // Also reduced amplitude
       this.rotation.roll = this.leanAngle + wobble;
     } else {
       // Ensure clean lean angle when not wobbling
@@ -537,7 +536,7 @@ export class SimpleBikePhysics {
       position: this.position, // Direct reference, no clone
       velocity: this.velocity, // Direct reference, no clone
       rotation: this.rotation, // Direct reference, no clone
-      speed: this.speed * 2.237, // Display speed in MPH (m/s to mph)
+      speed: this.speed * 2.237, // Convert m/s to MPH for display only
       actualSpeed: this.speed, // Keep actual speed for physics
       rpm: Math.round(this.rpm),
       gear: this.gear,

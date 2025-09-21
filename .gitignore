@@ -25,6 +25,16 @@ yarn-debug.log*
 yarn-error.log*
 lerna-debug.log*
 
+# Memory profiling and debugging
+memory-logs/
+*/memory-logs/
+memory-snapshots/
+*/memory-snapshots/
+*.memory.json
+*memory-snapshot*
+*memory-report*
+*.jsonl
+
 # OS files
 .DS_Store
 .DS_Store?

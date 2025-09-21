@@ -340,8 +340,8 @@ export class MotosaiGame {
     this.sunLight.shadow.mapSize.height = this.currentConfig.shadowMapSize;
     this.sunLight.shadow.radius = 2; // Reduced soft shadow edges
     this.sunLight.shadow.blurSamples = 10; // Fewer blur samples for performance
-    this.sunLight.shadow.bias = -0.0005; // Add negative bias to fix shadow acne
-    this.sunLight.shadow.normalBias = 0.02; // Add normal bias to prevent artifacts
+    this.sunLight.shadow.bias = 0.001; // Positive bias to prevent shadow acne
+    this.sunLight.shadow.normalBias = 0.05; // Increased normal bias to prevent self-shadowing artifacts
     this.scene.add(this.sunLight);
     
     // Hemisphere light for soft sky lighting
@@ -847,19 +847,19 @@ export class MotosaiGame {
       state.position.z + lookOffset.z
     );
     
-    // Smooth camera movement - more responsive at all speeds
+    // Smooth camera movement - much tighter to prevent player escaping
     const speedMPH = state.speed;
     let smoothing;
     if (speedMPH > 200) {
-      smoothing = 1.0; // Instant lock at extreme speeds
+      smoothing = 0.8; // Near instant at extreme speeds
     } else if (speedMPH > 150) {
-      smoothing = 0.95; // Nearly instant
+      smoothing = 0.75; // Very quick response
     } else if (speedMPH > 100) {
-      smoothing = 0.85;
+      smoothing = 0.7;
     } else if (speedMPH > 50) {
-      smoothing = 0.75;
+      smoothing = 0.65;
     } else {
-      smoothing = 0.65; // Much more responsive at low speeds (was 0.25)
+      smoothing = 0.6; // Tight tracking even at low speeds
     }
     
     this.cameraPosition.lerp(targetCameraPos, smoothing);
@@ -1214,7 +1214,7 @@ export class MotosaiGame {
         }
         this.screenShake.intensity = 5;
         this.screenShake.duration = 0.2;
-        console.log(`Barrier bump at ${collision.speedMph.toFixed(0)} mph`);
+        // Removed console.log to prevent memory accumulation
         break;
         
       case 'explode':
@@ -1225,7 +1225,7 @@ export class MotosaiGame {
         }
         this.screenShake.intensity = 15;
         this.screenShake.duration = 0.5;
-        console.log(`Barrier explosion at ${collision.speedMph.toFixed(0)} mph`);
+        // Removed console.log to prevent memory accumulation
         break;
         
       case 'smear':
@@ -1254,7 +1254,7 @@ export class MotosaiGame {
         
         this.screenShake.intensity = 30;
         this.screenShake.duration = 1.0;
-        console.log(`Barrier SMEAR at ${collision.speedMph.toFixed(0)} mph!`);
+        // Removed console.log to prevent memory accumulation
         break;
     }
   }

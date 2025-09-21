@@ -68,8 +68,11 @@ export class AudioManager {
       });
       // Clean up after sound finishes
       clonedSound.addEventListener('ended', () => {
-        clonedSound.remove();
-      });
+        // Properly clean up audio element
+        clonedSound.pause();
+        clonedSound.src = '';
+        clonedSound.load();
+      }, { once: true }); // Use once: true to auto-remove listener
       // console.log(`[AudioManager] Playing sound (cloned): ${soundName} | Volume: ${volume} | Loop: ${loop}`);
     } else {
       sound.currentTime = 0;
@@ -99,10 +102,10 @@ export class AudioManager {
     console.log('[AudioManager] All sounds stopped');
   }
   
-  updateEngineSound(speed) {
+  updateEngineSound(speedMPH) {
     if (!this.isEnabled) return;
-    
-    const speedMPH = Math.abs(speed * 2.237);
+
+    // Speed is already in MPH from the physics state
     let targetSound = null;
     
     if (speedMPH < 30) {
