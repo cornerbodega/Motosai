@@ -242,19 +242,12 @@ export class Highway101 {
     
     // Add reflective strips for visibility - WHITE like guardrails
     const stripGeo = new THREE.BoxGeometry(0.1, 0.1, this.segmentLength);
-    const stripMat = new THREE.MeshStandardMaterial({
-      color: 0xffffff,
-      emissive: 0xffffff,
-      emissiveIntensity: 0.2,
-      metalness: 0.9,
-      roughness: 0.1
-    });
-    
-    const leftStrip = new THREE.Mesh(stripGeo, stripMat);
+
+    const leftStrip = new THREE.Mesh(stripGeo, this.propMaterials.stripReflective);
     leftStrip.position.set(-railingOffset + 0.25, 0.9, 0);
     segment.add(leftStrip);
-    
-    const rightStrip = new THREE.Mesh(stripGeo, stripMat);
+
+    const rightStrip = new THREE.Mesh(stripGeo, this.propMaterials.stripReflective);
     rightStrip.position.set(railingOffset - 0.25, 0.9, 0);
     segment.add(rightStrip);
     
@@ -291,18 +284,16 @@ export class Highway101 {
   
   createSimpleTree() {
     const tree = new THREE.Group();
-    
-    // Simple trunk
+
+    // Simple trunk - use shared material
     const trunkGeo = new THREE.CylinderGeometry(0.2, 0.3, 2, 4);
-    const trunkMat = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
-    const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+    const trunk = new THREE.Mesh(trunkGeo, this.propMaterials.trunk);
     trunk.position.y = 1;
     tree.add(trunk);
-    
-    // Simple foliage
+
+    // Simple foliage - use shared material
     const foliageGeo = new THREE.ConeGeometry(1.5, 3, 4);
-    const foliageMat = new THREE.MeshLambertMaterial({ color: 0x228B22 });
-    const foliage = new THREE.Mesh(foliageGeo, foliageMat);
+    const foliage = new THREE.Mesh(foliageGeo, this.propMaterials.foliage);
     foliage.position.y = 3;
     tree.add(foliage);
     
@@ -335,18 +326,16 @@ export class Highway101 {
   
   createDistanceSign(miles) {
     const signGroup = new THREE.Group();
-    
-    // Pole
+
+    // Pole - use shared material
     const poleGeo = new THREE.CylinderGeometry(0.05, 0.05, 2, 4); // Reduced from 3 to 2
-    const poleMat = new THREE.MeshLambertMaterial({ color: 0x666666 });
-    const pole = new THREE.Mesh(poleGeo, poleMat);
+    const pole = new THREE.Mesh(poleGeo, this.propMaterials.pole);
     pole.position.y = 1; // Lowered from 1.5 to 1
     signGroup.add(pole);
-    
-    // Sign board
+
+    // Sign board - use shared material
     const signGeo = new THREE.BoxGeometry(2, 1, 0.1);
-    const signMat = new THREE.MeshLambertMaterial({ color: 0x006600 });
-    const signBoard = new THREE.Mesh(signGeo, signMat);
+    const signBoard = new THREE.Mesh(signGeo, this.propMaterials.sign);
     signBoard.position.y = 2; // Lowered from 3 to 2
     signGroup.add(signBoard);
     
@@ -355,23 +344,21 @@ export class Highway101 {
   
   createExitSign() {
     const signGroup = new THREE.Group();
-    
-    // Support structure
+
+    // Support structure - use shared material
     const supportGeo = new THREE.BoxGeometry(0.2, 3, 0.2); // Reduced from 4 to 3
-    const supportMat = new THREE.MeshLambertMaterial({ color: 0x444444 });
-    
-    const support1 = new THREE.Mesh(supportGeo, supportMat);
+
+    const support1 = new THREE.Mesh(supportGeo, this.propMaterials.support);
     support1.position.set(-2, 1.5, 0); // Lowered from 2 to 1.5
     signGroup.add(support1);
-    
-    const support2 = new THREE.Mesh(supportGeo, supportMat);
+
+    const support2 = new THREE.Mesh(supportGeo, this.propMaterials.support);
     support2.position.set(2, 1.5, 0); // Lowered from 2 to 1.5
     signGroup.add(support2);
-    
-    // Sign
+
+    // Sign - use shared material
     const signGeo = new THREE.BoxGeometry(5, 2, 0.2);
-    const signMat = new THREE.MeshLambertMaterial({ color: 0x006633 });
-    const sign = new THREE.Mesh(signGeo, signMat);
+    const sign = new THREE.Mesh(signGeo, this.propMaterials.signLarge);
     sign.position.y = 2.5; // Lowered from 4 to 2.5
     signGroup.add(sign);
     
@@ -685,9 +672,12 @@ export class Highway101 {
     // Clear segments array
     this.segments = [];
 
+    // Clear prop materials reference (materials themselves managed by MaterialManager)
+    this.propMaterials = null;
+
     // Materials are managed by MaterialManager - don't dispose them here
     // They will be disposed when MaterialManager.dispose() is called
-    
+
     // Dispose of instanced tree meshes
     if (this.treeMesh) {
       this.treeMesh.geometry.dispose();
