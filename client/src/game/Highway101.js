@@ -31,8 +31,39 @@ export class Highway101 {
     
     // Instanced meshes for trees
     this.initInstancedTrees();
+
+    // Initialize shared geometries to prevent memory leaks
+    this.initSharedGeometries();
   }
-  
+
+  initSharedGeometries() {
+    // Create shared geometries that will be reused for all segments
+    this.sharedRoadGeometries = {
+      // Road surfaces
+      road: new THREE.PlaneGeometry(this.totalWidth, this.segmentLength + 0.1),
+      shoulder: new THREE.PlaneGeometry(this.shoulderWidth, this.segmentLength + 0.1),
+      grass: new THREE.PlaneGeometry(50, this.segmentLength + 0.2),
+
+      // Lane markings
+      dash: new THREE.PlaneGeometry(0.15, 3), // lineWidth x dashLength
+      edgeLine: new THREE.PlaneGeometry(0.3, this.segmentLength), // lineWidth * 2
+
+      // Barriers
+      barrier: new THREE.BoxGeometry(0.5, 1.2, this.segmentLength),
+      strip: new THREE.BoxGeometry(0.1, 0.1, this.segmentLength),
+
+      // Trees
+      trunk: new THREE.CylinderGeometry(0.2, 0.3, 2, 4),
+      foliage: new THREE.ConeGeometry(1.5, 3, 4),
+
+      // Signs
+      pole: new THREE.CylinderGeometry(0.05, 0.05, 2, 4),
+      signSmall: new THREE.BoxGeometry(2, 1, 0.1),
+      signSupport: new THREE.BoxGeometry(0.2, 3, 0.2),
+      signLarge: new THREE.BoxGeometry(5, 2, 0.2)
+    };
+  }
+
   initMaterials() {
     // Use shared materials from MaterialManager
     this.asphaltMat = this.materialManager.getRoadMaterial('asphalt');
@@ -102,10 +133,9 @@ export class Highway101 {
   createSegment(zPosition) {
     const segment = new THREE.Group();
     segment.position.z = zPosition; // Position the whole group
-    
-    // Main road surface - slightly overlap to prevent gaps
-    const roadGeo = new THREE.PlaneGeometry(this.totalWidth, this.segmentLength + 0.1);
-    const road = new THREE.Mesh(roadGeo, this.asphaltMat);
+
+    // Main road surface - use shared geometry
+    const road = new THREE.Mesh(this.sharedRoadGeometries.road, this.asphaltMat);
     road.rotation.x = -Math.PI / 2;
     road.position.z = 0; // Local to group
     road.receiveShadow = true;
@@ -114,15 +144,13 @@ export class Highway101 {
     // Store LOD level
     segment.userData.lodLevel = 0;
     
-    // Shoulders - slightly overlap
-    const shoulderGeo = new THREE.PlaneGeometry(this.shoulderWidth, this.segmentLength + 0.1);
-    
-    const leftShoulder = new THREE.Mesh(shoulderGeo, this.shoulderMat);
+    // Shoulders - use shared geometry
+    const leftShoulder = new THREE.Mesh(this.sharedRoadGeometries.shoulder, this.shoulderMat);
     leftShoulder.rotation.x = -Math.PI / 2;
     leftShoulder.position.set(-this.totalWidth / 2 - this.shoulderWidth / 2, 0.01, 0);
     segment.add(leftShoulder);
     
-    const rightShoulder = new THREE.Mesh(shoulderGeo, this.shoulderMat);
+    const rightShoulder = new THREE.Mesh(this.sharedRoadGeometries.shoulder, this.shoulderMat);
     rightShoulder.rotation.x = -Math.PI / 2;
     rightShoulder.position.set(this.totalWidth / 2 + this.shoulderWidth / 2, 0.01, 0);
     segment.add(rightShoulder);
@@ -169,8 +197,7 @@ export class Highway101 {
       const xPos = divider === 0 ? (lane0X + lane1X) / 2 : (lane1X + lane2X) / 2;
       
       for (let i = 0; i < this.segmentLength; i += dashLength + dashGap) {
-        const dashGeo = new THREE.PlaneGeometry(lineWidth, dashLength);
-        const dash = new THREE.Mesh(dashGeo, this.whiteMat);
+        const dash = new THREE.Mesh(this.sharedRoadGeometries.dash, this.whiteMat);
         dash.rotation.x = -Math.PI / 2;
         dash.position.set(xPos, markingHeight, -this.segmentLength / 2 + i + dashLength/2);
         dash.userData.isMarking = true;
@@ -179,17 +206,15 @@ export class Highway101 {
       }
     }
     
-    // Edge lines
-    const edgeLineGeo = new THREE.PlaneGeometry(lineWidth * 2, this.segmentLength);
-    
-    const leftEdge = new THREE.Mesh(edgeLineGeo, this.whiteMat);
+    // Edge lines - use shared geometry
+    const leftEdge = new THREE.Mesh(this.sharedRoadGeometries.edgeLine, this.whiteMat);
     leftEdge.rotation.x = -Math.PI / 2;
     leftEdge.position.set(-this.totalWidth / 2, markingHeight, 0);
     leftEdge.userData.isMarking = true;
     segment.add(leftEdge);
     if (segmentData) segmentData.detailGroups.markings.push(leftEdge);
     
-    const rightEdge = new THREE.Mesh(edgeLineGeo, this.whiteMat);
+    const rightEdge = new THREE.Mesh(this.sharedRoadGeometries.edgeLine, this.whiteMat);
     rightEdge.rotation.x = -Math.PI / 2;
     rightEdge.position.set(this.totalWidth / 2, markingHeight, 0);
     rightEdge.userData.isMarking = true;
@@ -200,11 +225,9 @@ export class Highway101 {
   createRoadside(segment, zPosition) {
     const segmentData = this.segments.find(s => s.group === segment);
     
-    // Grass areas - overlap to prevent gaps
+    // Grass areas - use shared geometry
     const grassWidth = 50;
-    const grassGeo = new THREE.PlaneGeometry(grassWidth, this.segmentLength + 0.2);
-    
-    const leftGrass = new THREE.Mesh(grassGeo, this.grassMat);
+    const leftGrass = new THREE.Mesh(this.sharedRoadGeometries.grass, this.grassMat);
     leftGrass.rotation.x = -Math.PI / 2;
     leftGrass.position.set(-this.totalWidth / 2 - this.shoulderWidth - grassWidth / 2, -0.1, 0);
     leftGrass.receiveShadow = true;
@@ -212,7 +235,7 @@ export class Highway101 {
     segment.add(leftGrass);
     if (segmentData) segmentData.detailGroups.roadside.push(leftGrass);
     
-    const rightGrass = new THREE.Mesh(grassGeo, this.grassMat);
+    const rightGrass = new THREE.Mesh(this.sharedRoadGeometries.grass, this.grassMat);
     rightGrass.rotation.x = -Math.PI / 2;
     rightGrass.position.set(this.totalWidth / 2 + this.shoulderWidth + grassWidth / 2, -0.1, 0);
     rightGrass.receiveShadow = true;
@@ -221,33 +244,30 @@ export class Highway101 {
     if (segmentData) segmentData.detailGroups.roadside.push(rightGrass);
     
     // GUARDRAILS - Much further out (beyond shoulder)
-    const barrierGeo = new THREE.BoxGeometry(0.5, 1.2, this.segmentLength);
     const railingOffset = ROAD_CONSTANTS.TOTAL_WIDTH / 2 + ROAD_CONSTANTS.BARRIER_OFFSET; // Further out beyond shoulder
-    
-    // Left guardrail
-    const leftBarrier = new THREE.Mesh(barrierGeo, this.barrierMat);
+
+    // Left guardrail - use shared geometry
+    const leftBarrier = new THREE.Mesh(this.sharedRoadGeometries.barrier, this.barrierMat);
     leftBarrier.position.set(-railingOffset, 0.6, 0);
     leftBarrier.castShadow = false; // No shadows for performance
     leftBarrier.userData.isBarrier = true;
     segment.add(leftBarrier);
     if (segmentData) segmentData.detailGroups.roadside.push(leftBarrier);
     
-    // Right guardrail
-    const rightBarrier = new THREE.Mesh(barrierGeo, this.barrierMat);
+    // Right guardrail - use shared geometry
+    const rightBarrier = new THREE.Mesh(this.sharedRoadGeometries.barrier, this.barrierMat);
     rightBarrier.position.set(railingOffset, 0.6, 0);
     rightBarrier.castShadow = false; // No shadows for performance
     rightBarrier.userData.isBarrier = true;
     segment.add(rightBarrier);
     if (segmentData) segmentData.detailGroups.roadside.push(rightBarrier);
     
-    // Add reflective strips for visibility - WHITE like guardrails
-    const stripGeo = new THREE.BoxGeometry(0.1, 0.1, this.segmentLength);
-
-    const leftStrip = new THREE.Mesh(stripGeo, this.propMaterials.stripReflective);
+    // Add reflective strips for visibility - WHITE like guardrails - use shared geometry
+    const leftStrip = new THREE.Mesh(this.sharedRoadGeometries.strip, this.propMaterials.stripReflective);
     leftStrip.position.set(-railingOffset + 0.25, 0.9, 0);
     segment.add(leftStrip);
 
-    const rightStrip = new THREE.Mesh(stripGeo, this.propMaterials.stripReflective);
+    const rightStrip = new THREE.Mesh(this.sharedRoadGeometries.strip, this.propMaterials.stripReflective);
     rightStrip.position.set(railingOffset - 0.25, 0.9, 0);
     segment.add(rightStrip);
     
@@ -285,15 +305,13 @@ export class Highway101 {
   createSimpleTree() {
     const tree = new THREE.Group();
 
-    // Simple trunk - use shared material
-    const trunkGeo = new THREE.CylinderGeometry(0.2, 0.3, 2, 4);
-    const trunk = new THREE.Mesh(trunkGeo, this.propMaterials.trunk);
+    // Simple trunk - use shared geometry and material
+    const trunk = new THREE.Mesh(this.sharedRoadGeometries.trunk, this.propMaterials.trunk);
     trunk.position.y = 1;
     tree.add(trunk);
 
-    // Simple foliage - use shared material
-    const foliageGeo = new THREE.ConeGeometry(1.5, 3, 4);
-    const foliage = new THREE.Mesh(foliageGeo, this.propMaterials.foliage);
+    // Simple foliage - use shared geometry and material
+    const foliage = new THREE.Mesh(this.sharedRoadGeometries.foliage, this.propMaterials.foliage);
     foliage.position.y = 3;
     tree.add(foliage);
     
@@ -327,15 +345,13 @@ export class Highway101 {
   createDistanceSign(miles) {
     const signGroup = new THREE.Group();
 
-    // Pole - use shared material
-    const poleGeo = new THREE.CylinderGeometry(0.05, 0.05, 2, 4); // Reduced from 3 to 2
-    const pole = new THREE.Mesh(poleGeo, this.propMaterials.pole);
+    // Pole - use shared geometry and material
+    const pole = new THREE.Mesh(this.sharedRoadGeometries.pole, this.propMaterials.pole);
     pole.position.y = 1; // Lowered from 1.5 to 1
     signGroup.add(pole);
 
-    // Sign board - use shared material
-    const signGeo = new THREE.BoxGeometry(2, 1, 0.1);
-    const signBoard = new THREE.Mesh(signGeo, this.propMaterials.sign);
+    // Sign board - use shared geometry and material
+    const signBoard = new THREE.Mesh(this.sharedRoadGeometries.signSmall, this.propMaterials.sign);
     signBoard.position.y = 2; // Lowered from 3 to 2
     signGroup.add(signBoard);
     
@@ -345,20 +361,17 @@ export class Highway101 {
   createExitSign() {
     const signGroup = new THREE.Group();
 
-    // Support structure - use shared material
-    const supportGeo = new THREE.BoxGeometry(0.2, 3, 0.2); // Reduced from 4 to 3
-
-    const support1 = new THREE.Mesh(supportGeo, this.propMaterials.support);
+    // Support structure - use shared geometry and material
+    const support1 = new THREE.Mesh(this.sharedRoadGeometries.signSupport, this.propMaterials.support);
     support1.position.set(-2, 1.5, 0); // Lowered from 2 to 1.5
     signGroup.add(support1);
 
-    const support2 = new THREE.Mesh(supportGeo, this.propMaterials.support);
+    const support2 = new THREE.Mesh(this.sharedRoadGeometries.signSupport, this.propMaterials.support);
     support2.position.set(2, 1.5, 0); // Lowered from 2 to 1.5
     signGroup.add(support2);
 
-    // Sign - use shared material
-    const signGeo = new THREE.BoxGeometry(5, 2, 0.2);
-    const sign = new THREE.Mesh(signGeo, this.propMaterials.signLarge);
+    // Sign - use shared geometry and material
+    const sign = new THREE.Mesh(this.sharedRoadGeometries.signLarge, this.propMaterials.signLarge);
     sign.position.y = 2.5; // Lowered from 4 to 2.5
     signGroup.add(sign);
     
@@ -581,7 +594,7 @@ export class Highway101 {
   }
   
   regenerateRoadside(segment) {
-    // Remove old trees and signs - properly dispose of geometries
+    // Remove old trees and signs - DON'T dispose shared geometries
     const toRemove = [];
     segment.group.traverse(child => {
       if (child.userData.roadside || child.userData.isSign || child.userData.isTree) {
@@ -589,11 +602,8 @@ export class Highway101 {
       }
     });
     toRemove.forEach(child => {
-      // Dispose of geometry for non-shared objects
-      if (child.geometry) {
-        child.geometry.dispose();
-      }
-      // Don't dispose materials as they're shared
+      // DON'T dispose geometry - it's shared!
+      // DON'T dispose materials - they're shared!
       segment.group.remove(child);
     });
     
@@ -659,18 +669,23 @@ export class Highway101 {
     // Remove all segments from scene
     this.segments.forEach(segment => {
       if (segment.group) {
-        segment.group.traverse((object) => {
-          if (object.geometry) {
-            object.geometry.dispose();
-          }
-          // DON'T dispose materials - they're managed by MaterialManager
-        });
+        // Just remove from scene - don't dispose shared geometries
         this.scene.remove(segment.group);
       }
     });
 
     // Clear segments array
     this.segments = [];
+
+    // Dispose all shared geometries
+    if (this.sharedRoadGeometries) {
+      Object.values(this.sharedRoadGeometries).forEach(geo => {
+        if (geo && geo.dispose) {
+          geo.dispose();
+        }
+      });
+      this.sharedRoadGeometries = null;
+    }
 
     // Clear prop materials reference (materials themselves managed by MaterialManager)
     this.propMaterials = null;
@@ -771,38 +786,33 @@ export class Highway101 {
   
   disposeSegment(segment) {
     if (!segment) return;
-    
+
     // Remove from scene and dispose group
     if (segment.group) {
-      // Traverse and dispose all children
+      // Traverse and remove all children
       const toDispose = [];
       segment.group.traverse(child => {
         if (child !== segment.group) {
           toDispose.push(child);
         }
       });
-      
+
       toDispose.forEach(child => {
-        // Dispose geometry (if not shared)
-        if (child.geometry && !child.userData.sharedGeometry) {
-          child.geometry.dispose();
-        }
-        
-        // Don't dispose shared materials
-        // Materials are reused across segments
-        
+        // DON'T dispose geometry - it's all shared now!
+        // DON'T dispose materials - they're shared!
+
         // Remove from parent
         if (child.parent) {
           child.parent.remove(child);
         }
       });
-      
+
       // Remove group from scene
       if (segment.group.parent) {
         segment.group.parent.remove(segment.group);
       }
     }
-    
+
     // Clear references
     segment.group = null;
     segment.detailGroups = null;
