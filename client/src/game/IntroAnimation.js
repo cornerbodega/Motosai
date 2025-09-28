@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 
 export class IntroAnimation {
-    constructor(scene, camera) {
+    constructor(scene, camera, audioManager = null) {
         this.scene = scene;
         this.camera = camera;
+        this.audioManager = audioManager;
         this.animationPhase = 'emoji';
         this.emojiMesh = null;
         this.motorcycleMesh = null;
@@ -101,6 +102,11 @@ export class IntroAnimation {
                     this.motorcycleMesh = this.createMotorcycle3D();
                     this.scene.add(this.motorcycleMesh);
                     this.morphProgress = 0;
+
+                    // Play morph sound
+                    if (this.audioManager) {
+                        this.audioManager.playIntroMorph();
+                    }
                 }
             } else if (this.animationPhase === 'morph') {
                 // Morph from emoji to 3D

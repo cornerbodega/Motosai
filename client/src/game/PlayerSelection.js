@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 
 export class PlayerSelection {
-    constructor(scene, camera) {
+    constructor(scene, camera, audioManager = null) {
         this.scene = scene;
         this.camera = camera;
+        this.audioManager = audioManager;
         this.selectedBike = null;
         this.availableBikes = [];
         this.unlockedBikes = ['default'];
@@ -248,6 +249,10 @@ export class PlayerSelection {
                 bikeCard.addEventListener('mouseenter', () => {
                     bikeCard.style.transform = 'scale(1.05)';
                     bikeCard.style.borderColor = '#fff';
+                    // Play hover sound
+                    if (this.audioManager) {
+                        this.audioManager.playUIHover();
+                    }
                 });
 
                 bikeCard.addEventListener('mouseleave', () => {
@@ -256,6 +261,10 @@ export class PlayerSelection {
                 });
 
                 bikeCard.addEventListener('click', () => {
+                    // Play selection sound
+                    if (this.audioManager) {
+                        this.audioManager.playUISelect();
+                    }
                     this.selectBike(bike);
                 });
             }
@@ -310,6 +319,10 @@ export class PlayerSelection {
 
         startButton.addEventListener('click', () => {
             if (this.selectedBike && this.onSelectionComplete) {
+                // Play start game sound
+                if (this.audioManager) {
+                    this.audioManager.playUISelect();
+                }
                 this.onSelectionComplete(this.selectedBike);
                 this.hideSelectionUI();
             }

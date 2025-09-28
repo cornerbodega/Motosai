@@ -604,10 +604,10 @@ export class MotosaiGame {
 
   showIntroAndSelection(callback) {
     // Create intro animation
-    this.introAnimation = new IntroAnimation(this.scene, this.camera);
+    this.introAnimation = new IntroAnimation(this.scene, this.camera, this.audioManager);
 
     // Create player selection
-    this.playerSelection = new PlayerSelection(this.scene, this.camera);
+    this.playerSelection = new PlayerSelection(this.scene, this.camera, this.audioManager);
 
     // Start intro animation
     this.introAnimation.onComplete = () => {
@@ -637,7 +637,7 @@ export class MotosaiGame {
   }
 
   initPowerupSystem() {
-    this.powerupSystem = new PowerupSystem(this.scene, this.playerSelection);
+    this.powerupSystem = new PowerupSystem(this.scene, this.playerSelection, this.audioManager);
   }
   
   async initMultiplayer() {

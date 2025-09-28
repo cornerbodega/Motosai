@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 
 export class PowerupSystem {
-    constructor(scene, playerSelection) {
+    constructor(scene, playerSelection, audioManager = null) {
         this.scene = scene;
         this.playerSelection = playerSelection;
+        this.audioManager = audioManager;
         this.powerups = [];
         this.powerupCounters = new Map();
         this.powerupTypes = [
@@ -29,7 +30,7 @@ export class PowerupSystem {
         this.lastSpawnTime = Date.now();
         this.maxPowerups = 1; // Maximum 1 powerup at a time (very rare)
 
-        this.createUI();
+        // UI moved to PlayerSelection screen
     }
 
     createSharedTextures() {
@@ -140,13 +141,17 @@ export class PowerupSystem {
 
         powerup.collected = true;
 
+        // Play collection sound
+        if (this.audioManager) {
+            this.audioManager.playPowerupCollect(powerup.type);
+        }
+
         // Update counter
         const currentCount = this.powerupCounters.get(powerup.type) || 0;
         this.powerupCounters.set(powerup.type, currentCount + 1);
         this.saveCounters();
 
-        // Update UI
-        this.updateUI();
+        // UI updates handled by PlayerSelection screen
 
         // Check for bike unlocks
         this.checkBikeUnlocks(powerup.type);
@@ -184,6 +189,10 @@ export class PowerupSystem {
                     count >= bike.unlockRequirement.count) {
 
                     if (this.playerSelection.unlockBike(bike.id)) {
+                        // Play unlock sound
+                        if (this.audioManager) {
+                            this.audioManager.playBikeUnlock();
+                        }
                         this.showUnlockNotification(bike);
                     }
                 }

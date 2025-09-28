@@ -8,27 +8,33 @@ export class AudioManager {
     this.collisionCooldown = 500; // ms between collision sounds
     
     this.soundPaths = {
-      buttonOver: '/audio/Motosai Button Over.wav',
-      buttonSelect: '/audio/Motosai Button Select.wav',
-      gearSwitch: '/audio/Motosai Gear Switch.wav',
-      idle: '/audio/Motosai Idle.wav',
-      idle50: '/audio/Motosai Idle at 50mph.wav',
-      idle100: '/audio/Motosai Idle at 100mph.wav',
-      idle250: '/audio/Motosai Idle at 250mph.wav',
-      revEngine: '/audio/Motosai Rev Engine.wav',
-      shiftDown50: '/audio/Motosai Shift Down from 50mph.wav',
-      shiftDown100: '/audio/Motosai Shift Down from 100mph.wav',
-      shiftDown250: '/audio/Motosai Shift Down from 250mph.wav',
-      shiftTo50: '/audio/Motosai Shift to 50mph.wav',
-      shiftTo100: '/audio/Motosai Shift to 100mph.wav',
-      shiftTo250: '/audio/Motosai Shift to 250mph.wav',
-      soundBarrier: '/audio/Motosai Sound Barrier.wav',
-      explosionBloody: '/audio/Motosai Splosion Bloody.wav',
-      explosion: '/audio/Motosai Splosion.wav',
-      tireScreechLong: '/audio/Motosai Tire Screach Long.wav',
-      tireScreechMedium: '/audio/Motosai Tire Screach Medium.wav',
-      tireScreechShort: '/audio/Motosai Tire Screach Short.wav',
-      theme: '/audio/motosai OVER WORLD THEME.wav'
+      buttonOver: '/audio-v2/Motosai Button Over.wav',
+      buttonSelect: '/audio-v2/Motosai Button Select.wav',
+      gearSwitch: '/audio-v2/Motosai Gear Switch.wav',
+      idle: '/audio-v2/Motosai Idle.wav',
+      idle50: '/audio-v2/Motosai Idle at 50mph.wav',
+      idle100: '/audio-v2/Motosai Idle at 100mph.wav',
+      idle250: '/audio-v2/Motosai Idle at 250mph.wav',
+      revEngine: '/audio-v2/Motosai Rev Engine.wav',
+      shiftDown50: '/audio-v2/Motosai Shift Down from 50mph.wav',
+      shiftDown100: '/audio-v2/Motosai Shift Down from 100mph.wav',
+      shiftDown250: '/audio-v2/Motosai Shift Down from 250mph.wav',
+      shiftTo50: '/audio-v2/Motosai Shift to 50mph.wav',
+      shiftTo100: '/audio-v2/Motosai Shift to 100mph.wav',
+      shiftTo250: '/audio-v2/Motosai Shift to 250mph.wav',
+      soundBarrier: '/audio-v2/Motosai Sound Barrier.wav',
+      explosionBloody: '/audio-v2/Motosai Splosion Bloody.wav',
+      explosion: '/audio-v2/Motosai Splosion.wav',
+      tireScreechLong: '/audio-v2/Motosai Tire Screach Long.wav',
+      tireScreechMedium: '/audio-v2/Motosai Tire Screach Medium.wav',
+      tireScreechShort: '/audio-v2/Motosai Tire Screach Short.wav',
+      theme: '/audio-v2/motosai OVER WORLD THEME.wav',
+      // New game feature sounds - using better choices from expanded library
+      powerupCollect: '/audio-v2/Motosai Button Select.wav', // Satisfying click for powerup collection
+      bikeUnlock: '/audio-v2/Motosai Victory.wav', // Exciting unlock sound
+      introMorph: '/audio-v2/Motosai Whoosh 2.wav', // Transformation whoosh
+      gameOver: '/audio-v2/Motosai Game Over.wav',
+      gameOverVO: '/audio-v2/Motosai Game Over VO.wav'
     };
     
     this.loadSounds();
@@ -204,5 +210,47 @@ export class AudioManager {
   
   stopTheme() {
     this.stop('theme');
+  }
+
+  // New game feature sound methods
+  playPowerupCollect(powerupType) {
+    // Play a satisfying collection sound
+    this.play('powerupCollect', { clone: true, volume: 0.7 });
+  }
+
+  playBikeUnlock() {
+    // Play an exciting unlock sound
+    this.play('bikeUnlock', { clone: true, volume: 0.8 });
+  }
+
+  playIntroMorph() {
+    // Play transformation sound for emoji to 3D morph
+    this.play('introMorph', { clone: true, volume: 0.6 });
+  }
+
+  playUIHover() {
+    // Play hover sound for UI elements
+    this.play('buttonOver', { clone: true, volume: 0.4 });
+  }
+
+  playUISelect() {
+    // Play selection sound for UI elements
+    this.play('buttonSelect', { clone: true, volume: 0.6 });
+  }
+
+  dispose() {
+    // Stop all sounds and clean up audio elements
+    this.stopAll();
+
+    // Clean up all audio elements to prevent memory leaks
+    Object.values(this.sounds).forEach(sound => {
+      sound.pause();
+      sound.src = '';
+      sound.load();
+    });
+
+    this.sounds = {};
+    this.currentEngineSound = null;
+    console.log('[AudioManager] Disposed of all audio resources');
   }
 }
