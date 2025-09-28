@@ -586,7 +586,8 @@ export class MotosaiGame {
   }
   
   initBloodTrackSystem() {
-    this.bloodTrackSystem = new BloodTrackSystem(this.scene);
+    const performanceLevel = this.performanceManager ? this.performanceManager.performanceLevel : 'high';
+    this.bloodTrackSystem = new BloodTrackSystem(this.scene, false, performanceLevel);
   }
 
   initMinimap() {
@@ -1364,7 +1365,12 @@ export class MotosaiGame {
     
     // Update current config
     this.currentConfig = this.performanceManager.getConfig();
-    
+
+    // Update blood track system performance
+    if (this.bloodTrackSystem) {
+      this.bloodTrackSystem.setPerformanceLevel(level);
+    }
+
     // Apply immediate changes that don't require restart
     if (this.renderer) {
       this.renderer.setPixelRatio(this.currentConfig.pixelRatio);

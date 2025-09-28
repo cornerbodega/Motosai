@@ -2,13 +2,14 @@ import * as THREE from 'three';
 import { getMaterialManager } from '../utils/MaterialManager.js';
 
 export class BloodTrackSystem {
-  constructor(scene, debugMode = false) {
+  constructor(scene, debugMode = false, performanceLevel = 'high') {
     this.scene = scene;
     this.bloodStains = []; // Active bloodstains on the ground
     this.bloodTracks = []; // Active tire tracks
     this.vehicleBloodStatus = new Map(); // Track which vehicles are creating blood trails
     this.debugMode = debugMode;
     this.debugMarkers = []; // Visual markers for blood pools in debug mode
+    this.performanceLevel = performanceLevel;
 
     // Use MaterialManager for materials
     this.materialManager = getMaterialManager();
@@ -20,11 +21,33 @@ export class BloodTrackSystem {
     // Pool of reusable track meshes AND materials - NO CLONING!
     this.trackPool = [];
     this.materialPool = []; // Pool of materials with different opacities
-    this.maxTracks = 5000; // Much higher limit - shared geometry keeps memory low
+
+    // Scale max tracks based on performance level
+    this.maxTracks = this.getMaxTracksForQuality(performanceLevel);
     this.trackSpacing = 0.3; // Smaller spacing for continuous trails
 
     // Pre-create a pool of materials with different opacities to avoid cloning
     this.initMaterialPool();
+  }
+
+  // Get max tracks based on quality setting
+  getMaxTracksForQuality(quality) {
+    switch(quality) {
+      case 'low':
+        return 500;   // Minimal tracks for low-end devices
+      case 'medium':
+        return 2000;  // Moderate amount
+      case 'high':
+      default:
+        return 5000;  // Full amount for high-end devices
+    }
+  }
+
+  // Update quality settings dynamically
+  setPerformanceLevel(level) {
+    this.performanceLevel = level;
+    this.maxTracks = this.getMaxTracksForQuality(level);
+    console.log(`BloodTrackSystem: Performance set to ${level}, max tracks: ${this.maxTracks}`);
   }
 
   // Pre-create materials with different opacity levels

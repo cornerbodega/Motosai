@@ -24,6 +24,13 @@ export class PowerupSystem {
         this.sharedTextures = new Map();
         this.createSharedTextures();
 
+        // Create shared geometries ONCE for all powerups
+        this.sharedGeometries = {
+            sphere: new THREE.SphereGeometry(1.0, 16, 16),
+            emoji: new THREE.PlaneGeometry(2.5, 2.5),
+            glow: new THREE.SphereGeometry(1.5, 8, 8)
+        };
+
         this.initializeCounters();
         this.spawnTimer = 0;
         this.spawnInterval = 10000; // Spawn every 10 seconds (MUCH less frequent)
@@ -76,37 +83,33 @@ export class PowerupSystem {
     createPowerupMesh(powerupType) {
         const group = new THREE.Group();
 
-        // Create larger base sphere for better visibility
-        const geometry = new THREE.SphereGeometry(1.0, 16, 16); // Doubled size
+        // Use SHARED geometry for sphere
         const material = new THREE.MeshPhongMaterial({
             color: powerupType.color,
             emissive: powerupType.color,
-            emissiveIntensity: 0.5 // More glow
+            emissiveIntensity: 0.5
         });
-        const sphere = new THREE.Mesh(geometry, material);
+        const sphere = new THREE.Mesh(this.sharedGeometries.sphere, material);
         group.add(sphere);
 
-        // Use SHARED texture instead of creating new one
+        // Use SHARED texture AND geometry for emoji
         const sharedTexture = this.sharedTextures.get(powerupType.type);
-        const emojiGeometry = new THREE.PlaneGeometry(2.5, 2.5); // Larger emoji
         const emojiMaterial = new THREE.MeshBasicMaterial({
             map: sharedTexture,
             transparent: true,
             side: THREE.DoubleSide
         });
-
-        const emojiMesh = new THREE.Mesh(emojiGeometry, emojiMaterial);
+        const emojiMesh = new THREE.Mesh(this.sharedGeometries.emoji, emojiMaterial);
         emojiMesh.position.z = 1.2;
         group.add(emojiMesh);
 
-        // Add bigger glow effect
-        const glowGeometry = new THREE.SphereGeometry(1.5, 8, 8); // Larger glow
+        // Use SHARED geometry for glow
         const glowMaterial = new THREE.MeshBasicMaterial({
             color: powerupType.color,
             transparent: true,
             opacity: 0.4
         });
-        const glow = new THREE.Mesh(glowGeometry, glowMaterial);
+        const glow = new THREE.Mesh(this.sharedGeometries.glow, glowMaterial);
         group.add(glow);
 
         return group;
@@ -454,6 +457,16 @@ export class PowerupSystem {
             texture.dispose();
         });
         this.sharedTextures.clear();
+
+        // Dispose of shared geometries
+        if (this.sharedGeometries) {
+            Object.values(this.sharedGeometries).forEach(geometry => {
+                if (geometry && geometry.dispose) {
+                    geometry.dispose();
+                }
+            });
+            this.sharedGeometries = null;
+        }
 
         // Clear all active timers
         if (this.activeTimers) {
