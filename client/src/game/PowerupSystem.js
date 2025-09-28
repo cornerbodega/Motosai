@@ -19,6 +19,10 @@ export class PowerupSystem {
             { type: 'coin', emoji: '🪙', color: 0xffd700, effect: 'money' }
         ];
 
+        // Create shared textures ONCE for all powerups
+        this.sharedTextures = new Map();
+        this.createSharedTextures();
+
         this.initializeCounters();
         this.spawnTimer = 0;
         this.spawnInterval = 10000; // Spawn every 10 seconds (MUCH less frequent)
@@ -26,6 +30,27 @@ export class PowerupSystem {
         this.maxPowerups = 1; // Maximum 1 powerup at a time (very rare)
 
         this.createUI();
+    }
+
+    createSharedTextures() {
+        // Create one texture per emoji type and reuse it
+        this.powerupTypes.forEach(type => {
+            const canvas = document.createElement('canvas');
+            canvas.width = 256;
+            canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+
+            ctx.fillStyle = 'transparent';
+            ctx.fillRect(0, 0, 256, 256);
+
+            ctx.font = 'bold 180px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(type.emoji, 128, 128);
+
+            const texture = new THREE.CanvasTexture(canvas);
+            this.sharedTextures.set(type.type, texture);
+        });
     }
 
     initializeCounters() {
@@ -60,24 +85,11 @@ export class PowerupSystem {
         const sphere = new THREE.Mesh(geometry, material);
         group.add(sphere);
 
-        // Create emoji texture
-        const canvas = document.createElement('canvas');
-        canvas.width = 256;
-        canvas.height = 256;
-        const ctx = canvas.getContext('2d');
-
-        ctx.fillStyle = 'transparent';
-        ctx.fillRect(0, 0, 256, 256);
-
-        ctx.font = 'bold 180px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(powerupType.emoji, 128, 128);
-
-        const emojiTexture = new THREE.CanvasTexture(canvas);
+        // Use SHARED texture instead of creating new one
+        const sharedTexture = this.sharedTextures.get(powerupType.type);
         const emojiGeometry = new THREE.PlaneGeometry(2.5, 2.5); // Larger emoji
         const emojiMaterial = new THREE.MeshBasicMaterial({
-            map: emojiTexture,
+            map: sharedTexture,
             transparent: true,
             side: THREE.DoubleSide
         });
@@ -146,19 +158,7 @@ export class PowerupSystem {
         powerup.mesh.traverse(child => {
             if (child.geometry) child.geometry.dispose();
             if (child.material) {
-                // Dispose texture and its source canvas
-                if (child.material.map) {
-                    // If it's a canvas texture, also nullify the canvas
-                    if (child.material.map.image && child.material.map.image.getContext) {
-                        const ctx = child.material.map.image.getContext('2d');
-                        if (ctx) {
-                            ctx.clearRect(0, 0, child.material.map.image.width, child.material.map.image.height);
-                        }
-                        child.material.map.image.width = 0;
-                        child.material.map.image.height = 0;
-                    }
-                    child.material.map.dispose();
-                }
+                // Don't dispose shared textures! Just dispose the material
                 child.material.dispose();
             }
         });
@@ -302,19 +302,20 @@ export class PowerupSystem {
             position: fixed;
             top: 10px;
             right: 10px;
-            background: rgba(0, 0, 0, 0.8);
-            border: 2px solid #fff;
-            border-radius: 10px;
-            padding: 15px;
+            background: rgba(0, 0, 0, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 8px;
+            padding: 8px 10px;
             color: white;
             font-family: Arial, sans-serif;
             z-index: 100;
-            min-width: 200px;
+            min-width: 120px;
+            font-size: 12px;
         `;
 
         const title = document.createElement('div');
-        title.textContent = 'Powerups Collected';
-        title.style.cssText = 'font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #666; padding-bottom: 5px;';
+        title.textContent = '🎁 Powerups';
+        title.style.cssText = 'font-weight: bold; margin-bottom: 6px; font-size: 13px;';
         uiContainer.appendChild(title);
 
         const countersDiv = document.createElement('div');
@@ -336,15 +337,15 @@ export class PowerupSystem {
             const count = this.powerupCounters.get(type.type) || 0;
             if (count > 0) {
                 const counterDiv = document.createElement('div');
-                counterDiv.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin: 5px 0;';
+                counterDiv.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin: 3px 0;';
 
                 const emojiSpan = document.createElement('span');
                 emojiSpan.textContent = type.emoji;
-                emojiSpan.style.cssText = 'font-size: 20px; margin-right: 10px;';
+                emojiSpan.style.cssText = 'font-size: 14px; margin-right: 5px;';
 
                 const countSpan = document.createElement('span');
                 countSpan.textContent = `× ${count}`;
-                countSpan.style.cssText = 'font-size: 16px; font-weight: bold;';
+                countSpan.style.cssText = 'font-size: 12px; font-weight: bold;';
 
                 counterDiv.appendChild(emojiSpan);
                 counterDiv.appendChild(countSpan);
@@ -354,8 +355,8 @@ export class PowerupSystem {
 
         if (countersDiv.children.length === 0) {
             const emptyMessage = document.createElement('div');
-            emptyMessage.textContent = 'No powerups yet!';
-            emptyMessage.style.cssText = 'color: #666; font-style: italic;';
+            emptyMessage.textContent = 'None yet';
+            emptyMessage.style.cssText = 'color: #888; font-style: italic; font-size: 11px;';
             countersDiv.appendChild(emptyMessage);
         }
     }
@@ -413,19 +414,7 @@ export class PowerupSystem {
                     powerup.mesh.traverse(child => {
                         if (child.geometry) child.geometry.dispose();
                         if (child.material) {
-                            // Dispose texture and its source canvas
-                            if (child.material.map) {
-                                // If it's a canvas texture, also clean the canvas
-                                if (child.material.map.image && child.material.map.image.getContext) {
-                                    const ctx = child.material.map.image.getContext('2d');
-                                    if (ctx) {
-                                        ctx.clearRect(0, 0, child.material.map.image.width, child.material.map.image.height);
-                                    }
-                                    child.material.map.image.width = 0;
-                                    child.material.map.image.height = 0;
-                                }
-                                child.material.map.dispose();
-                            }
+                            // Don't dispose shared textures! Just dispose the material
                             child.material.dispose();
                         }
                     });
@@ -443,13 +432,19 @@ export class PowerupSystem {
             powerup.mesh.traverse(child => {
                 if (child.geometry) child.geometry.dispose();
                 if (child.material) {
-                    if (child.material.map) child.material.map.dispose();
+                    // Don't dispose shared textures here either
                     child.material.dispose();
                 }
             });
             this.scene.remove(powerup.mesh);
         });
         this.powerups = [];
+
+        // NOW dispose of all shared textures when system is destroyed
+        this.sharedTextures.forEach(texture => {
+            texture.dispose();
+        });
+        this.sharedTextures.clear();
 
         // Clear all active timers
         if (this.activeTimers) {

@@ -1,5 +1,5 @@
 import { io } from 'socket.io-client';
-import { BikeSelector } from './BikeSelector.js';
+// import { BikeSelector } from './BikeSelector.js'; // Replaced by PlayerSelection
 
 // Get server URL from environment or use default
 const serverUrl = import.meta.env.VITE_SERVER_URL || 'http://localhost:8080';
@@ -138,36 +138,20 @@ nameInput.addEventListener('keypress', (e) => {
 // Initial status
 updateStatus(false);
 
-// Initialize bike selector
-let bikeSelector = null;
+// BikeSelector replaced by PlayerSelection in MotosaiGame
+// The bike selection is now handled in the game itself
+// let bikeSelector = null;
 
 // Wait for DOM to be ready
 if (document.getElementById('bikePreview')) {
-    bikeSelector = new BikeSelector('bikePreview');
-
-    // Handle bike navigation
+    // Bike selection is now handled by PlayerSelection in MotosaiGame
     const prevBtn = document.getElementById('prevBike');
     const nextBtn = document.getElementById('nextBike');
     const startBtn = document.getElementById('startGame');
 
-    if (prevBtn) {
-        prevBtn.addEventListener('click', () => {
-            bikeSelector.previousBike();
-        });
-    }
-
-    if (nextBtn) {
-        nextBtn.addEventListener('click', () => {
-            bikeSelector.nextBike();
-        });
-    }
-
     if (startBtn) {
         startBtn.addEventListener('click', () => {
-            const selectedBike = bikeSelector.getSelectedBike();
-            // Store selected bike in sessionStorage for the game to use
-            sessionStorage.setItem('selectedBike', JSON.stringify(selectedBike));
-            // Navigate to game
+            // Navigate to game - bike selection now happens in-game
             window.location.href = 'game.html';
         });
     }
@@ -175,7 +159,5 @@ if (document.getElementById('bikePreview')) {
 
 // Cleanup on page unload
 window.addEventListener('beforeunload', () => {
-    if (bikeSelector) {
-        bikeSelector.dispose();
-    }
+    // BikeSelector cleanup no longer needed
 });

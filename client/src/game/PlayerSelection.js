@@ -337,8 +337,16 @@ export class PlayerSelection {
     }
 
     updateBikePreview(bike) {
-        // Remove existing preview
+        // Remove existing preview and dispose textures properly
         this.bikeModels.forEach(model => {
+            // Dispose of textures and materials to prevent memory leak
+            model.traverse(child => {
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) {
+                    if (child.material.map) child.material.map.dispose();
+                    child.material.dispose();
+                }
+            });
             this.scene.remove(model);
         });
         this.bikeModels.clear();
@@ -369,8 +377,16 @@ export class PlayerSelection {
             this.selectionUI.parentElement.removeChild(this.selectionUI);
         }
 
-        // Clean up 3D models
+        // Clean up 3D models and dispose resources properly
         this.bikeModels.forEach(model => {
+            // Dispose of all textures, materials, and geometry
+            model.traverse(child => {
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) {
+                    if (child.material.map) child.material.map.dispose();
+                    child.material.dispose();
+                }
+            });
             this.scene.remove(model);
         });
         this.bikeModels.clear();

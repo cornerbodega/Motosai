@@ -14,6 +14,10 @@ export class TrafficSystem {
     this.maxVehicles = 30; // Optimized for lower-end machines
     this.spawnDistance = 200; // Reduced spawn distance for performance
 
+    // Reusable vectors to prevent memory allocation in update loops
+    this._tempVector = new THREE.Vector3();
+    this._tempVector2 = new THREE.Vector3()
+
     // Use centralized material manager
     this.materialManager = getMaterialManager();
     
@@ -967,16 +971,17 @@ export class TrafficSystem {
   onTrafficUpdate(trafficData) {
     // Only non-master clients should update from network
     if (this.isMaster) return;
-    
+
+    // Create temp vector ONCE and reuse it
+    const tempPos = new THREE.Vector3();
+
     trafficData.forEach(update => {
       const vehicle = this.vehicles.find(v => v.id === update.id);
       if (vehicle) {
-        // Interpolate position
-        vehicle.position.lerp(
-          new THREE.Vector3(update.position.x, update.position.y, update.position.z),
-          0.3
-        );
-        
+        // Interpolate position - REUSE temp vector instead of creating new one
+        tempPos.set(update.position.x, update.position.y, update.position.z);
+        vehicle.position.lerp(tempPos, 0.3);
+
         // Update velocity
         vehicle.velocity.set(update.velocity.x, update.velocity.y, update.velocity.z);
         

@@ -583,9 +583,9 @@ export class Highway101 {
               furthestSegment.z = requiredZ;
               furthestSegment.group.position.z = requiredZ;
               this.regenerateRoadside(furthestSegment);
-              console.log(`Recycled segment from ${furthestDist}m away to position ${requiredZ}`);
+              // Successfully recycled segment
             } else {
-              console.warn('No segments available to recycle for position', requiredZ);
+              // Silently handle - no segments available to recycle
             }
           }
         }

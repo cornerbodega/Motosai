@@ -141,10 +141,19 @@ export class IntroAnimation {
         if (this.emojiMesh) {
             this.scene.remove(this.emojiMesh);
             this.emojiMesh.geometry.dispose();
+            // Dispose texture too!
+            if (this.emojiMesh.material.map) {
+                this.emojiMesh.material.map.dispose();
+            }
             this.emojiMesh.material.dispose();
         }
 
         if (this.motorcycleMesh) {
+            // Properly dispose of the 3D motorcycle
+            this.motorcycleMesh.traverse(child => {
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) child.material.dispose();
+            });
             this.scene.remove(this.motorcycleMesh);
         }
     }
