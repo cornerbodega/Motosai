@@ -825,17 +825,19 @@ export class MotosaiGame {
   
   updateControls(deltaTime) {
     // Simple direct controls for our new physics
+    if (!this.physics) return; // Safety check
+
     const controls = {
       throttle: 0,
       brake: 0,
       steer: 0
     };
-    
+
     // Throttle
     if (this.keys['KeyW'] || this.keys['ArrowUp']) {
       controls.throttle = 1;
     }
-    
+
     // Brakes (removed Space since it's now camera toggle)
     if (this.keys['KeyS'] || this.keys['ArrowDown']) {
       controls.brake = 1;
@@ -850,13 +852,14 @@ export class MotosaiGame {
     } else if (this.keys['KeyD'] || this.keys['ArrowRight']) {
       controls.steer = 1;   // Right
     }
-    
+
     // Apply controls to physics
     this.physics.setControls(controls);
   }
   
   updateControlsComplex(deltaTime) {
     // Complex controls for old physics with InputController
+    if (!this.physics) return; // Safety check
     const state = this.physics.getState();
     const speed = state.speed / 2.237; // Convert MPH to m/s
     
@@ -956,42 +959,24 @@ export class MotosaiGame {
       state.position.z + lookOffset.z
     );
     
-    // Smooth camera movement - much tighter to prevent player escaping
-    const speedMPH = state.speed;
-    let smoothing;
-    if (speedMPH > 200) {
-      smoothing = 0.8; // Near instant at extreme speeds
-    } else if (speedMPH > 150) {
-      smoothing = 0.75; // Very quick response
-    } else if (speedMPH > 100) {
-      smoothing = 0.7;
-    } else if (speedMPH > 50) {
-      smoothing = 0.65;
-    } else {
-      smoothing = 0.6; // Tight tracking even at low speeds
-    }
-    
-    this.cameraPosition.lerp(targetCameraPos, smoothing);
-    this.cameraTarget.lerp(targetLookAt, smoothing);
-    
     // Dynamic FOV based on speed for better speed perception
     const baseFOV = 60;
     const maxFOVIncrease = 30; // Maximum FOV increase at top speed
-    const speedRatio = Math.min(speedMPH / 200, 1); // Normalize to displayed max of 200mph
+    const speedRatio = Math.min(state.speed / 200, 1); // Normalize to displayed max of 200mph
     const targetFOV = baseFOV + (maxFOVIncrease * speedRatio * speedRatio); // Quadratic increase
-    
-    // Smooth FOV transition - make it more responsive
+
+    // Smooth FOV transition - SLOWER to reduce shake perception
     const currentFOV = this.camera.fov;
-    this.camera.fov = currentFOV + (targetFOV - currentFOV) * 0.2; // Faster FOV changes (was 0.1)
+    this.camera.fov = currentFOV + (targetFOV - currentFOV) * 0.05; // Much slower FOV changes to reduce shake
     this.camera.updateProjectionMatrix();
-    
-    // Apply camera position with screen shake
+
+    // Direct camera positioning with screen shake
     this.camera.position.set(
-      this.cameraPosition.x + this.screenShake.offset.x * 0.1,
-      this.cameraPosition.y + this.screenShake.offset.y * 0.1,
-      this.cameraPosition.z
+      targetCameraPos.x + this.screenShake.offset.x * 0.1,
+      targetCameraPos.y + this.screenShake.offset.y * 0.1,
+      targetCameraPos.z
     );
-    this.camera.lookAt(this.cameraTarget);
+    this.camera.lookAt(targetLookAt);
     
     // IMMERSIVE CAMERA TILT: Rotate the camera to match the rider's lean angle
     // This simulates the rider's head tilting with the motorcycle
@@ -999,16 +984,16 @@ export class MotosaiGame {
     // More tilt in first person for full immersion
     const cameraLeanFactor = this.isFirstPerson ? 0.9 : 0.7; // 90% in first person, 70% in third
     const targetCameraRoll = state.rotation.roll * cameraLeanFactor;
-    
-    // Smooth the camera roll transition - make it more responsive
+
+    // Smooth the camera roll transition - SLOWER to reduce shake
     if (!this.cameraRoll) this.cameraRoll = 0;
-    this.cameraRoll += (targetCameraRoll - this.cameraRoll) * 0.3; // Faster transition (was 0.15)
+    this.cameraRoll += (targetCameraRoll - this.cameraRoll) * 0.1; // Much slower transition to reduce shake
     
     // Apply the roll rotation to the camera
     // Use pre-allocated vectors instead of creating new ones
     const { up, forward } = this._cameraUpdateObjects;
     up.set(0, 1, 0);
-    forward.subVectors(this.cameraTarget, this.camera.position).normalize();
+    forward.subVectors(targetLookAt, this.camera.position).normalize();
     
     // Apply roll rotation around the forward axis
     up.applyAxisAngle(forward, this.cameraRoll);
@@ -1466,22 +1451,29 @@ export class MotosaiGame {
       return;
     }
     
-    if (!this.isPaused) {
+    if (!this.isPaused && this.gameStarted) {
+      // Only run game logic if the game has started (after intro/selection)
       // Wrap everything in try-catch to prevent crashes
       try {
+      // Skip physics updates if not initialized yet
+      if (!this.physics) {
+        // Still render the scene but skip physics
+        return;
+      }
+
       // Get physics state first
       let state;
-      
+
       // Handle death animation
       if (this.isDead) {
         // Update death animation
         const readyForRespawn = this.deathAnimation.update(deltaTime);
-        
+
         // Check if we should respawn
         if (readyForRespawn && !this.deathAnimation.isAnimating) {
           this.respawnPlayer();
         }
-        
+
         // Get state for camera
         state = this.physics.getState();
       } else {
@@ -1494,7 +1486,7 @@ export class MotosaiGame {
           // Use input controller for complex physics
           this.updateControlsComplex(deltaTime);
         }
-        
+
         // Update physics (pass traffic for collision detection)
         state = this.useSimplePhysics 
           ? this.physics.update(deltaTime, this.traffic) 
@@ -1658,13 +1650,11 @@ export class MotosaiGame {
         this.rider.visible = true;
         
         // Update motorcycle position and rotation
-        // Apply lean offset to make it rotate around ground contact point
-        const leanOffset = Math.sin(state.rotation.roll) * 0.4; // Height of bike center from ground
-        
+        // Simplified position - no lean offset to prevent jitter
         this.motorcycle.position.set(
-          state.position.x + leanOffset * Math.cos(state.rotation.yaw + Math.PI/2),
+          state.position.x,
           0, // Force Y to 0 to prevent vertical vibration
-          state.position.z + leanOffset * Math.sin(state.rotation.yaw + Math.PI/2)
+          state.position.z
         );
         
         // Apply rotations in correct order: yaw first, then lean, then pitch
@@ -1673,9 +1663,10 @@ export class MotosaiGame {
         this.motorcycle.rotateZ(state.rotation.roll);
         this.motorcycle.rotateX(state.rotation.pitch);
         
-        // Update wheels rotation
-        this.frontWheel.rotation.x += state.speed * deltaTime * 0.1;
-        this.rearWheel.rotation.x += state.speed * deltaTime * 0.1;
+        // Update wheels rotation - reduced multiplier at high speeds
+        const wheelSpeedMultiplier = Math.min(0.1, 0.1 / (1 + state.speed / 100)); // Reduce at high speeds
+        this.frontWheel.rotation.x += state.speed * deltaTime * wheelSpeedMultiplier;
+        this.rearWheel.rotation.x += state.speed * deltaTime * wheelSpeedMultiplier;
         
         // Rider lean animation
         this.rider.rotation.z = -state.rotation.roll * 0.5;
@@ -1784,8 +1775,11 @@ export class MotosaiGame {
       } catch (error) {
         console.error('Memory cleanup error:', error);
       }
+    } else if (!this.gameStarted) {
+      // During intro/selection, just render the scene
+      // The intro animation and player selection handle their own updates
     }
-    
+
     // Render - wrapped to catch shader uniform errors
     try {
       this.renderer.render(this.scene, this.camera);

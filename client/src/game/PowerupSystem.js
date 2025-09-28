@@ -21,9 +21,9 @@ export class PowerupSystem {
 
         this.initializeCounters();
         this.spawnTimer = 0;
-        this.spawnInterval = 3000; // Spawn every 3 seconds (less frequent)
+        this.spawnInterval = 10000; // Spawn every 10 seconds (MUCH less frequent)
         this.lastSpawnTime = Date.now();
-        this.maxPowerups = 3; // Maximum 3 powerups at once (much fewer)
+        this.maxPowerups = 1; // Maximum 1 powerup at a time (very rare)
 
         this.createUI();
     }
@@ -146,7 +146,19 @@ export class PowerupSystem {
         powerup.mesh.traverse(child => {
             if (child.geometry) child.geometry.dispose();
             if (child.material) {
-                if (child.material.map) child.material.map.dispose();
+                // Dispose texture and its source canvas
+                if (child.material.map) {
+                    // If it's a canvas texture, also nullify the canvas
+                    if (child.material.map.image && child.material.map.image.getContext) {
+                        const ctx = child.material.map.image.getContext('2d');
+                        if (ctx) {
+                            ctx.clearRect(0, 0, child.material.map.image.width, child.material.map.image.height);
+                        }
+                        child.material.map.image.width = 0;
+                        child.material.map.image.height = 0;
+                    }
+                    child.material.map.dispose();
+                }
                 child.material.dispose();
             }
         });
@@ -353,8 +365,8 @@ export class PowerupSystem {
 
         // Spawn new powerups periodically (if we don't have too many)
         if (now - this.lastSpawnTime > this.spawnInterval && this.powerups.length < this.maxPowerups) {
-            // Spawn powerup FAR ahead of player (z increases as player moves forward)
-            const spawnDistance = 100 + Math.random() * 100; // 100-200 units ahead (much farther)
+            // Spawn powerup VERY FAR ahead of player (z increases as player moves forward)
+            const spawnDistance = 150 + Math.random() * 150; // 150-300 units ahead (very far)
 
             // Random lane position (road width is about 13.5 units)
             const lanePositions = [-4.5, -1.5, 1.5, 4.5]; // 4 lane positions
@@ -401,7 +413,19 @@ export class PowerupSystem {
                     powerup.mesh.traverse(child => {
                         if (child.geometry) child.geometry.dispose();
                         if (child.material) {
-                            if (child.material.map) child.material.map.dispose();
+                            // Dispose texture and its source canvas
+                            if (child.material.map) {
+                                // If it's a canvas texture, also clean the canvas
+                                if (child.material.map.image && child.material.map.image.getContext) {
+                                    const ctx = child.material.map.image.getContext('2d');
+                                    if (ctx) {
+                                        ctx.clearRect(0, 0, child.material.map.image.width, child.material.map.image.height);
+                                    }
+                                    child.material.map.image.width = 0;
+                                    child.material.map.image.height = 0;
+                                }
+                                child.material.map.dispose();
+                            }
                             child.material.dispose();
                         }
                     });

@@ -157,14 +157,15 @@ export class MaterialTracker {
     console.log(`Currently Undisposed: ${stats.currentUndisposed}`);
     console.log('Undisposed by type:', stats.undisposedByType);
 
-    // Save detailed report to file
-    const report = this.generateDetailedReport(stats);
-    await this.saveReportToFile(report, 'material-stats');
+    // Only save reports if a debug server is available
+    // Comment out to avoid 404 errors when no server is running
+    // const report = this.generateDetailedReport(stats);
+    // await this.saveReportToFile(report, 'material-stats');
 
     if (stats.currentUndisposed > 100) {
       console.log('%c⚠️ MEMORY LEAK DETECTED!', 'color: #ff0000; font-weight: bold; font-size: 14px');
-      const leakReport = await this.generateLeakReport();
-      await this.saveReportToFile(leakReport, 'memory-leak');
+      // const leakReport = await this.generateLeakReport();
+      // await this.saveReportToFile(leakReport, 'memory-leak');
     }
   }
 

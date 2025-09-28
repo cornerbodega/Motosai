@@ -37,7 +37,7 @@ export class PlayerSelection {
                 acceleration: 1.2,
                 handling: 0.9,
                 unlocked: false,
-                unlockRequirement: { powerup: 'dragon', count: 5 }
+                unlockRequirement: { powerup: 'dragon', count: 2 }  // Reduced from 5
             },
             {
                 id: 'rocket',
@@ -48,7 +48,7 @@ export class PlayerSelection {
                 acceleration: 1.5,
                 handling: 0.8,
                 unlocked: false,
-                unlockRequirement: { powerup: 'rocket', count: 10 }
+                unlockRequirement: { powerup: 'rocket', count: 3 }  // Reduced from 10
             },
             {
                 id: 'star',
@@ -59,7 +59,7 @@ export class PlayerSelection {
                 acceleration: 1.1,
                 handling: 1.2,
                 unlocked: false,
-                unlockRequirement: { powerup: 'star', count: 7 }
+                unlockRequirement: { powerup: 'star', count: 2 }  // Reduced from 7
             },
             {
                 id: 'fire',
@@ -70,7 +70,7 @@ export class PlayerSelection {
                 acceleration: 1.3,
                 handling: 1.0,
                 unlocked: false,
-                unlockRequirement: { powerup: 'fire', count: 8 }
+                unlockRequirement: { powerup: 'fire', count: 3 }  // Reduced from 8
             },
             {
                 id: 'lightning',
@@ -81,7 +81,7 @@ export class PlayerSelection {
                 acceleration: 1.4,
                 handling: 1.1,
                 unlocked: false,
-                unlockRequirement: { powerup: 'lightning', count: 12 }
+                unlockRequirement: { powerup: 'lightning', count: 4 }  // Reduced from 12
             },
             {
                 id: 'skull',
@@ -92,7 +92,7 @@ export class PlayerSelection {
                 acceleration: 1.2,
                 handling: 1.3,
                 unlocked: false,
-                unlockRequirement: { powerup: 'skull', count: 15 }
+                unlockRequirement: { powerup: 'skull', count: 5 }  // Reduced from 15
             },
             {
                 id: 'rainbow',
@@ -103,7 +103,7 @@ export class PlayerSelection {
                 acceleration: 1.3,
                 handling: 1.4,
                 unlocked: false,
-                unlockRequirement: { powerup: 'rainbow', count: 20 }
+                unlockRequirement: { powerup: 'rainbow', count: 7 }  // Reduced from 20
             }
         ];
 
