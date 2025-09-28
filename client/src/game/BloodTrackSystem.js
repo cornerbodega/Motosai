@@ -20,7 +20,7 @@ export class BloodTrackSystem {
     // Pool of reusable track meshes AND materials - NO CLONING!
     this.trackPool = [];
     this.materialPool = []; // Pool of materials with different opacities
-    this.maxTracks = 200; // Reduced to prevent memory issues
+    this.maxTracks = 5000; // Much higher limit - shared geometry keeps memory low
     this.trackSpacing = 0.3; // Smaller spacing for continuous trails
 
     // Pre-create a pool of materials with different opacities to avoid cloning
@@ -104,7 +104,7 @@ export class BloodTrackSystem {
         lastTrackPosition: null,
         bloodIntensity: 1.0, // Starts strong, fades over distance
         totalDistance: 0,
-        maxTrailDistance: 100, // Blood trails last for 100 meters
+        maxTrailDistance: 500, // Blood trails last much longer - 500 meters
         sourceStain: bloodStain
       });
     }
@@ -146,18 +146,12 @@ export class BloodTrackSystem {
       status.totalDistance += distance;
     }
 
-    // Check if blood trail should end
-    if (status.totalDistance > status.maxTrailDistance) {
-      console.log(`Vehicle ${vehicle.id} blood trail ended - max distance reached`);
-      this.vehicleBloodStatus.delete(vehicle.id);
-      return false;
-    }
+    // Blood trail continues indefinitely - no cutoff at all
+    // Keep constant intensity for permanent trails
+    status.bloodIntensity = 0.7; // Constant visible intensity
 
-    // Calculate fade based on distance from source
-    status.bloodIntensity = Math.max(0, 1.0 - (status.totalDistance / status.maxTrailDistance));
-
-    // Create new track segment
-    if (status.bloodIntensity > 0.1) {
+    // Always create new track segment - no stopping
+    if (true) {
       this.createTireTracks(vehicle.position, vehicle.velocity, vehicle.width, status.bloodIntensity, vehicle.id);
       status.lastTrackPosition = vehicle.position.clone();
     }
@@ -269,40 +263,9 @@ export class BloodTrackSystem {
       }
     }
 
-    // Update tire tracks - despawn from furthest distance back to source
-    if (this.bloodTracks.length > 0) {
-      // Find the maximum distance from source among all tracks
-      const maxDistance = Math.max(...this.bloodTracks.map(t => t.distanceFromSource));
-
-      for (let i = this.bloodTracks.length - 1; i >= 0; i--) {
-        const track = this.bloodTracks[i];
-        track.age += deltaTime;
-
-        // Calculate when this track should start fading based on its distance
-        // Furthest tracks start fading immediately, closest tracks fade last
-        const distanceRatio = maxDistance > 0 ? track.distanceFromSource / maxDistance : 0;
-        const fadeStartDelay = (1 - distanceRatio) * 10; // Closer tracks wait up to 10 seconds
-        const adjustedFadeStartAge = fadeStartDelay;
-
-        // Check if track should be removed (based on distance-adjusted timing)
-        const distanceAdjustedAge = track.age - fadeStartDelay;
-        if (distanceAdjustedAge > 20) { // 20 seconds after its fade start
-          // Remove expired track and return to pool
-          this.scene.remove(track.mesh);
-          track.mesh.visible = false;
-          // Reset to default material before returning to pool
-          track.mesh.material = this.materialPool[9]; // Use highest opacity material
-          // Return mesh to pool for reuse
-          this.trackPool.push(track.mesh);
-          this.bloodTracks.splice(i, 1);
-        } else if (track.age > adjustedFadeStartAge) {
-          // Fade out based on how long after the adjusted fade start
-          const fadeProgress = Math.max(0, Math.min(1, (track.age - adjustedFadeStartAge) / 20));
-          const baseOpacity = 0.7 * (track.initialIntensity || 1.0);
-          const targetOpacity = baseOpacity * (1 - fadeProgress);
-          track.mesh.material = this.getMaterialForOpacity(targetOpacity);
-        }
-      }
+    // Keep tracks simple - only update age
+    for (const track of this.bloodTracks) {
+      track.age += deltaTime;
     }
   }
 
@@ -328,9 +291,33 @@ export class BloodTrackSystem {
     console.log(`Blood stains registered: ${this.bloodStains.length} active stains`);
   }
 
-  // Clear all blood-related data - called on respawn
+  // Clear only blood stains - called on respawn
+  // Active blood trails continue naturally, existing tracks remain
+  clearBloodStainsOnly() {
+    console.log('🩸 Clearing blood stains only (keeping active trails and existing tracks)');
+
+    // Remove all blood stains to prevent new blood trails from starting
+    for (const bloodStain of this.bloodStains) {
+      // Remove debug marker if exists
+      if (this.debugMode) {
+        const markerIndex = this.debugMarkers.findIndex(m => m.stain === bloodStain);
+        if (markerIndex >= 0) {
+          const marker = this.debugMarkers[markerIndex];
+          this.scene.remove(marker.mesh);
+          marker.mesh.geometry.dispose();
+          marker.mesh.material.dispose();
+          this.debugMarkers.splice(markerIndex, 1);
+        }
+      }
+    }
+    this.bloodStains = [];
+
+    console.log('Blood stains cleared - active trails continue, existing tracks remain');
+  }
+
+  // Clear all blood-related data - called on full reset/restart
   clearAllBloodData() {
-    console.log('🧹 Clearing all blood data for respawn');
+    console.log('🧹 Clearing all blood data for full reset');
 
     // Remove all blood stains
     for (const bloodStain of this.bloodStains) {

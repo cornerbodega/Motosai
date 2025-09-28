@@ -1236,7 +1236,7 @@ export class MotosaiGame {
       this.trafficSystem.cleanupDebris();
     }
 
-    // MEMORY LEAK FIX: Clear all blood data from previous deaths
+    // Clear all blood data - remove trails completely to avoid artificial cutoff look
     if (this.bloodTrackSystem) {
       this.bloodTrackSystem.clearAllBloodData();
     }
@@ -1817,6 +1817,11 @@ export class MotosaiGame {
     this.distance = 0;
     if (this.traffic && typeof this.traffic.reset === 'function') {
       this.traffic.reset();
+    }
+
+    // Full reset - clear all blood data (stains and tracks)
+    if (this.bloodTrackSystem) {
+      this.bloodTrackSystem.clearAllBloodData();
     }
 
     // Reset camera position to match player starting position
