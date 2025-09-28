@@ -134,6 +134,85 @@
             color: #666;
             font-size: 0.9em;
         }
+
+        .bike-selector-container {
+            background: #1a1a2e;
+            border-radius: 15px;
+            padding: 20px;
+            margin: 20px 0;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        #bikePreview {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+
+        .bike-info {
+            text-align: center;
+            color: white;
+            margin-bottom: 15px;
+        }
+
+        #bikeName {
+            font-size: 1.5em;
+            font-weight: bold;
+            margin-bottom: 5px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        #bikeIndex {
+            color: #888;
+            font-size: 0.9em;
+        }
+
+        .bike-controls {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .bike-nav-btn {
+            padding: 10px 20px;
+            background: rgba(102, 126, 234, 0.2);
+            border: 2px solid #667eea;
+            color: #667eea;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: bold;
+        }
+
+        .bike-nav-btn:hover {
+            background: rgba(102, 126, 234, 0.4);
+            transform: scale(1.05);
+        }
+
+        .start-game-btn {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #ff4444 0%, #cc0000 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.2em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .start-game-btn:hover {
+            background: linear-gradient(135deg, #ff6666 0%, #ff0000 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(255, 68, 68, 0.3);
+        }
         
         .endpoints {
             margin-top: 20px;
@@ -164,10 +243,17 @@
         <h1>🏍️ Motosai</h1>
         <div id="status" class="status disconnected">Disconnected</div>
         
-        <div style="margin: 20px 0; text-align: center;">
-            <a href="game.html" style="display: inline-block; padding: 15px 30px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 18px;">
-                🎮 Play Game
-            </a>
+        <div class="bike-selector-container">
+            <div id="bikePreview"></div>
+            <div class="bike-info">
+                <div id="bikeName">Red Racer</div>
+                <div id="bikeIndex">1 / 8</div>
+            </div>
+            <div class="bike-controls">
+                <button class="bike-nav-btn" id="prevBike">← Previous</button>
+                <button class="bike-nav-btn" id="nextBike">Next →</button>
+            </div>
+            <button class="start-game-btn" id="startGame">Start Game</button>
         </div>
         
         <div class="input-group">

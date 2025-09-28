@@ -17,6 +17,9 @@ import { getStoppa } from '../utils/Stoppa.js';
 import { Minimap } from './Minimap.js';
 import { MemoryProfiler } from '../utils/MemoryProfiler.js';
 import { getMaterialManager, resetMaterialManager } from '../utils/MaterialManager.js';
+import { IntroAnimation } from './IntroAnimation.js';
+import { PlayerSelection } from './PlayerSelection.js';
+import { PowerupSystem } from './PowerupSystem.js';
 
 export class MotosaiGame {
   constructor(container, config = {}) {
@@ -128,30 +131,44 @@ export class MotosaiGame {
     this._tempVelocity = new THREE.Vector3();
     this._tempDeathPosition = new THREE.Vector3();
     
+    // Initialize game systems
+    this.introAnimation = null;
+    this.playerSelection = null;
+    this.powerupSystem = null;
+    this.gameStarted = false;
+
     // Initialize components
     this.initRenderer();
     this.initScene();
     this.initCamera();
     this.initLights();
-    this.initPhysics();
-    this.initHighway();
-    this.initBackgrounds();
-    this.initControls();
-    this.initHUD();
-    this.initDeathAnimation();
-    this.initAudio();
-    this.initBloodTrackSystem();
-    this.initMinimap();
-    
-    // Initialize multiplayer first, then traffic (for synchronization)
-    if (this.isMultiplayerEnabled) {
-      this.initMultiplayer().then(() => {
+
+    // Show intro and player selection first
+    this.showIntroAndSelection(() => {
+      // After selection, initialize game components
+      this.initPhysics();
+      this.initHighway();
+      this.initBackgrounds();
+      this.initControls();
+      this.initHUD();
+      this.initDeathAnimation();
+      this.initAudio();
+      this.initBloodTrackSystem();
+      this.initMinimap();
+      this.initPowerupSystem();
+
+      // Initialize multiplayer first, then traffic (for synchronization)
+      if (this.isMultiplayerEnabled) {
+        this.initMultiplayer().then(() => {
+          this.initTraffic();
+        });
+      } else {
         this.initTraffic();
-      });
-    } else {
-      this.initTraffic();
-    }
-    
+      }
+
+      this.gameStarted = true;
+    });
+
     // Start game loop - delay slightly to ensure all materials are initialized
     this.lastTime = performance.now();
     requestAnimationFrame(() => this.animate());
@@ -297,25 +314,34 @@ export class MotosaiGame {
       0.1,
       2000
     );
-    
+
     // Camera mode
     this.isFirstPerson = false;
-    
+
     // Third person camera positions - closer to bike for high speed
     this.thirdPersonOffset = new THREE.Vector3(0, 2, -4); // Moved closer from -6 to -4
     this.thirdPersonLookOffset = new THREE.Vector3(0, 1, 5); // Look closer too
-    
+
     // First person camera positions (rider POV)
     this.firstPersonOffset = new THREE.Vector3(0, 0.9, 0.3); // Lower, more realistic rider height
     this.firstPersonLookOffset = new THREE.Vector3(0, 0.6, 8); // Look ahead at road level
-    
+
     // Current camera offsets (will switch between modes)
     this.cameraOffset = this.thirdPersonOffset.clone();
     this.cameraLookOffset = this.thirdPersonLookOffset.clone();
-    
-    // Smooth camera movement
-    this.cameraPosition = new THREE.Vector3();
-    this.cameraTarget = new THREE.Vector3();
+
+    // Smooth camera movement - initialize to player starting position
+    const initialPlayerPos = { x: -8.5, y: 0.3, z: 0 }; // Match SimpleBikePhysics starting position
+    this.cameraPosition = new THREE.Vector3(
+      initialPlayerPos.x + this.thirdPersonOffset.x,
+      initialPlayerPos.y + this.thirdPersonOffset.y + 1,
+      initialPlayerPos.z + this.thirdPersonOffset.z
+    );
+    this.cameraTarget = new THREE.Vector3(
+      initialPlayerPos.x + this.thirdPersonLookOffset.x,
+      initialPlayerPos.y + this.thirdPersonLookOffset.y,
+      initialPlayerPos.z + this.thirdPersonLookOffset.z
+    );
   }
   
   initLights() {
@@ -384,9 +410,40 @@ export class MotosaiGame {
   }
   
   createMotorcycle() {
+    // Use the bike selected from the player selection screen
+    let bikeColor = 0xff0000; // default red
+    let bikeStats = null;
+
+    if (this.selectedBike) {
+      bikeColor = this.selectedBike.color;
+      bikeStats = {
+        speed: this.selectedBike.speed,
+        acceleration: this.selectedBike.acceleration,
+        handling: this.selectedBike.handling
+      };
+      console.log('Using selected bike:', this.selectedBike.name);
+    } else {
+      // Fallback to sessionStorage or default
+      const selectedBikeData = sessionStorage.getItem('selectedBike');
+      if (selectedBikeData) {
+        try {
+          const selectedBike = JSON.parse(selectedBikeData);
+          bikeColor = selectedBike.color || 0xff0000;
+          console.log('Using bike from sessionStorage:', selectedBike.name);
+        } catch (e) {
+          console.warn('Failed to parse selected bike data:', e);
+        }
+      }
+    }
+
+    // Apply bike stats to physics if available
+    if (bikeStats && this.physics) {
+      this.physics.setBikeStats(bikeStats);
+    }
+
     // Use MotorcycleFactory to create the motorcycle with rider
     this.motorcycle = MotorcycleFactory.createMotorcycle({
-      bikeColor: 0xff0000,
+      bikeColor: bikeColor,
       riderColor: this.config.riderColor,
       includeRider: true
     });
@@ -543,6 +600,44 @@ export class MotosaiGame {
 
     // Set local player ID (use a default for now, will be updated in multiplayer)
     this.minimap.setLocalPlayer('local');
+  }
+
+  showIntroAndSelection(callback) {
+    // Create intro animation
+    this.introAnimation = new IntroAnimation(this.scene, this.camera);
+
+    // Create player selection
+    this.playerSelection = new PlayerSelection(this.scene, this.camera);
+
+    // Start intro animation
+    this.introAnimation.onComplete = () => {
+      // Clean up intro
+      this.introAnimation.cleanup();
+
+      // Show player selection
+      this.playerSelection.showSelectionUI();
+
+      // Set up selection callback
+      this.playerSelection.onSelectionComplete = (selectedBike) => {
+        console.log('Selected bike:', selectedBike);
+
+        // Store selected bike for motorcycle creation
+        this.selectedBike = selectedBike;
+
+        // Hide selection UI
+        this.playerSelection.hideSelectionUI();
+
+        // Continue with game initialization
+        callback();
+      };
+    };
+
+    // Start the intro
+    this.introAnimation.start();
+  }
+
+  initPowerupSystem() {
+    this.powerupSystem = new PowerupSystem(this.scene, this.playerSelection);
   }
   
   async initMultiplayer() {
@@ -1498,7 +1593,12 @@ export class MotosaiGame {
         this.minimap.updateVehicles(this.traffic.vehicles);
         this.minimap.update(); // Draw the minimap
       }
-      
+
+      // Update powerup system
+      if (this.powerupSystem && !this.isDead) {
+        this.powerupSystem.update(deltaTime, state.position);
+      }
+
       // Update blood track system
       if (this.bloodTrackSystem) {
         this.bloodTrackSystem.update(deltaTime);
@@ -1724,6 +1824,19 @@ export class MotosaiGame {
     if (this.traffic && typeof this.traffic.reset === 'function') {
       this.traffic.reset();
     }
+
+    // Reset camera position to match player starting position
+    const initialPlayerPos = { x: -8.5, y: 0.3, z: 0 };
+    this.cameraPosition.set(
+      initialPlayerPos.x + this.cameraOffset.x,
+      initialPlayerPos.y + this.cameraOffset.y + 1,
+      initialPlayerPos.z + this.cameraOffset.z
+    );
+    this.cameraTarget.set(
+      initialPlayerPos.x + this.cameraLookOffset.x,
+      initialPlayerPos.y + this.cameraLookOffset.y,
+      initialPlayerPos.z + this.cameraLookOffset.z
+    );
   }
   
   dispose() {
@@ -1792,6 +1905,10 @@ export class MotosaiGame {
     if (this.minimap) {
       this.minimap.dispose();
       this.minimap = null;
+    }
+    if (this.powerupSystem) {
+      this.powerupSystem.cleanup();
+      this.powerupSystem = null;
     }
 
     // Dispose performance manager

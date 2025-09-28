@@ -9,7 +9,7 @@ export class SimpleBikePhysics {
     this.position = { x: -8.5, y: 0.3, z: 0 }; // Left shoulder position (road half-width is 6.75, shoulder is 2.5 more)
     this.velocity = { x: 0, y: 0, z: 0 };
     this.rotation = { pitch: 0, yaw: 0, roll: 0 };
-    
+
     // Speed parameters - More realistic motorcycle physics
     this.speed = 0; // Current speed in m/s
     this.maxSpeed = Infinity; // No speed limit!
@@ -18,6 +18,13 @@ export class SimpleBikePhysics {
     this.deceleration = 30; // m/s² (coasting) - original values
     this.brakeDeceleration = 90; // m/s² (sport bike brakes are powerful!)
     this.throttleHoldTime = 0; // How long throttle has been held
+
+    // Bike stats modifiers (from selected bike)
+    this.bikeStats = {
+      speedMultiplier: 1.0,
+      accelerationMultiplier: 1.0,
+      handlingMultiplier: 1.0
+    };
     
     // Aggressive torque curve - instant power!
     this.powerBand = {
@@ -73,6 +80,22 @@ export class SimpleBikePhysics {
     };
   }
   
+  setBikeStats(stats) {
+    if (stats.speed !== undefined) {
+      // Convert speed value (100-150) to multiplier (1.0-1.5)
+      this.bikeStats.speedMultiplier = stats.speed / 100;
+    }
+    if (stats.acceleration !== undefined) {
+      this.bikeStats.accelerationMultiplier = stats.acceleration;
+    }
+    if (stats.handling !== undefined) {
+      this.bikeStats.handlingMultiplier = stats.handling;
+    }
+
+    // Apply stats to physics parameters
+    this.acceleration = this.baseAcceleration * this.bikeStats.accelerationMultiplier;
+  }
+
   setControls(controls) {
     // Update controls
     if (controls.throttle !== undefined) this.controls.throttle = Math.max(0, Math.min(1, controls.throttle));
@@ -194,9 +217,9 @@ export class SimpleBikePhysics {
       const gearRatio = this.gear <= 3 ? 1.2 : (this.gear <= 5 ? 1.0 : 0.85); // Lower gears = more torque
       const finalAcceleration = this.baseAcceleration * torqueMultiplier * dragCoefficient * gearRatio * timeBoost;
       
-      // Apply acceleration with throttle control
+      // Apply acceleration with throttle control (apply speed multiplier)
       const accelPower = this.controls.throttle * finalAcceleration;
-      this.speed += accelPower * deltaTime;
+      this.speed += accelPower * deltaTime * this.bikeStats.speedMultiplier;
       
       // Small boosts at milestones for game feel
       if (displaySpeedMPH > 100 && displaySpeedMPH < 101) this.speed *= 1.005;
@@ -351,7 +374,7 @@ export class SimpleBikePhysics {
       this.trailBrakeMultiplier = 1.0;
     }
     
-    const targetTurnSpeed = -steerInput * this.maxTurnSpeed * speedFactor * this.trailBrakeMultiplier;
+    const targetTurnSpeed = -steerInput * this.maxTurnSpeed * speedFactor * this.trailBrakeMultiplier * this.bikeStats.handlingMultiplier;
     
     // If no input, apply auto-centering
     if (Math.abs(steerInput) < 0.01) {

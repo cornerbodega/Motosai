@@ -5,6 +5,38 @@ A realistic motorcycle riding simulator featuring the entire Interstate 5 corrid
 
 ## Core Features
 
+### New Features
+
+#### Emoji-Based Progression System
+- **Intro Animation**: Game starts with a motorcycle emoji (🏍️) that morphs into 3D
+- **Bike Selection**: Choose from 8 unique bikes with different stats
+- **Powerup Collection**: Emoji-themed powerups spawn on the road
+  - 🐉 Dragon: Speed boost
+  - 🚀 Rocket: Super speed
+  - ⭐ Star: Invincibility
+  - 🔥 Fire: Burn trail
+  - ⚡ Lightning: Teleport
+  - 💀 Skull: Ghost mode
+  - 🌈 Rainbow: Multi-boost
+  - ❤️ Heart: Health
+  - 💎 Gem: Bonus points
+  - 🪙 Coin: Currency
+
+#### Bike Unlock System
+- Start with default Street Rider bike
+- Collect specific powerups to unlock new bikes:
+  - Dragon Fury: 5 dragon powerups
+  - Rocket Blast: 10 rocket powerups
+  - Star Cruiser: 7 star powerups
+  - Inferno: 8 fire powerups
+  - Thunder Strike: 12 lightning powerups
+  - Death Rider: 15 skull powerups
+  - Rainbow Dash: 20 rainbow powerups
+- Each bike has unique stats (speed, acceleration, handling)
+- Progress saved locally
+
+## Core Features
+
 ### 1. Custom Physics Engine
 - **Motorcycle Dynamics**:
   - Realistic lean angles (up to 45° in corners)
@@ -120,11 +152,13 @@ const BIKE_PHYSICS = {
 
 ## Gameplay Loop
 
-1. **Start**: Choose bike and starting point
-2. **Ride**: Navigate traffic, maintain speed
-3. **Challenge**: Lane split safely, avoid accidents
-4. **Score**: Based on time, safety, style points
-5. **Progress**: Unlock new bikes, routes
+1. **Intro**: Motorcycle emoji animation morphs to 3D
+2. **Selection**: Choose from unlocked bikes with unique stats
+3. **Ride**: Navigate traffic, maintain speed, collect powerups
+4. **Powerups**: Collect emoji-themed powerups (🐉 🚀 ⭐ 🔥 ⚡ 💀 🌈)
+5. **Progress**: Unlock new bikes by collecting specific powerup counts
+6. **Challenge**: Lane split safely, avoid accidents
+7. **Score**: Based on time, safety, style points, powerups collected
 
 ## Development Phases
 
