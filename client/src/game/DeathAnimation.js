@@ -828,8 +828,10 @@ export class DeathAnimation {
         // Clean up blood trail (unique geometry + cloned material)
         if (bone.bloodParticles) {
           this.scene.remove(bone.bloodParticles.mesh);
-          if (bone.bloodParticles.geometry) bone.bloodParticles.geometry.dispose();
-          if (bone.bloodParticles.material) bone.bloodParticles.material.dispose();
+          if (bone.bloodParticles.geometry)
+            bone.bloodParticles.geometry.dispose();
+          if (bone.bloodParticles.material)
+            bone.bloodParticles.material.dispose();
           if (bone.bloodParticles.velocities) {
             bone.bloodParticles.velocities.length = 0;
             bone.bloodParticles.velocities = null;
@@ -876,8 +878,10 @@ export class DeathAnimation {
         if (bone.bloodParticles.age > bone.bloodParticles.maxAge) {
           // Remove blood trail when expired
           this.scene.remove(bone.bloodParticles.mesh);
-          if (bone.bloodParticles.geometry) bone.bloodParticles.geometry.dispose();
-          if (bone.bloodParticles.material) bone.bloodParticles.material.dispose();
+          if (bone.bloodParticles.geometry)
+            bone.bloodParticles.geometry.dispose();
+          if (bone.bloodParticles.material)
+            bone.bloodParticles.material.dispose();
           if (bone.bloodParticles.velocities) {
             bone.bloodParticles.velocities.length = 0;
             bone.bloodParticles.velocities = null;
@@ -1020,8 +1024,10 @@ export class DeathAnimation {
       // Clean up blood trail
       if (bone.bloodParticles) {
         this.scene.remove(bone.bloodParticles.mesh);
-        if (bone.bloodParticles.geometry) bone.bloodParticles.geometry.dispose();
-        if (bone.bloodParticles.material) bone.bloodParticles.material.dispose();
+        if (bone.bloodParticles.geometry)
+          bone.bloodParticles.geometry.dispose();
+        if (bone.bloodParticles.material)
+          bone.bloodParticles.material.dispose();
         if (bone.bloodParticles.velocities) {
           bone.bloodParticles.velocities.length = 0;
           bone.bloodParticles.velocities = null;

@@ -70,6 +70,16 @@ export class MotosaiGame {
     this.isPaused = false;
     this.score = 0;
     this.distance = 0; // miles traveled
+
+    // Race state
+    this.raceMode = false;
+    this.raceType = null; // 'ai' or 'friend'
+    this.raceDistance = 0; // km
+    this.raceStartDistance = 0;
+    this.isCountingDown = false;
+    this.countdownValue = 0;
+    this.aiOpponent = null;
+    this.deathInRaceMode = false; // Track if death happened during race
     
     // Collision effects
     this.screenShake = {
@@ -775,13 +785,320 @@ export class MotosaiGame {
     `;
     chatMsg.textContent = `${data.username}: ${data.message}`;
     this.container.appendChild(chatMsg);
-    
+
     // Remove after animation
     const removeTimer = setTimeout(() => {
       chatMsg.remove();
       this.activeChatTimers.delete(removeTimer);
     }, 5000);
     this.activeChatTimers.add(removeTimer);
+  }
+
+  showRaceSetup() {
+    // Create race setup overlay
+    const overlay = document.createElement('div');
+    overlay.id = 'race-setup-overlay';
+    overlay.style.cssText = `
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    `;
+
+    const panel = document.createElement('div');
+    panel.style.cssText = `
+      background: rgba(30, 30, 30, 0.95);
+      border: 3px solid white;
+      border-radius: 20px;
+      padding: 40px;
+      text-align: center;
+    `;
+
+    const title = document.createElement('h1');
+    title.textContent = '🏁 Race Setup';
+    title.style.cssText = 'color: white; font-size: 48px; margin-bottom: 30px;';
+    panel.appendChild(title);
+
+    // Race mode selection
+    const modeLabel = document.createElement('label');
+    modeLabel.textContent = 'Race Mode:';
+    modeLabel.style.cssText = 'color: white; font-size: 20px; display: block; margin-bottom: 10px;';
+    panel.appendChild(modeLabel);
+
+    const modeSelect = document.createElement('select');
+    modeSelect.style.cssText = 'padding: 10px 20px; font-size: 18px; border-radius: 5px; width: 250px; margin-bottom: 20px;';
+    modeSelect.innerHTML = `
+      <option value="ai">vs AI</option>
+      <option value="friend">vs Friend</option>
+    `;
+    panel.appendChild(modeSelect);
+
+    // Race length selection
+    const lengthLabel = document.createElement('label');
+    lengthLabel.textContent = 'Race Length:';
+    lengthLabel.style.cssText = 'color: white; font-size: 20px; display: block; margin-bottom: 10px; margin-top: 20px;';
+    panel.appendChild(lengthLabel);
+
+    const lengthSelect = document.createElement('select');
+    lengthSelect.style.cssText = 'padding: 10px 20px; font-size: 18px; border-radius: 5px; width: 250px; margin-bottom: 30px;';
+    lengthSelect.innerHTML = `
+      <option value="1">1 km</option>
+      <option value="5">5 km</option>
+      <option value="10">10 km</option>
+      <option value="20">20 km</option>
+      <option value="50">50 km</option>
+    `;
+    panel.appendChild(lengthSelect);
+
+    // Buttons
+    const buttonContainer = document.createElement('div');
+    buttonContainer.style.cssText = 'display: flex; gap: 20px; justify-content: center;';
+
+    const startButton = document.createElement('button');
+    startButton.textContent = 'START RACE';
+    startButton.style.cssText = `
+      padding: 15px 30px;
+      font-size: 20px;
+      font-weight: bold;
+      color: white;
+      background: #4CAF50;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.3s;
+    `;
+    startButton.addEventListener('mouseenter', () => startButton.style.background = '#45a049');
+    startButton.addEventListener('mouseleave', () => startButton.style.background = '#4CAF50');
+    startButton.addEventListener('click', () => {
+      this.startRace(modeSelect.value, parseFloat(lengthSelect.value));
+      overlay.remove();
+    });
+    buttonContainer.appendChild(startButton);
+
+    const cancelButton = document.createElement('button');
+    cancelButton.textContent = 'CANCEL';
+    cancelButton.style.cssText = `
+      padding: 15px 30px;
+      font-size: 20px;
+      font-weight: bold;
+      color: white;
+      background: #f44336;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.3s;
+    `;
+    cancelButton.addEventListener('mouseenter', () => cancelButton.style.background = '#da190b');
+    cancelButton.addEventListener('mouseleave', () => cancelButton.style.background = '#f44336');
+    cancelButton.addEventListener('click', () => overlay.remove());
+    buttonContainer.appendChild(cancelButton);
+
+    panel.appendChild(buttonContainer);
+    overlay.appendChild(panel);
+    this.container.appendChild(overlay);
+  }
+
+  startRace(raceType, raceDistanceKm) {
+    this.raceMode = true;
+    this.raceType = raceType;
+    this.raceDistance = raceDistanceKm;
+
+    // Reset distance to 0
+    this.distance = 0;
+    this.raceStartDistance = 0;
+
+    // Hide race button during race
+    if (this.raceButton) {
+      this.raceButton.style.display = 'none';
+    }
+
+    // Create AI opponent if vs AI
+    if (raceType === 'ai') {
+      this.createAIOpponent();
+    }
+
+    // Start countdown
+    this.startCountdown();
+  }
+
+  createAIOpponent() {
+    // Create AI motorcycle
+    const aiColor = 0x0000ff; // Blue bike for AI
+    this.aiOpponent = MotorcycleFactory.createMotorcycle({
+      bikeColor: aiColor,
+      riderColor: 0x1a1a1a,
+      includeRider: true
+    });
+
+    // Position AI in adjacent lane
+    const state = this.physics.getState();
+    this.aiOpponent.position.set(state.position.x + 4, 0.3, state.position.z);
+    this.scene.add(this.aiOpponent);
+
+    // AI state
+    this.aiOpponent.userData = {
+      distance: 0,
+      speed: 100 + Math.random() * 20, // 100-120 mph base speed
+      frontWheel: this.aiOpponent.children.find(c => c.userData && c.userData.isFrontWheel),
+      rearWheel: this.aiOpponent.children.find(c => c.userData && c.userData.isRearWheel)
+    };
+  }
+
+  removeAIOpponent() {
+    if (this.aiOpponent) {
+      this.scene.remove(this.aiOpponent);
+      this.aiOpponent.traverse(child => {
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) {
+          if (child.material.map) child.material.map.dispose();
+          child.material.dispose();
+        }
+      });
+      this.aiOpponent = null;
+    }
+  }
+
+  startCountdown() {
+    this.isCountingDown = true;
+    this.countdownValue = 3;
+    this.isPaused = true; // Pause game during countdown
+
+    const countdownInterval = setInterval(() => {
+      if (this.countdownValue > 0) {
+        this.showGameMessage(this.countdownValue.toString(), 'info');
+        if (this.audioManager) {
+          this.audioManager.play('revEngine', { clone: true, volume: 0.3 });
+        }
+        this.countdownValue--;
+      } else {
+        clearInterval(countdownInterval);
+        this.showGameMessage('GO!', 'info');
+        if (this.audioManager) {
+          this.audioManager.play('revEngine', { clone: true, volume: 0.8 });
+        }
+        this.isCountingDown = false;
+        this.isPaused = false; // Unpause game
+      }
+    }, 1000);
+  }
+
+  endRace(playerWon) {
+    this.raceMode = false;
+    this.isPaused = true; // Pause game
+
+    // Create result overlay
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.9);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    `;
+
+    const resultPanel = document.createElement('div');
+    resultPanel.style.cssText = `
+      background: ${playerWon ? 'rgba(76, 175, 80, 0.2)' : 'rgba(244, 67, 54, 0.2)'};
+      border: 5px solid ${playerWon ? '#4CAF50' : '#f44336'};
+      border-radius: 20px;
+      padding: 60px;
+      text-align: center;
+    `;
+
+    const title = document.createElement('h1');
+    title.textContent = playerWon ? '🏆 YOU WIN!' : '💀 YOU LOSE!';
+    title.style.cssText = `
+      color: ${playerWon ? '#4CAF50' : '#f44336'};
+      font-size: 72px;
+      margin-bottom: 20px;
+      text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.5);
+    `;
+    resultPanel.appendChild(title);
+
+    const message = document.createElement('p');
+    const distanceKm = (this.distance * 0.0003048).toFixed(2);
+    let messageText;
+    if (this.raceType === 'ai') {
+      const aiDistanceKm = this.aiOpponent ? (this.aiOpponent.userData.distance * 0.0003048).toFixed(2) : '0.00';
+      messageText = playerWon
+        ? `You beat the AI! ${this.raceDistance}km completed!`
+        : this.isDead
+        ? `You crashed at ${distanceKm}km! AI won at ${aiDistanceKm}km.`
+        : `AI finished first at ${this.raceDistance}km!`;
+    } else {
+      messageText = playerWon
+        ? `You completed ${this.raceDistance}km!`
+        : `You crashed at ${distanceKm}km!`;
+    }
+    message.textContent = messageText;
+    message.style.cssText = 'color: white; font-size: 24px; margin-bottom: 40px;';
+    resultPanel.appendChild(message);
+
+    const button = document.createElement('button');
+    button.textContent = 'BACK TO FREE RIDE';
+    button.style.cssText = `
+      padding: 20px 40px;
+      font-size: 24px;
+      font-weight: bold;
+      color: white;
+      background: #2196F3;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.3s;
+    `;
+    button.addEventListener('mouseenter', () => button.style.background = '#0b7dda');
+    button.addEventListener('mouseleave', () => button.style.background = '#2196F3');
+    button.addEventListener('click', () => {
+      overlay.remove();
+      this.exitRaceMode();
+    });
+    resultPanel.appendChild(button);
+
+    overlay.appendChild(resultPanel);
+    this.container.appendChild(overlay);
+
+    // Play win/lose sound
+    if (this.audioManager) {
+      if (playerWon) {
+        this.audioManager.play('revEngine', { clone: true, volume: 1.0 });
+      } else {
+        this.audioManager.play('explosionBloody', { clone: true, volume: 0.5 });
+      }
+    }
+  }
+
+  exitRaceMode() {
+    this.raceMode = false;
+    this.raceType = null;
+    this.raceDistance = 0;
+    this.isPaused = false;
+
+    // Remove AI opponent
+    this.removeAIOpponent();
+
+    // Show race button again
+    if (this.raceButton) {
+      this.raceButton.style.display = 'block';
+    }
+
+    // If player is dead, respawn them
+    if (this.isDead) {
+      this.respawnPlayer();
+    }
   }
   
   initHUD() {
@@ -795,6 +1112,35 @@ export class MotosaiGame {
     this.hud.style.fontSize = '14px';
     this.hud.style.textShadow = '2px 2px 4px rgba(0,0,0,0.5)';
     this.container.appendChild(this.hud);
+
+    // Create race button
+    this.raceButton = document.createElement('button');
+    this.raceButton.textContent = '🏁 START RACE';
+    this.raceButton.style.cssText = `
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      padding: 12px 24px;
+      font-size: 16px;
+      font-weight: bold;
+      color: white;
+      background: rgba(255, 100, 0, 0.9);
+      border: 2px solid white;
+      border-radius: 8px;
+      cursor: pointer;
+      z-index: 100;
+      transition: all 0.3s;
+    `;
+    this.raceButton.addEventListener('mouseenter', () => {
+      this.raceButton.style.background = 'rgba(255, 120, 20, 1)';
+      this.raceButton.style.transform = 'scale(1.05)';
+    });
+    this.raceButton.addEventListener('mouseleave', () => {
+      this.raceButton.style.background = 'rgba(255, 100, 0, 0.9)';
+      this.raceButton.style.transform = 'scale(1)';
+    });
+    this.raceButton.addEventListener('click', () => this.showRaceSetup());
+    this.container.appendChild(this.raceButton);
 
     // Pre-create HUD elements to avoid innerHTML allocations
     this.hudElements = {};
@@ -1070,7 +1416,20 @@ export class MotosaiGame {
       this.hudElements.death.style.display = 'none';
     }
     
-    this.hudElements.distance.textContent = `Distance: ${(this.distance / 5280).toFixed(1)} mi`;
+    // Distance display - show km in race mode
+    if (this.raceMode) {
+      const distanceKm = (this.distance * 0.0003048).toFixed(2); // feet to km
+      const remainingKm = Math.max(0, this.raceDistance - distanceKm).toFixed(2);
+      this.hudElements.distance.textContent = `Race: ${distanceKm}km / ${this.raceDistance}km (${remainingKm}km left)`;
+      this.hudElements.distance.style.color = '#00ff00';
+      this.hudElements.distance.style.fontSize = '18px';
+      this.hudElements.distance.style.fontWeight = 'bold';
+    } else {
+      this.hudElements.distance.textContent = `Distance: ${(this.distance / 5280).toFixed(1)} mi`;
+      this.hudElements.distance.style.color = 'white';
+      this.hudElements.distance.style.fontSize = '14px';
+      this.hudElements.distance.style.fontWeight = 'normal';
+    }
     this.hudElements.score.textContent = `Score: ${this.score}`;
 
     // Memory stats from Stoppa
@@ -1178,8 +1537,12 @@ export class MotosaiGame {
   
   triggerDeath(state) {
     if (this.isDead) return; // Already dead
-    
+
     this.isDead = true;
+
+    // Store race state for later (after death animation completes)
+    this.deathInRaceMode = this.raceMode;
+
     this.motorcycle.visible = false; // Hide motorcycle immediately
     this.rider.visible = false; // Hide rider immediately - they're now a puddle!
     
@@ -1473,9 +1836,17 @@ export class MotosaiGame {
         // Update death animation
         const readyForRespawn = this.deathAnimation.update(deltaTime);
 
-        // Check if we should respawn
+        // Check if death animation is complete
         if (readyForRespawn && !this.deathAnimation.isAnimating) {
-          this.respawnPlayer();
+          // If died during race, end the race now (after animation)
+          if (this.deathInRaceMode) {
+            this.deathInRaceMode = false;
+            this.endRace(false); // Player loses
+            // Don't respawn yet - endRace will handle it via exitRaceMode
+          } else {
+            // Normal respawn for free ride mode
+            this.respawnPlayer();
+          }
         }
 
         // Get state for camera
@@ -1735,6 +2106,41 @@ export class MotosaiGame {
       // state.speed is in MPH, deltaTime is in seconds
       // Convert: MPH * seconds * (5280 feet/mile) / (3600 seconds/hour) = feet
       this.distance += state.speed * deltaTime * (5280 / 3600); // Correct: 1.4667 ft/s per mph
+
+      // Update AI opponent
+      if (this.aiOpponent && this.raceMode && !this.isCountingDown) {
+        const aiData = this.aiOpponent.userData;
+        // AI moves at constant speed with slight variation
+        aiData.speed = 100 + Math.sin(performance.now() * 0.001) * 15; // Varies between 85-115 mph
+        aiData.distance += aiData.speed * deltaTime * (5280 / 3600); // feet
+
+        // Update AI position
+        const playerState = this.physics.getState();
+        this.aiOpponent.position.z = playerState.position.z + (aiData.distance - this.distance) * 0.3048 / 1609.34 * 5280;
+        this.aiOpponent.position.x = playerState.position.x + 4; // Keep in adjacent lane
+
+        // Rotate AI wheels
+        if (aiData.frontWheel) {
+          aiData.frontWheel.rotation.x += aiData.speed * deltaTime * 0.1;
+        }
+        if (aiData.rearWheel) {
+          aiData.rearWheel.rotation.x += aiData.speed * deltaTime * 0.1;
+        }
+
+        // Check if AI wins
+        const aiDistanceKm = aiData.distance * 0.0003048;
+        if (aiDistanceKm >= this.raceDistance) {
+          this.endRace(false); // AI wins, player loses
+        }
+      }
+
+      // Check race win condition for player
+      if (this.raceMode && !this.isCountingDown) {
+        const distanceKm = this.distance * 0.0003048; // feet to km
+        if (distanceKm >= this.raceDistance) {
+          this.endRace(true); // Player wins!
+        }
+      }
       
       // Update performance manager
       if (this.performanceManager) {
