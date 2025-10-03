@@ -24,7 +24,9 @@ export const ROAD_CONSTANTS = {
   // Lane center positions
   getLanePosition(lane) {
     // Returns x position for given lane (0-2 for 3 lanes)
-    return (lane - 1) * this.LANE_WIDTH; // Lane 0 is left, 1 is center, 2 is right
+    // Spread lanes across more of the visual road width
+    const effectiveLaneSpacing = 6; // Increased from 4.5 to spread cars across the full road
+    return (lane - 1) * effectiveLaneSpacing; // Lane 0 at -6, Lane 1 at 0, Lane 2 at +6
   },
   
   // Sub-lane positions within a lane
@@ -41,16 +43,17 @@ export const ROAD_CONSTANTS = {
   
   // Convert continuous X position to nearest lane and sub-lane
   getPositionInfo(x) {
-    // Find main lane
-    const lane = Math.round(x / this.LANE_WIDTH) + 1;
+    // Find main lane based on effective lane spacing
+    const effectiveLaneSpacing = 6;
+    const lane = Math.round(x / effectiveLaneSpacing) + 1;
     const clampedLane = Math.max(0, Math.min(2, lane));
-    
+
     // Find sub-lane within that lane
     const laneCenter = this.getLanePosition(clampedLane);
     const offsetFromCenter = x - laneCenter;
     const subLane = Math.round(offsetFromCenter / this.SUBLANE_WIDTH) + 1;
     const clampedSubLane = Math.max(0, Math.min(2, subLane));
-    
+
     return { lane: clampedLane, subLane: clampedSubLane };
   },
   

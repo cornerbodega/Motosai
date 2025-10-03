@@ -206,11 +206,11 @@ export class TrafficSystem {
         type: vehicleData.type,
         mesh: this.createVehicleMesh(type),
         lane: vehicleData.lane,
-        subLane: vehicleData.subLane || 1, // Default to center sub-lane
+        subLane: vehicleData.subLane !== undefined ? vehicleData.subLane : Math.floor(Math.random() * 3), // Random default if not specified
         targetLane: vehicleData.targetLane,
-        targetSubLane: vehicleData.targetSubLane || vehicleData.subLane || 1,
+        targetSubLane: vehicleData.targetSubLane !== undefined ? vehicleData.targetSubLane : (vehicleData.subLane !== undefined ? vehicleData.subLane : Math.floor(Math.random() * 3)),
         laneChangeProgress: vehicleData.laneChangeProgress || 0,
-        laneChangeSpeed: 1.5 + Math.random() * 0.5, // Variable smooth lane changes (1.5-2.0 seconds)
+        laneChangeSpeed: 2.0 + Math.random() * 1.0, // Smoother lane changes (2-3 seconds)
         position: new THREE.Vector3(vehicleData.position.x, vehicleData.position.y, vehicleData.position.z),
         velocity: new THREE.Vector3(vehicleData.velocity.x, vehicleData.velocity.y, vehicleData.velocity.z),
         speed: vehicleData.speed,
@@ -229,20 +229,17 @@ export class TrafficSystem {
       const type = this.selectVehicleType();
       const lane = Math.floor(Math.random() * 3);
       
-      // Cars should strongly prefer center of lane
-      let subLane = 1; // Default center
-      // 90% chance to stay in center, only 10% to use other sub-lanes
-      if (Math.random() < 0.9) {
-        subLane = 1; // Center sub-lane
+      // Randomly select sublane for more variety
+      let subLane;
+      if (lane === 0) {
+        // Left lane: prefer left and center sublanes
+        subLane = Math.random() < 0.66 ? Math.floor(Math.random() * 2) : 2; // 0 or 1 mostly, sometimes 2
+      } else if (lane === 2) {
+        // Right lane: prefer center and right sublanes
+        subLane = Math.random() < 0.66 ? Math.floor(Math.random() * 2) + 1 : 0; // 1 or 2 mostly, sometimes 0
       } else {
-        // Occasionally use other sub-lanes based on lane position
-        if (lane === 0) {
-          subLane = 0; // Left sub-lane in left lane
-        } else if (lane === 2) {
-          subLane = 2; // Right sub-lane in right lane
-        } else {
-          subLane = Math.random() < 0.5 ? 0 : 2; // Either side in middle lane
-        }
+        // Middle lane: equal distribution across all sublanes
+        subLane = Math.floor(Math.random() * 3); // 0, 1, or 2 equally
       }
       
       vehicle = {
@@ -254,7 +251,7 @@ export class TrafficSystem {
         targetLane: lane,
         targetSubLane: subLane,
         laneChangeProgress: 0,
-        laneChangeSpeed: 1.5 + Math.random() * 0.5, // Variable smooth lane changes (1.5-2.0 seconds)
+        laneChangeSpeed: 2.0 + Math.random() * 1.0, // Smoother lane changes (2-3 seconds)
         position: new THREE.Vector3(),
         velocity: new THREE.Vector3(),
         speed: type.speed + (Math.random() - 0.5) * 4, // ±~10 mph variation
@@ -543,16 +540,38 @@ export class TrafficSystem {
         vehicle.mesh.rotation.y = rotationAmount;
       }
     } else {
-      // Not changing position - keep stable
-      vehicle.mesh.rotation.y = 0;
-      
-      // Ensure position is set correctly
-      if (!vehicle.hasStablePosition) {
-        const exactX = ROAD_CONSTANTS.getExactPosition(vehicle.lane, vehicle.subLane);
-        vehicle.position.x = exactX;
-        vehicle.hasStablePosition = true;
+      // Not changing lanes - add subtle drift within sublane
+
+      // Initialize drift parameters if not present
+      if (!vehicle.lateralDrift) {
+        vehicle.lateralDrift = {
+          primaryPhase: Math.random() * Math.PI * 2, // Primary wave phase
+          secondaryPhase: Math.random() * Math.PI * 2, // Secondary wave phase
+          amplitude: 0.15 + Math.random() * 0.15, // 0.15-0.3m amplitude
+          frequency: 0.15 + Math.random() * 0.1 // Vary frequency per vehicle
+        };
       }
-      
+
+      // Update phases for smooth, natural movement
+      vehicle.lateralDrift.primaryPhase += deltaTime * vehicle.lateralDrift.frequency;
+      vehicle.lateralDrift.secondaryPhase += deltaTime * vehicle.lateralDrift.frequency * 1.7; // Different frequency
+
+      // Combine two sine waves for more natural movement
+      const primaryWave = Math.sin(vehicle.lateralDrift.primaryPhase) * vehicle.lateralDrift.amplitude;
+      const secondaryWave = Math.sin(vehicle.lateralDrift.secondaryPhase) * vehicle.lateralDrift.amplitude * 0.3;
+
+      // Smooth natural drift
+      const totalDrift = primaryWave + secondaryWave;
+      const clampedDrift = Math.max(-0.4, Math.min(0.4, totalDrift)); // Stay within sublane
+
+      // Apply position with drift
+      const baseX = ROAD_CONSTANTS.getExactPosition(vehicle.lane, vehicle.subLane);
+      vehicle.position.x = baseX + clampedDrift;
+
+      // Add subtle rotation based on drift direction for realism
+      const driftVelocity = Math.cos(vehicle.lateralDrift.primaryPhase) * vehicle.lateralDrift.amplitude * vehicle.lateralDrift.frequency;
+      vehicle.mesh.rotation.y = driftVelocity * 0.08; // Very subtle rotation
+
       vehicle.position.y = ROAD_CONSTANTS.ROAD_Y; // Force correct height
     }
     
@@ -610,18 +629,18 @@ export class TrafficSystem {
       const distance = vehicle.frontVehicle.position.z - vehicle.position.z;
       const speedDiff = vehicle.baseSpeed - vehicle.frontVehicle.speed;
       
-      // Less aggressive passing - only pass if significantly slower
-      const passingThreshold = 40; // Need to be closer to consider passing
-      const minPassingGap = 15; // Need more space
+      // Natural passing behavior
+      const passingThreshold = 40; // Consider passing at reasonable distance
+      const minPassingGap = 12; // Safe following distance
 
-      // Only pass if vehicle is significantly slower (4+ m/s difference, ~10 mph)
-      if (speedDiff > 4 && distance < passingThreshold && distance > minPassingGap) {
+      // Pass if vehicle is moderately slower (3+ m/s difference, ~7 mph)
+      if (speedDiff > 3 && distance < passingThreshold && distance > minPassingGap) {
         // Try to pass if haven't changed lanes recently
-        const laneChangeDelay = 5.0; // Wait at least 5 seconds between passes
+        const laneChangeDelay = 3.5; // Wait 3.5 seconds between passes
         if (vehicle.behavior.lastLaneChange > laneChangeDelay && vehicle.targetLane === vehicle.lane) {
           // Prefer passing on the left (lane 0 is leftmost)
           let passingLane = vehicle.lane - 1;
-          const requiredGap = 20; // Require good spacing for passing
+          const requiredGap = 15; // Require safe spacing for passing
           
           if (passingLane < 0 || !this.isLaneChangeSafe(vehicle, passingLane, 1, requiredGap)) {
             // Can't pass on left, try right
@@ -641,9 +660,9 @@ export class TrafficSystem {
     
     // Return to original lane after passing
     if (vehicle.behavior.isPassing && !vehicle.frontVehicle) {
-      const returnDelay = 5.0; // Wait 5 seconds after passing
+      const returnDelay = 2.0; // Wait 2 seconds after passing
       if (vehicle.behavior.lastLaneChange > returnDelay) {
-        const returnGap = 15; // Safe gap for returning
+        const returnGap = 10; // Smaller gap for returning
         if (this.isLaneChangeSafe(vehicle, vehicle.behavior.originalLane, 1, returnGap)) {
           if (this.attemptLaneChange(vehicle, vehicle.behavior.originalLane, returnGap)) {
             vehicle.behavior.isPassing = false;
@@ -653,9 +672,9 @@ export class TrafficSystem {
       }
     }
     
-    // Much less frequent random lane changes
-    const laneChangeWait = 30.0; // Wait at least 30 seconds between random changes
-    const laneChangeProbability = 0.002; // Only 0.2% chance per frame
+    // Natural random lane changes - less abrupt
+    const laneChangeWait = 12.0 + Math.random() * 8.0; // Wait 12-20 seconds between lane changes
+    const laneChangeProbability = 0.004; // 0.4% chance per frame
 
     if (!vehicle.behavior.isPassing &&
         vehicle.targetLane === vehicle.lane &&
@@ -663,6 +682,23 @@ export class TrafficSystem {
         Math.random() < laneChangeProbability) {
       this.attemptLaneChange(vehicle);
       vehicle.behavior.lastLaneChange = 0;
+    }
+
+    // Smooth sublane changes for natural weaving
+    const subLaneChangeProbability = 0.008; // 0.8% chance per frame
+    const subLaneChangeWait = 4.0 + Math.random() * 4.0; // Wait 4-8 seconds between sublane changes
+
+    // Track sublane change timing separately
+    if (!vehicle.behavior.lastSubLaneChange) {
+      vehicle.behavior.lastSubLaneChange = Math.random() * 2; // Randomize initial timing
+    }
+    vehicle.behavior.lastSubLaneChange += deltaTime;
+
+    if (vehicle.targetSubLane === vehicle.subLane && // Not already changing
+        vehicle.behavior.lastSubLaneChange > subLaneChangeWait &&
+        Math.random() < subLaneChangeProbability) {
+      this.attemptSubLaneChange(vehicle);
+      vehicle.behavior.lastSubLaneChange = 0;
     }
     
     // Speed adjustment based on front vehicle
@@ -702,11 +738,6 @@ export class TrafficSystem {
   }
   
   attemptLaneChange(vehicle, targetLane = null, requiredGap = null) {
-    // First, consider sub-lane changes within current lane (much less frequent)
-    if (Math.random() < 0.05) { // Only 5% chance to change sub-lane instead of full lane
-      return this.attemptSubLaneChange(vehicle);
-    }
-    
     // If target lane specified, use it; otherwise pick randomly
     if (targetLane === null) {
       // Determine possible lanes (0-2)
@@ -726,9 +757,9 @@ export class TrafficSystem {
     // Check if lane change is safe
     if (targetLane >= 0 && targetLane <= 2 && targetLane !== vehicle.lane) {
       
-      // Always prefer center sub-lane when changing lanes
-      let targetSubLane = 1; // Always center for better lane discipline
-      
+      // Pick a random sublane when changing lanes for more variety
+      let targetSubLane = Math.floor(Math.random() * 3); // Random sublane 0, 1, or 2
+
       if (this.isLaneChangeSafe(vehicle, targetLane, targetSubLane, requiredGap)) {
         vehicle.targetLane = targetLane;
         vehicle.targetSubLane = targetSubLane;
@@ -749,7 +780,7 @@ export class TrafficSystem {
       // Check if sub-lane change is safe (smaller safety margin)
       if (this.isSubLaneChangeSafe(vehicle, vehicle.lane, targetSubLane)) {
         vehicle.targetSubLane = targetSubLane;
-        vehicle.laneChangeSpeed = 0.8 + Math.random() * 0.4; // Faster for sub-lane changes
+        vehicle.laneChangeSpeed = 0.8 + Math.random() * 0.6; // Smoother sublane changes (0.8-1.4 seconds)
         return true;
       }
     }

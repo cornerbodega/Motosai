@@ -149,7 +149,7 @@ export class Highway101 {
     leftShoulder.rotation.x = -Math.PI / 2;
     leftShoulder.position.set(-this.totalWidth / 2 - this.shoulderWidth / 2, 0.01, 0);
     segment.add(leftShoulder);
-    
+
     const rightShoulder = new THREE.Mesh(this.sharedRoadGeometries.shoulder, this.shoulderMat);
     rightShoulder.rotation.x = -Math.PI / 2;
     rightShoulder.position.set(this.totalWidth / 2 + this.shoulderWidth / 2, 0.01, 0);
@@ -181,20 +181,24 @@ export class Highway101 {
     const dashLength = 3;
     const dashGap = 9;
     const lineWidth = 0.15;
-    
+
     // Get segment data
     const segmentData = this.segments.find(s => s.group === segment);
-    
-    // White dashed lanes for 3 lanes (2 dividers between lanes)
-    // Lane 0 at x=-3.5, Lane 1 at x=0, Lane 2 at x=3.5
-    // Dividers at x=-1.75 and x=1.75
-    const lane0X = -this.laneWidth;
-    const lane1X = 0;
-    const lane2X = this.laneWidth;
-    
+
+    // Use ROAD_CONSTANTS for consistent lane positioning
+    // Get lane center positions from RoadConstants
+    const lane0X = ROAD_CONSTANTS.getLanePosition(0); // -6
+    const lane1X = ROAD_CONSTANTS.getLanePosition(1); // 0
+    const lane2X = ROAD_CONSTANTS.getLanePosition(2); // 6
+
+    // Calculate divider positions between lane centers
+    // Dividers should be halfway between lane centers
+    const divider0X = (lane0X + lane1X) / 2; // (-6 + 0) / 2 = -3
+    const divider1X = (lane1X + lane2X) / 2; // (0 + 6) / 2 = 3
+
     // Create individual dashed lines (not merged for simplicity and visibility)
     for (let divider = 0; divider < 2; divider++) {
-      const xPos = divider === 0 ? (lane0X + lane1X) / 2 : (lane1X + lane2X) / 2;
+      const xPos = divider === 0 ? divider0X : divider1X;
       
       for (let i = 0; i < this.segmentLength; i += dashLength + dashGap) {
         const dash = new THREE.Mesh(this.sharedRoadGeometries.dash, this.whiteMat);
@@ -213,7 +217,7 @@ export class Highway101 {
     leftEdge.userData.isMarking = true;
     segment.add(leftEdge);
     if (segmentData) segmentData.detailGroups.markings.push(leftEdge);
-    
+
     const rightEdge = new THREE.Mesh(this.sharedRoadGeometries.edgeLine, this.whiteMat);
     rightEdge.rotation.x = -Math.PI / 2;
     rightEdge.position.set(this.totalWidth / 2, markingHeight, 0);
@@ -234,7 +238,7 @@ export class Highway101 {
     leftGrass.userData.isRoadside = true;
     segment.add(leftGrass);
     if (segmentData) segmentData.detailGroups.roadside.push(leftGrass);
-    
+
     const rightGrass = new THREE.Mesh(this.sharedRoadGeometries.grass, this.grassMat);
     rightGrass.rotation.x = -Math.PI / 2;
     rightGrass.position.set(this.totalWidth / 2 + this.shoulderWidth + grassWidth / 2, -0.1, 0);
@@ -242,7 +246,7 @@ export class Highway101 {
     rightGrass.userData.isRoadside = true;
     segment.add(rightGrass);
     if (segmentData) segmentData.detailGroups.roadside.push(rightGrass);
-    
+
     // GUARDRAILS - Much further out (beyond shoulder)
     const railingOffset = ROAD_CONSTANTS.TOTAL_WIDTH / 2 + ROAD_CONSTANTS.BARRIER_OFFSET; // Further out beyond shoulder
 

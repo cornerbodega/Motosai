@@ -169,14 +169,18 @@ export class BloodTrackSystem {
       status.totalDistance += distance;
     }
 
-    // Blood trail continues indefinitely - no cutoff at all
-    // Keep constant intensity for permanent trails
-    status.bloodIntensity = 0.7; // Constant visible intensity
+    // Fade blood trail over distance
+    status.bloodIntensity = Math.max(0, 1.0 - (status.totalDistance / status.maxTrailDistance));
 
-    // Always create new track segment - no stopping
-    if (true) {
+    // Stop creating tracks when intensity is too low or exceeded max distance
+    if (status.bloodIntensity > 0.1 && status.totalDistance < status.maxTrailDistance) {
       this.createTireTracks(vehicle.position, vehicle.velocity, vehicle.width, status.bloodIntensity, vehicle.id);
       status.lastTrackPosition = vehicle.position.clone();
+    } else {
+      // Trail has ended - remove from tracking
+      console.log(`Vehicle ${vehicle.id} blood trail ended after ${status.totalDistance.toFixed(1)}m`);
+      this.vehicleBloodStatus.delete(vehicle.id);
+      return false;
     }
 
     return true;
@@ -263,6 +267,19 @@ export class BloodTrackSystem {
 
   // Update system - called every frame
   update(deltaTime) {
+    // MEMORY LEAK FIX: Clean up excess tracks if array grows too large
+    if (this.bloodTracks.length > this.maxTracks) {
+      console.warn(`Blood tracks exceeded limit (${this.bloodTracks.length}/${this.maxTracks}), cleaning up oldest tracks`);
+      while (this.bloodTracks.length > this.maxTracks * 0.8) { // Clean down to 80% capacity
+        const oldTrack = this.bloodTracks.shift();
+        if (oldTrack && oldTrack.mesh) {
+          this.scene.remove(oldTrack.mesh);
+          oldTrack.mesh.visible = false;
+          this.trackPool.push(oldTrack.mesh); // Return to pool for reuse
+        }
+      }
+    }
+
     // Update bloodstains
     for (let i = this.bloodStains.length - 1; i >= 0; i--) {
       const bloodStain = this.bloodStains[i];
