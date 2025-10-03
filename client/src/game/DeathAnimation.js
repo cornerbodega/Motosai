@@ -443,8 +443,8 @@ export class DeathAnimation {
     geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
     geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
 
-    // Clone the blood trail material for individual opacity control
-    const bloodTrailMaterial = this.bloodTrailMaterial;
+    // Clone the blood trail material for individual opacity control so we can dispose it later
+    const bloodTrailMaterial = this.bloodTrailMaterial.clone();
     bloodTrailMaterial.size = 0.15;
     bloodTrailMaterial.opacity = 0.8;
 
@@ -649,14 +649,10 @@ export class DeathAnimation {
 
       if (explosion.age > explosion.maxAge) {
         this.scene.remove(explosion.mesh);
+        // Only dispose geometry we explicitly created and stored on the object
         if (explosion.geometry) explosion.geometry.dispose();
-        // Clean up Vector3 objects to prevent memory leak!
+        // Clear references to velocity arrays so GC can collect Vector3s
         if (explosion.velocities) {
-          explosion.velocities.forEach((v) => {
-            v.x = null;
-            v.y = null;
-            v.z = null;
-          });
           explosion.velocities.length = 0;
           explosion.velocities = null;
         }
@@ -722,20 +718,9 @@ export class DeathAnimation {
 
       if (debris.age > debris.maxAge) {
         this.scene.remove(debris.mesh);
-        // DON'T dispose shared geometry!
-        // Clean up Vector3 objects to prevent memory leak!
-        if (debris.velocity) {
-          debris.velocity.x = null;
-          debris.velocity.y = null;
-          debris.velocity.z = null;
-          debris.velocity = null;
-        }
-        if (debris.angularVelocity) {
-          debris.angularVelocity.x = null;
-          debris.angularVelocity.y = null;
-          debris.angularVelocity.z = null;
-          debris.angularVelocity = null;
-        }
+        // Clear references so GC can collect Vector3s
+        if (debris.velocity) debris.velocity = null;
+        if (debris.angularVelocity) debris.angularVelocity = null;
         this.bikeDebris.splice(i, 1);
         continue;
       }
@@ -789,14 +774,10 @@ export class DeathAnimation {
 
       if (particle.age > particle.maxAge) {
         this.scene.remove(particle.mesh);
-        particle.geometry.dispose();
-        // Clean up Vector3 objects to prevent memory leak!
+        // Dispose the unique BufferGeometry we created
+        if (particle.geometry) particle.geometry.dispose();
+        // Clear velocities array so GC can collect Vector3s
         if (particle.velocities) {
-          particle.velocities.forEach((v) => {
-            v.x = null;
-            v.y = null;
-            v.z = null;
-          });
           particle.velocities.length = 0;
           particle.velocities = null;
         }
@@ -841,31 +822,15 @@ export class DeathAnimation {
 
       if (bone.age > bone.maxAge) {
         this.scene.remove(bone.mesh);
-        // DON'T dispose shared geometry!
-        // Clean up Vector3 objects to prevent memory leak!
-        if (bone.velocity) {
-          bone.velocity.x = null;
-          bone.velocity.y = null;
-          bone.velocity.z = null;
-          bone.velocity = null;
-        }
-        if (bone.angularVelocity) {
-          bone.angularVelocity.x = null;
-          bone.angularVelocity.y = null;
-          bone.angularVelocity.z = null;
-          bone.angularVelocity = null;
-        }
-        // Clean up blood trail
+        // Clear velocity/angular references
+        if (bone.velocity) bone.velocity = null;
+        if (bone.angularVelocity) bone.angularVelocity = null;
+        // Clean up blood trail (unique geometry + cloned material)
         if (bone.bloodParticles) {
           this.scene.remove(bone.bloodParticles.mesh);
-          bone.bloodParticles.geometry.dispose(); // This IS unique, should dispose
-          // Clean up Vector3 objects in blood trail
+          if (bone.bloodParticles.geometry) bone.bloodParticles.geometry.dispose();
+          if (bone.bloodParticles.material) bone.bloodParticles.material.dispose();
           if (bone.bloodParticles.velocities) {
-            bone.bloodParticles.velocities.forEach((v) => {
-              v.x = null;
-              v.y = null;
-              v.z = null;
-            });
             bone.bloodParticles.velocities.length = 0;
             bone.bloodParticles.velocities = null;
           }
@@ -911,14 +876,9 @@ export class DeathAnimation {
         if (bone.bloodParticles.age > bone.bloodParticles.maxAge) {
           // Remove blood trail when expired
           this.scene.remove(bone.bloodParticles.mesh);
-          bone.bloodParticles.geometry.dispose(); // This IS unique, should dispose
-          // Clean up Vector3 objects to prevent memory leak!
+          if (bone.bloodParticles.geometry) bone.bloodParticles.geometry.dispose();
+          if (bone.bloodParticles.material) bone.bloodParticles.material.dispose();
           if (bone.bloodParticles.velocities) {
-            bone.bloodParticles.velocities.forEach((v) => {
-              v.x = null;
-              v.y = null;
-              v.z = null;
-            });
             bone.bloodParticles.velocities.length = 0;
             bone.bloodParticles.velocities = null;
           }
@@ -1019,15 +979,10 @@ export class DeathAnimation {
     // Clean up all particles
     for (const particle of this.particles) {
       this.scene.remove(particle.mesh);
-      if (particle.mesh.geometry) particle.mesh.geometry.dispose(); // Dispose unique BufferGeometry
+      if (particle.geometry) particle.geometry.dispose(); // Dispose unique BufferGeometry
       // DON'T dispose shared material - it's reused!
-      // Clean up Vector3 objects properly
+      // Clear velocities so GC can collect Vector3s
       if (particle.velocities) {
-        particle.velocities.forEach((v) => {
-          v.x = null;
-          v.y = null;
-          v.z = null;
-        });
         particle.velocities.length = 0;
         particle.velocities = null;
       }
@@ -1038,15 +993,9 @@ export class DeathAnimation {
     // Clean up explosion effects
     for (const explosion of this.explosionParticles) {
       this.scene.remove(explosion.mesh);
-      if (explosion.mesh.geometry) explosion.mesh.geometry.dispose(); // Dispose unique BufferGeometry
+      if (explosion.geometry) explosion.geometry.dispose(); // Dispose unique BufferGeometry
       // DON'T dispose shared materials - they're reused!
-      // Clean up Vector3 objects properly
       if (explosion.velocities) {
-        explosion.velocities.forEach((v) => {
-          v.x = null;
-          v.y = null;
-          v.z = null;
-        });
         explosion.velocities.length = 0;
         explosion.velocities = null;
       }
@@ -1057,54 +1006,23 @@ export class DeathAnimation {
     // Clean up bike debris
     for (const debris of this.bikeDebris) {
       this.scene.remove(debris.mesh);
-      // Dispose cloned material
-      // Material disposal is handled by pool cleanup - no individual disposal needed
-      // Clean up Vector3 objects properly
-      if (debris.velocity) {
-        debris.velocity.x = null;
-        debris.velocity.y = null;
-        debris.velocity.z = null;
-        debris.velocity = null;
-      }
-      if (debris.angularVelocity) {
-        debris.angularVelocity.x = null;
-        debris.angularVelocity.y = null;
-        debris.angularVelocity.z = null;
-        debris.angularVelocity = null;
-      }
+      // Clear velocities so GC can collect Vector3s
+      if (debris.velocity) debris.velocity = null;
+      if (debris.angularVelocity) debris.angularVelocity = null;
     }
     this.bikeDebris = [];
 
     // Clean up bones
     for (const bone of this.bones) {
       this.scene.remove(bone.mesh);
-      // Dispose cloned material
-      // Material disposal is handled by pool cleanup - no individual disposal needed
-      // Clean up Vector3 objects properly
-      if (bone.velocity) {
-        bone.velocity.x = null;
-        bone.velocity.y = null;
-        bone.velocity.z = null;
-        bone.velocity = null;
-      }
-      if (bone.angularVelocity) {
-        bone.angularVelocity.x = null;
-        bone.angularVelocity.y = null;
-        bone.angularVelocity.z = null;
-        bone.angularVelocity = null;
-      }
+      if (bone.velocity) bone.velocity = null;
+      if (bone.angularVelocity) bone.angularVelocity = null;
       // Clean up blood trail
       if (bone.bloodParticles) {
         this.scene.remove(bone.bloodParticles.mesh);
-        if (bone.bloodParticles.mesh.geometry)
-          bone.bloodParticles.mesh.geometry.dispose(); // Unique geometry
-        // DON'T dispose shared material
+        if (bone.bloodParticles.geometry) bone.bloodParticles.geometry.dispose();
+        if (bone.bloodParticles.material) bone.bloodParticles.material.dispose();
         if (bone.bloodParticles.velocities) {
-          bone.bloodParticles.velocities.forEach((v) => {
-            v.x = null;
-            v.y = null;
-            v.z = null;
-          });
           bone.bloodParticles.velocities.length = 0;
           bone.bloodParticles.velocities = null;
         }
@@ -1115,8 +1033,7 @@ export class DeathAnimation {
     // Clean up blood splatters
     for (const splatter of this.bloodSplatters) {
       this.scene.remove(splatter.mesh);
-      // Dispose cloned materials
-      // Material disposal is handled by pool cleanup - no individual disposal needed
+      // DON'T dispose shared geometry or material!
     }
     this.bloodSplatters = [];
   }

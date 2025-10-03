@@ -37,7 +37,7 @@ export class PlayerSelection {
                 speed: 120,
                 acceleration: 1.2,
                 handling: 0.9,
-                unlocked: false,
+                unlocked: true, // All bikes unlocked - powerup system removed
                 unlockRequirement: { powerup: 'dragon', count: 2 }  // Reduced from 5
             },
             {
@@ -48,7 +48,7 @@ export class PlayerSelection {
                 speed: 150,
                 acceleration: 1.5,
                 handling: 0.8,
-                unlocked: false,
+                unlocked: true, // All bikes unlocked - powerup system removed
                 unlockRequirement: { powerup: 'rocket', count: 3 }  // Reduced from 10
             },
             {
@@ -59,7 +59,7 @@ export class PlayerSelection {
                 speed: 110,
                 acceleration: 1.1,
                 handling: 1.2,
-                unlocked: false,
+                unlocked: true, // All bikes unlocked - powerup system removed
                 unlockRequirement: { powerup: 'star', count: 2 }  // Reduced from 7
             },
             {
@@ -70,7 +70,7 @@ export class PlayerSelection {
                 speed: 130,
                 acceleration: 1.3,
                 handling: 1.0,
-                unlocked: false,
+                unlocked: true, // All bikes unlocked - powerup system removed
                 unlockRequirement: { powerup: 'fire', count: 3 }  // Reduced from 8
             },
             {
@@ -81,7 +81,7 @@ export class PlayerSelection {
                 speed: 140,
                 acceleration: 1.4,
                 handling: 1.1,
-                unlocked: false,
+                unlocked: true, // All bikes unlocked - powerup system removed
                 unlockRequirement: { powerup: 'lightning', count: 4 }  // Reduced from 12
             },
             {
@@ -92,7 +92,7 @@ export class PlayerSelection {
                 speed: 125,
                 acceleration: 1.2,
                 handling: 1.3,
-                unlocked: false,
+                unlocked: true, // All bikes unlocked - powerup system removed
                 unlockRequirement: { powerup: 'skull', count: 5 }  // Reduced from 15
             },
             {
@@ -103,7 +103,7 @@ export class PlayerSelection {
                 speed: 135,
                 acceleration: 1.3,
                 handling: 1.4,
-                unlocked: false,
+                unlocked: true, // All bikes unlocked - powerup system removed
                 unlockRequirement: { powerup: 'rainbow', count: 7 }  // Reduced from 20
             }
         ];
@@ -288,12 +288,7 @@ export class PlayerSelection {
             `;
             bikeCard.appendChild(stats);
 
-            if (!bike.unlocked && bike.unlockRequirement) {
-                const lockInfo = document.createElement('div');
-                lockInfo.style.cssText = 'font-size: 10px; color: #f44336; margin-top: 10px;';
-                lockInfo.textContent = `Collect ${bike.unlockRequirement.count} ${bike.unlockRequirement.powerup} powerups`;
-                bikeCard.appendChild(lockInfo);
-            }
+            // Powerup unlock system removed - all bikes unlocked
 
             bikeGrid.appendChild(bikeCard);
         });

@@ -52,9 +52,9 @@ export class Highway101 {
       barrier: new THREE.BoxGeometry(0.5, 1.2, this.segmentLength),
       strip: new THREE.BoxGeometry(0.1, 0.1, this.segmentLength),
 
-      // Trees
-      trunk: new THREE.CylinderGeometry(0.2, 0.3, 2, 4),
-      foliage: new THREE.ConeGeometry(1.5, 3, 4),
+      // Cacti
+      cactusBody: new THREE.CylinderGeometry(0.4, 0.5, 4, 8), // Main cactus trunk
+      cactusArm: new THREE.CylinderGeometry(0.25, 0.3, 1.5, 6), // Cactus arms
 
       // Signs
       pole: new THREE.CylinderGeometry(0.05, 0.05, 2, 4),
@@ -79,9 +79,9 @@ export class Highway101 {
     // Shoulder - use MaterialManager
     this.shoulderMat = this.materialManager.getRoadMaterial('shoulder');
 
-    // Grass - use MaterialManager
+    // Sand - use MaterialManager
     this.grassMat = this.materialManager.getMaterial('standard', {
-      color: 0x7cae3f,
+      color: 0xC2B280, // Sandy yellow/beige color
       roughness: 1,
       metalness: 0
     });
@@ -93,10 +93,9 @@ export class Highway101 {
       metalness: 0
     });
 
-    // Create reusable materials for props (trees, signs, etc.)
+    // Create reusable materials for props (cacti, signs, etc.)
     this.propMaterials = {
-      trunk: this.materialManager.getMaterial('lambert', { color: 0x8B4513 }),
-      foliage: this.materialManager.getMaterial('lambert', { color: 0x228B22 }),
+      cactus: this.materialManager.getMaterial('lambert', { color: 0x4A7C59 }), // Desert cactus green
       pole: this.materialManager.getMaterial('lambert', { color: 0x666666 }),
       sign: this.materialManager.getMaterial('lambert', { color: 0x006600 }),
       signLarge: this.materialManager.getMaterial('lambert', { color: 0x006633 }),
@@ -275,51 +274,67 @@ export class Highway101 {
     rightStrip.position.set(railingOffset - 0.25, 0.9, 0);
     segment.add(rightStrip);
     
-    // Trees (low poly)
-    this.addTrees(segment, 0);
+    // Cacti (low poly)
+    this.addCacti(segment, 0);
     
     // Signs and landmarks
     this.addSignage(segment, 0);
   }
   
-  addTrees(segment, zPosition) {
+  addCacti(segment, zPosition) {
     const segmentData = this.segments.find(s => s.group === segment);
-    const numTrees = Math.floor(Math.random() * 2) + 1; // Reduced for performance
-    
-    for (let i = 0; i < numTrees; i++) {
-      const tree = this.createSimpleTree();
-      
+
+    // Only add cacti to ~10% of segments for very sparse desert look
+    if (Math.random() > 0.1) return;
+
+    const numCacti = 1; // Always just 1 cactus when they do spawn
+
+    for (let i = 0; i < numCacti; i++) {
+      const cactus = this.createSimpleCactus();
+
       // Random position alongside road
       const side = Math.random() > 0.5 ? 1 : -1;
       const xOffset = (this.totalWidth / 2 + this.shoulderWidth + 5 + Math.random() * 20) * side;
       const zOffset = (Math.random() - 0.5) * this.segmentLength;
-      
-      tree.position.set(xOffset, 0, zOffset);
-      tree.scale.setScalar(0.8 + Math.random() * 0.4);
-      tree.userData.isTree = true;
-      
-      segment.add(tree);
+
+      cactus.position.set(xOffset, 0, zOffset);
+      cactus.scale.setScalar(0.8 + Math.random() * 0.4);
+      cactus.userData.isCactus = true;
+
+      segment.add(cactus);
       if (segmentData) {
         if (!segmentData.detailGroups.trees) segmentData.detailGroups.trees = [];
-        segmentData.detailGroups.trees.push(tree);
+        segmentData.detailGroups.trees.push(cactus);
       }
     }
   }
   
-  createSimpleTree() {
-    const tree = new THREE.Group();
+  createSimpleCactus() {
+    const cactus = new THREE.Group();
 
-    // Simple trunk - use shared geometry and material
-    const trunk = new THREE.Mesh(this.sharedRoadGeometries.trunk, this.propMaterials.trunk);
-    trunk.position.y = 1;
-    tree.add(trunk);
+    // Main cactus body - use shared geometry and material
+    const body = new THREE.Mesh(this.sharedRoadGeometries.cactusBody, this.propMaterials.cactus);
+    body.position.y = 2; // Center the body vertically
+    cactus.add(body);
 
-    // Simple foliage - use shared geometry and material
-    const foliage = new THREE.Mesh(this.sharedRoadGeometries.foliage, this.propMaterials.foliage);
-    foliage.position.y = 3;
-    tree.add(foliage);
-    
-    return tree;
+    // Add arms randomly (50% chance for each side)
+    if (Math.random() > 0.3) {
+      // Left arm
+      const leftArm = new THREE.Mesh(this.sharedRoadGeometries.cactusArm, this.propMaterials.cactus);
+      leftArm.position.set(-0.5, 1.5, 0);
+      leftArm.rotation.z = Math.PI / 3; // Angle upward
+      cactus.add(leftArm);
+    }
+
+    if (Math.random() > 0.3) {
+      // Right arm
+      const rightArm = new THREE.Mesh(this.sharedRoadGeometries.cactusArm, this.propMaterials.cactus);
+      rightArm.position.set(0.5, 2, 0);
+      rightArm.rotation.z = -Math.PI / 3; // Angle upward
+      cactus.add(rightArm);
+    }
+
+    return cactus;
   }
   
   // Removed createLowPolyTree - now using instanced rendering
@@ -598,10 +613,10 @@ export class Highway101 {
   }
   
   regenerateRoadside(segment) {
-    // Remove old trees and signs - DON'T dispose shared geometries
+    // Remove old cacti and signs - DON'T dispose shared geometries
     const toRemove = [];
     segment.group.traverse(child => {
-      if (child.userData.roadside || child.userData.isSign || child.userData.isTree) {
+      if (child.userData.roadside || child.userData.isSign || child.userData.isCactus) {
         toRemove.push(child);
       }
     });
@@ -618,7 +633,7 @@ export class Highway101 {
     }
     
     // Add new ones
-    this.addTrees(segment.group, 0);
+    this.addCacti(segment.group, 0);
     this.addSignage(segment.group, segment.z);
   }
   

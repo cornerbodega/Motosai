@@ -19,7 +19,7 @@ import { MemoryProfiler } from '../utils/MemoryProfiler.js';
 import { getMaterialManager, resetMaterialManager } from '../utils/MaterialManager.js';
 import { IntroAnimation } from './IntroAnimation.js';
 import { PlayerSelection } from './PlayerSelection.js';
-import { PowerupSystem } from './PowerupSystem.js';
+// PowerupSystem removed
 
 export class MotosaiGame {
   constructor(container, config = {}) {
@@ -134,7 +134,7 @@ export class MotosaiGame {
     // Initialize game systems
     this.introAnimation = null;
     this.playerSelection = null;
-    this.powerupSystem = null;
+    // powerupSystem removed
     this.gameStarted = false;
 
     // Initialize components
@@ -155,7 +155,7 @@ export class MotosaiGame {
       this.initAudio();
       this.initBloodTrackSystem();
       this.initMinimap();
-      this.initPowerupSystem();
+      // Powerup system removed
 
       // Initialize multiplayer first, then traffic (for synchronization)
       if (this.isMultiplayerEnabled) {
@@ -637,9 +637,7 @@ export class MotosaiGame {
     this.introAnimation.start();
   }
 
-  initPowerupSystem() {
-    this.powerupSystem = new PowerupSystem(this.scene, this.playerSelection, this.audioManager);
-  }
+  // Powerup system removed
   
   async initMultiplayer() {
     if (!this.isMultiplayerEnabled) return;
@@ -1592,10 +1590,7 @@ export class MotosaiGame {
         this.minimap.update(); // Draw the minimap
       }
 
-      // Update powerup system
-      if (this.powerupSystem && !this.isDead) {
-        this.powerupSystem.update(deltaTime, state.position);
-      }
+      // Powerup system removed
 
       // Update blood track system
       if (this.bloodTrackSystem) {
@@ -1911,10 +1906,7 @@ export class MotosaiGame {
       this.minimap.dispose();
       this.minimap = null;
     }
-    if (this.powerupSystem) {
-      this.powerupSystem.cleanup();
-      this.powerupSystem = null;
-    }
+    // Powerup system removed
 
     // Dispose performance manager
     if (this.performanceManager && typeof this.performanceManager.dispose === 'function') {
