@@ -322,6 +322,62 @@ io.on('connection', (socket) => {
 
     // Chat messages are only stored in memory for this session
   });
+
+  // Handle race invite
+  socket.on('race-invite', async (data) => {
+    const playerId = playerSockets.get(socket.id);
+    if (!playerId) return;
+
+    const player = activePlayers.get(playerId);
+    if (!player) return;
+
+    // Find target player's socket
+    const targetSocketId = Array.from(playerSockets.entries())
+      .find(([sid, pid]) => pid === data.to)?.[0];
+
+    if (targetSocketId) {
+      io.to(targetSocketId).emit('race-invite', {
+        from: data.from,
+        distance: data.distance
+      });
+      console.log(`Race invite sent from ${data.from} to ${data.to} for ${data.distance}km`);
+    }
+  });
+
+  // Handle race accept
+  socket.on('race-accept', async (data) => {
+    const playerId = playerSockets.get(socket.id);
+    if (!playerId) return;
+
+    // Find target player's socket
+    const targetSocketId = Array.from(playerSockets.entries())
+      .find(([sid, pid]) => pid === data.to)?.[0];
+
+    if (targetSocketId) {
+      io.to(targetSocketId).emit('race-accept', {
+        from: data.from,
+        distance: data.distance
+      });
+      console.log(`Race accepted by ${data.from} to ${data.to}`);
+    }
+  });
+
+  // Handle race decline
+  socket.on('race-decline', async (data) => {
+    const playerId = playerSockets.get(socket.id);
+    if (!playerId) return;
+
+    // Find target player's socket
+    const targetSocketId = Array.from(playerSockets.entries())
+      .find(([sid, pid]) => pid === data.to)?.[0];
+
+    if (targetSocketId) {
+      io.to(targetSocketId).emit('race-decline', {
+        from: data.from
+      });
+      console.log(`Race declined by ${data.from} to ${data.to}`);
+    }
+  });
   
   // Handle traffic synchronization events
   socket.on('traffic-vehicle-spawn', (vehicleData) => {

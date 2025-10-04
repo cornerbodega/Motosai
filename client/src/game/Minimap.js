@@ -84,6 +84,22 @@ export class Minimap {
     this.title.textContent = 'PLAYER POSITIONS';
     this.mapElement.appendChild(this.title);
 
+    // Add distance display
+    this.distanceDisplay = document.createElement('div');
+    this.distanceDisplay.style.cssText = `
+      position: absolute;
+      top: 15px;
+      left: 5px;
+      color: white;
+      font-size: 16px;
+      font-weight: bold;
+      font-family: 'Arial', sans-serif;
+      text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.9);
+      pointer-events: none;
+    `;
+    this.distanceDisplay.textContent = '0.0 mi';
+    this.mapElement.appendChild(this.distanceDisplay);
+
     // Add to container
     this.container.appendChild(this.mapElement);
   }
@@ -119,6 +135,12 @@ export class Minimap {
         isDead: data.isDead || false,
         respawnTime: data.respawnTime || 0
       });
+    }
+
+    // Update distance display for local player
+    if (playerId === this.localPlayerId && this.distanceDisplay) {
+      const distanceMiles = (position.z / 1609.34).toFixed(1);
+      this.distanceDisplay.textContent = `${distanceMiles} mi`;
     }
   }
 

@@ -85,7 +85,10 @@ export class MultiplayerManager {
     this.socket.off('traffic-vehicle-remove');
     this.socket.off('player-crash');
     this.socket.off('player-death');
-    
+    this.socket.off('race-invite');
+    this.socket.off('race-accept');
+    this.socket.off('race-decline');
+
     // Welcome message
     this.socket.on('welcome', (data) => {
       console.log('Server welcome:', data);
@@ -162,6 +165,29 @@ export class MultiplayerManager {
     this.socket.on('player-death', (data) => {
       console.log(`💀 RECEIVED DEATH EVENT: Player ${data.username} died!`, data);
       this.handlePlayerDeath(data);
+    });
+
+    // Race invite system
+    this.socket.on('race-invite', (data) => {
+      console.log(`🏁 Race invite from ${data.from}`, data);
+      if (this.game && this.game.showRaceInvite) {
+        this.game.showRaceInvite(data.from, data.distance);
+      }
+    });
+
+    this.socket.on('race-accept', (data) => {
+      console.log(`✅ Race accepted by ${data.from}`, data);
+      if (this.game && this.game.startRaceCountdown) {
+        this.game.showRaceInviteStatus('Invite accepted! Starting race...');
+        this.game.startRaceCountdown(data.distance, data.from);
+      }
+    });
+
+    this.socket.on('race-decline', (data) => {
+      console.log(`❌ Race declined by ${data.from}`, data);
+      if (this.game && this.game.showRaceInviteStatus) {
+        this.game.showRaceInviteStatus('Invite declined.');
+      }
     });
 
     // Disconnection
@@ -349,8 +375,15 @@ export class MultiplayerManager {
 
   sendChatMessage(message) {
     if (!this.socket || !this.isConnected) return;
-    
+
     this.socket.emit('chat-message', { message });
+  }
+
+  sendMessage(data) {
+    if (!this.socket || !this.isConnected) return;
+
+    // Send custom message through WebSocket
+    this.socket.emit(data.type, data);
   }
 
   handleChatMessage(data) {

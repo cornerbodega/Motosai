@@ -1,4 +1,6 @@
+// PlayerSelection module - preview and bike chooser
 import * as THREE from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MotorcycleFactory } from "./MotorcycleFactory.js";
 
 export class PlayerSelection {
@@ -17,6 +19,8 @@ export class PlayerSelection {
     this.previewScene = null;
     this.previewCamera = null;
     this.previewAnimationId = null;
+    // token to track latest async preview load to avoid race conditions
+    this._previewLoadId = 0;
 
     this.initializeBikes();
   }
@@ -186,26 +190,7 @@ export class PlayerSelection {
     handlebar.position.set(0.6, 0.9, 0);
     group.add(handlebar);
 
-    // Add emoji indicator on top
-    const canvas = document.createElement("canvas");
-    canvas.width = 128;
-    canvas.height = 128;
-    const ctx = canvas.getContext("2d");
-    ctx.font = "bold 100px sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(bikeConfig.emoji, 64, 64);
-
-    const emojiTexture = new THREE.CanvasTexture(canvas);
-    const emojiGeometry = new THREE.PlaneGeometry(1, 1);
-    const emojiMaterial = new THREE.MeshBasicMaterial({
-      map: emojiTexture,
-      transparent: true,
-      side: THREE.DoubleSide,
-    });
-    const emojiMesh = new THREE.Mesh(emojiGeometry, emojiMaterial);
-    emojiMesh.position.y = 2;
-    group.add(emojiMesh);
+    // emoji and placeholder red-bike removed; prefer GLB model for previews
 
     return group;
   }
@@ -218,16 +203,18 @@ export class PlayerSelection {
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            background: rgba(0, 0, 0, 0.9);
-            border: 2px solid #fff;
+            /* softer, non-black background */
+            background: linear-gradient(180deg, rgba(12,18,28,0.98), rgba(24,36,56,0.95));
+            border: 1px solid rgba(255,255,255,0.12);
             border-radius: 20px;
             padding: 20px;
             z-index: 1000;
             color: white;
             font-family: Arial, sans-serif;
             width: 760px;
-            height: 620px; /* fixed height so inner scrolling works */
-            max-height: 640px;
+            /* make the dialog a bit shorter to reduce dead space */
+            height: 560px; /* reduced height */
+            max-height: 600px;
             overflow: hidden;
         `;
 
@@ -237,18 +224,19 @@ export class PlayerSelection {
       "text-align: center; margin: 8px 0 16px; font-size: 28px;";
     uiContainer.appendChild(title);
 
-    // Content row: left = preview, right = bike list + start
+    // Content row: left = preview, right = info + start
     const contentRow = document.createElement("div");
-    contentRow.style.cssText = `display: flex; gap: 18px; align-items: flex-start; height: calc(100% - 88px);`;
+    contentRow.style.cssText = `display: flex; gap: 12px; align-items: flex-start; height: calc(100% - 88px);`;
 
-    // Left: preview container
+    // Left: preview container (we'll load the level mountains into the preview scene)
     const previewContainer = document.createElement("div");
     previewContainer.id = "bike-preview-container";
     previewContainer.style.cssText = `
-            width: 360px;
-            min-width: 260px;
+            width: 640px; /* wider to show mountains */
+            min-width: 420px;
             height: 420px;
-            background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(0,0,0,0.2));
+            /* lighter, bluish preview background so the bike doesn't sit on black */
+            background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(10,20,40,0.16));
             border-radius: 12px;
             border: 1px solid rgba(255,255,255,0.06);
             display: flex;
@@ -257,124 +245,104 @@ export class PlayerSelection {
             position: relative;
         `;
 
-    // Add an overlay label for the preview
+    // Overlay label
     const previewLabel = document.createElement("div");
     previewLabel.textContent = "Bike Preview";
     previewLabel.style.cssText =
       "position: absolute; top: 8px; left: 12px; color: #ddd; font-size: 12px;";
     previewContainer.appendChild(previewLabel);
 
+    // Add left/right arrow controls overlayed on the preview to switch bikes
+    const leftArrow = document.createElement("button");
+    leftArrow.textContent = "‹";
+    leftArrow.title = "Previous Bike";
+    leftArrow.style.cssText = `
+      position: absolute; left: 8px; top: 50%; transform: translateY(-50%);
+      width: 40px; height: 40px; border-radius: 8px; background: rgba(0,0,0,0.5);
+      color: #fff; border: none; font-size: 20px; cursor: pointer;
+    `;
+    leftArrow.addEventListener("click", () => this._prevBike());
+    previewContainer.appendChild(leftArrow);
+
+    const rightArrow = document.createElement("button");
+    rightArrow.textContent = "›";
+    rightArrow.title = "Next Bike";
+    rightArrow.style.cssText = `
+      position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+      width: 40px; height: 40px; border-radius: 8px; background: rgba(0,0,0,0.5);
+      color: #fff; border: none; font-size: 20px; cursor: pointer;
+    `;
+    rightArrow.addEventListener("click", () => this._nextBike());
+    previewContainer.appendChild(rightArrow);
+
     contentRow.appendChild(previewContainer);
 
-    // Right: controls and bike grid
+    // Right: info panel and start button
     const rightPanel = document.createElement("div");
     rightPanel.style.cssText =
-      "flex: 1; display: flex; flex-direction: column; gap: 12px; height: 100%;";
+      "width: 280px; display:flex; flex-direction:column; gap:12px; align-items:center; justify-content:flex-start;";
 
-    const bikeGrid = document.createElement("div");
-    bikeGrid.style.cssText = `
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-            gap: 12px;
-            overflow-y: auto;
-            padding-right: 6px;
-            flex: 1 1 auto; /* allow grid to grow and scroll */
-            max-height: 100%;
-        `;
+    // Bike info
+    const infoBox = document.createElement("div");
+    infoBox.style.cssText = `width:100%; padding:12px; background: rgba(255,255,255,0.03); border-radius:10px; text-align:center;`;
+    const infoName = document.createElement("div");
+    infoName.style.cssText =
+      "font-weight:bold; font-size:18px; margin-bottom:8px;";
+    const infoStats = document.createElement("div");
+    infoStats.style.cssText = "font-size:13px; color:#bbb;";
+    infoBox.appendChild(infoName);
+    infoBox.appendChild(infoStats);
+    rightPanel.appendChild(infoBox);
 
-    this.availableBikes.forEach((bike) => {
-      const bikeCard = document.createElement("div");
-      bikeCard.style.cssText = `
-                background: ${
-                  bike.unlocked
-                    ? "rgba(50,50,50,0.85)"
-                    : "rgba(20,20,20,0.85)"
-                };
-                border: 2px solid ${bike.unlocked ? "#4CAF50" : "#666"};
-                border-radius: 10px;
-                padding: 12px;
-                cursor: ${bike.unlocked ? "pointer" : "not-allowed"};
-                transition: all 0.18s;
-                text-align: center;
-                opacity: ${bike.unlocked ? "1" : "0.5"};
-                display: flex;
-                flex-direction: column;
-                justify-content: center;
-                align-items: center;
-            `;
-
-      if (bike.unlocked) {
-        bikeCard.addEventListener("click", () => {
-          if (this.audioManager) this.audioManager.playUISelect();
-          this.selectBike(bike);
-        });
-        bikeCard.addEventListener("mouseenter", () => {
-          bikeCard.style.transform = "scale(1.03)";
-          if (this.audioManager) this.audioManager.playUIHover();
-          // update preview on hover for faster feedback
-          this.updateBikePreview(bike);
-        });
-        bikeCard.addEventListener("mouseleave", () => {
-          bikeCard.style.transform = "scale(1)";
-        });
-      }
-
-      const emoji = document.createElement("div");
-      emoji.textContent = bike.emoji;
-      emoji.style.cssText = "font-size: 34px; margin-bottom: 8px;";
-      bikeCard.appendChild(emoji);
-
-      const name = document.createElement("div");
-      name.textContent = bike.name;
-      name.style.cssText = "font-weight: bold; margin-bottom: 6px; font-size:14px;";
-      bikeCard.appendChild(name);
-
-      const stats = document.createElement("div");
-      stats.style.cssText = "font-size: 12px; color: #bbb;";
-      stats.innerHTML = `Speed: ${bike.speed}<br>Accel: ${bike.acceleration}x<br>Handle: ${bike.handling}x`;
-      bikeCard.appendChild(stats);
-
-      bikeGrid.appendChild(bikeCard);
-    });
-
-    rightPanel.appendChild(bikeGrid);
-
-    // Start button area pinned to bottom of rightPanel
-    const bottomBar = document.createElement("div");
-    bottomBar.style.cssText = 'display:flex; justify-content:center; align-items:center; padding: 8px 0; flex: 0 0 auto;';
-
+    // Start button
+    const startWrap = document.createElement("div");
+    startWrap.style.cssText =
+      "width:100%; display:flex; justify-content:center; padding-top:18px;";
     const startButton = document.createElement("button");
     startButton.textContent = "START GAME";
-    startButton.disabled = true;
-    startButton.style.cssText = `
-            padding: 12px 26px;
-            font-size: 16px;
-            background: #4CAF50;
-            color: white;
-            border: none;
-            border-radius: 10px;
-            cursor: pointer;
-            opacity: 0.6;
-        `;
-
+    startButton.style.cssText = `padding:12px 26px; font-size:16px; background:#4CAF50; color:#fff; border:none; border-radius:10px; cursor:pointer;`;
     startButton.addEventListener("click", () => {
       if (this.selectedBike && this.onSelectionComplete) {
+        // pass selected bike (colors already on config)
         if (this.audioManager) this.audioManager.playUISelect();
         this.onSelectionComplete(this.selectedBike);
         this.hideSelectionUI();
       }
     });
-
-    bottomBar.appendChild(startButton);
-    rightPanel.appendChild(bottomBar);
+    startWrap.appendChild(startButton);
+    rightPanel.appendChild(startWrap);
 
     contentRow.appendChild(rightPanel);
     uiContainer.appendChild(contentRow);
 
-    this.selectionUI = uiContainer;
+    // store references for updates
+    this._uiInfoName = infoName;
+    this._uiInfoStats = infoStats;
     this.startButton = startButton;
 
     return uiContainer;
+  }
+
+  _prevBike() {
+    const i = this.availableBikes.indexOf(this.selectedBike);
+    const next =
+      (i - 1 + this.availableBikes.length) % this.availableBikes.length;
+    this.selectBike(this.availableBikes[next]);
+    this._updateInfoUI();
+  }
+
+  _nextBike() {
+    const i = this.availableBikes.indexOf(this.selectedBike);
+    const next = (i + 1) % this.availableBikes.length;
+    this.selectBike(this.availableBikes[next]);
+    this._updateInfoUI();
+  }
+
+  _updateInfoUI() {
+    if (this._uiInfoName && this.selectedBike) {
+      this._uiInfoName.textContent = this.selectedBike.name;
+      this._uiInfoStats.innerHTML = `Speed: ${this.selectedBike.speed}<br>Accel: ${this.selectedBike.acceleration}x<br>Handle: ${this.selectedBike.handling}x`;
+    }
   }
 
   selectBike(bike) {
@@ -389,13 +357,41 @@ export class PlayerSelection {
 
     // Update 3D preview if needed
     this.updateBikePreview(bike);
+    this._updateInfoUI();
   }
 
   updateBikePreview(bike) {
     // Use a dedicated preview scene + renderer so UI does not overlap the bike
     this._ensurePreviewRenderer();
 
-    // Remove existing preview model from previewScene
+    // bump load token so in-flight loads become stale
+    this._previewLoadId += 1;
+    const loadId = this._previewLoadId;
+
+    const disposeObject = (obj) => {
+      if (!obj) return;
+      obj.traverse((child) => {
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) {
+          if (Array.isArray(child.material)) {
+            child.material.forEach((m) => {
+              if (m.map) m.map.dispose();
+              m.dispose();
+            });
+          } else {
+            if (child.material.map) child.material.map.dispose();
+            child.material.dispose();
+          }
+        }
+      });
+    };
+
+    // Preserve current rotation so swapping models doesn't reset the spin
+    const preservedRotationY = this.previewModel
+      ? this.previewModel.rotation.y
+      : 0;
+
+    // Remove existing preview model from previewScene and dispose
     if (this.previewModel) {
       this.previewModel.traverse((child) => {
         if (child.geometry) child.geometry.dispose();
@@ -408,139 +404,324 @@ export class PlayerSelection {
       this.previewModel = null;
     }
 
-    // Create a fuller motorcycle model using the MotorcycleFactory
-    const model = MotorcycleFactory.createMotorcycle({
-      bikeColor: bike.color,
-      includeRider: true,
-    });
-    model.position.set(0, 0, 0);
-    model.scale.setScalar(1.2);
-    this.previewScene.add(model);
-    this.previewModel = model;
-
-    // Cancel previous animation and start a new one that renders into the preview canvas
+    // Cancel previous animation frame
     if (this.previewAnimationId) cancelAnimationFrame(this.previewAnimationId);
 
-    const renderLoop = () => {
-      if (!this.previewRenderer) return;
-      if (this.previewModel) this.previewModel.rotation.y += 0.01;
-      this.previewRenderer.render(this.previewScene, this.previewCamera);
-      this.previewAnimationId = requestAnimationFrame(renderLoop);
-    };
-    renderLoop();
+    // Load the GLB model from public folder
+    const glbPath = "/models/motor1.glb";
+    const loader = new GLTFLoader();
+    loader.load(
+      glbPath,
+      (gltf) => {
+        // ignore this result if a newer load started
+        if (loadId !== this._previewLoadId) {
+          // dispose loaded resources to avoid leaks
+          if (gltf && gltf.scene) disposeObject(gltf.scene);
+          return;
+        }
+        const model = gltf.scene || gltf.scenes[0];
+        if (!model) return;
+
+        // Basic framing
+        // Nudge down and scale smaller so the bike fits the preview properly
+        // Scale the model down so it fits the preview
+        model.scale.setScalar(0.6);
+
+        // Compute bounding box center so we can pivot around the visual center
+        const bbox = new THREE.Box3().setFromObject(model);
+        const center = new THREE.Vector3();
+        bbox.getCenter(center);
+
+        // Create a pivot wrapper so we can rotate around the model's true center
+        const pivot = new THREE.Group();
+
+        // Move the model so its center is at the pivot origin
+        model.position.sub(center);
+        pivot.add(model);
+
+        // Position the pivot slightly up relative to camera so bikes are visually centered
+        const verticalOffset = 0.06; // tuned offset to visually center bike
+        pivot.position.set(0, verticalOffset, 0);
+
+        // Apply preserved rotation to the pivot so swapping keeps the spin
+        pivot.rotation.y = preservedRotationY;
+
+        // Ensure meshes cast/receive shadows and apply bike color
+        model.traverse((c) => {
+          if (c.isMesh && c.material) {
+            c.castShadow = true;
+            c.receiveShadow = true;
+            if (
+              this.selectedBike &&
+              this.selectedBike.color &&
+              c.material.color
+            ) {
+              try {
+                c.material.color.setHex(this.selectedBike.color);
+              } catch (e) {}
+            }
+          }
+        });
+
+        // Add pivot (not the raw model) to the scene and set as previewModel
+        this.previewScene.add(pivot);
+        this.previewModel = pivot;
+
+        // Aim camera at the pivot so rotation appears centered and show mountains behind
+        if (this.previewCamera) {
+          // place camera slightly back & above the pivot for level-style framing
+          this.previewCamera.position.set(0.0, 1.4, 4.5);
+          this.previewCamera.lookAt(pivot.position);
+        }
+
+        // Start render loop once model is present
+        const renderLoop = () => {
+          if (!this.previewRenderer) return;
+          if (this.previewModel) this.previewModel.rotation.y += 0.01;
+          this.previewRenderer.render(this.previewScene, this.previewCamera);
+          this.previewAnimationId = requestAnimationFrame(renderLoop);
+        };
+        renderLoop();
+      },
+      undefined,
+      (err) => {
+        // If this load fails but is stale, ignore to avoid triggering fallback for newer loads
+        if (loadId !== this._previewLoadId) return;
+        console.error("Failed to load preview GLB:", err);
+        // Fallback: use MotorcycleFactory as a fallback if GLB fails
+        try {
+          const fallback = MotorcycleFactory.createMotorcycle({
+            bikeColor: bike.color,
+            includeRider: true,
+          });
+          // if a newer load started while building fallback, discard it
+          if (loadId !== this._previewLoadId) {
+            disposeObject(fallback);
+            return;
+          }
+          this.previewModel = fallback;
+          this.previewScene.add(fallback);
+
+          // Aim camera at the fallback model
+          const bbox = new THREE.Box3().setFromObject(fallback);
+          const center = new THREE.Vector3();
+          bbox.getCenter(center);
+          if (this.previewCamera) {
+            this.previewCamera.position.set(center.x, center.y, bbox.max.z + 2);
+            this.previewCamera.lookAt(center);
+          }
+
+          // Start render loop for fallback
+          const renderLoop = () => {
+            if (!this.previewRenderer) return;
+            if (this.previewModel) this.previewModel.rotation.y += 0.01;
+            this.previewRenderer.render(this.previewScene, this.previewCamera);
+            this.previewAnimationId = requestAnimationFrame(renderLoop);
+          };
+          renderLoop();
+        } catch (e) {
+          console.error("Fallback model error:", e);
+        }
+      }
+    );
   }
 
   _ensurePreviewRenderer() {
-    // If previewScene already created, nothing to do
-    if (this.previewScene) return;
+    if (this.previewRenderer) return;
 
-    // Create simple preview scene / camera
+    // Create a separate scene and camera for the bike preview
     this.previewScene = new THREE.Scene();
-    this.previewCamera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
-    this.previewCamera.position.set(0, 1.2, 3.0);
-    this.previewCamera.lookAt(0, 0.5, 0);
+    // give the 3D preview a tan background so the model is easier to see
+    const previewBgColor = 0xd2b48c; // tan
+    this.previewScene.background = new THREE.Color(previewBgColor);
+    this.previewCamera = new THREE.PerspectiveCamera(75, 1.0, 0.1, 1000);
+    this.previewCamera.position.set(0, 1, 3);
 
-    // Add simple lighting so standard/physical materials are visible in the preview
-    const ambient = new THREE.AmbientLight(0xffffff, 0.35);
-    this.previewScene.add(ambient);
+    const renderer = new THREE.WebGLRenderer({
+      // alpha:false so the renderer draws its own background color
+      alpha: false,
+      antialias: true,
+    });
+    renderer.setSize(460, 360);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    // set a matching clear color so the canvas shows this tan background
+    renderer.setClearColor(previewBgColor, 1);
+    // ensure the canvas fills the preview container and visually matches the scene
+    renderer.domElement.style.display = "block";
+    renderer.domElement.style.width = "100%";
+    renderer.domElement.style.height = "100%";
+    renderer.domElement.style.borderRadius = "12px";
+    renderer.domElement.style.backgroundColor = "#d2b48c";
+    renderer.gammaOutput = true;
+    renderer.physicallyCorrectLights = true;
 
-    const hemi = new THREE.HemisphereLight(0xffffff, 0x222222, 0.45);
-    hemi.position.set(0, 5, 0);
-    this.previewScene.add(hemi);
+    // Enable shadow maps for the preview renderer
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-    const key = new THREE.DirectionalLight(0xffffff, 0.8);
-    key.position.set(5, 8, 5);
-    key.target.position.set(0, 0.5, 0);
-    this.previewScene.add(key);
-    this.previewScene.add(key.target);
+    this.previewRenderer = renderer;
 
-    const rim = new THREE.DirectionalLight(0xaaaaee, 0.25);
-    rim.position.set(-5, 4, -3);
-    this.previewScene.add(rim);
+    // Add lighting to the preview scene so the bike is visible and casts soft shadows
+    (function addPreviewLights(scene) {
+      // Ambient fill (brighter so dark materials show)
+      const ambient = new THREE.AmbientLight(0xffffff, 0.8);
+      scene.add(ambient);
 
-    // Note: renderer is created in showSelectionUI when the preview container is available
+      // Hemisphere light for nice sky/ground fill
+      const hemi = new THREE.HemisphereLight(0xffffff, 0x222244, 0.6);
+      hemi.position.set(0, 5, 0);
+      scene.add(hemi);
+
+      // Key directional light
+      const key = new THREE.DirectionalLight(0xffffff, 1.2);
+      key.position.set(4, 6, 4);
+      key.castShadow = true;
+      key.shadow.mapSize.width = 2048;
+      key.shadow.mapSize.height = 2048;
+      key.shadow.camera.near = 0.5;
+      key.shadow.camera.far = 30;
+      key.shadow.camera.left = -6;
+      key.shadow.camera.right = 6;
+      key.shadow.camera.top = 6;
+      key.shadow.camera.bottom = -6;
+      key.shadow.bias = -0.0005;
+      scene.add(key);
+
+      // Soft rim/back light to separate silhouette
+      const rim = new THREE.DirectionalLight(0xaaaaff, 0.6);
+      rim.position.set(-3, 2, -4);
+      // Let rim light cast shadows and tune its shadow camera for the preview
+      rim.castShadow = true;
+      rim.shadow.mapSize.width = 1024;
+      rim.shadow.mapSize.height = 1024;
+      rim.shadow.camera.near = 0.5;
+      rim.shadow.camera.far = 30;
+      rim.shadow.camera.left = -6;
+      rim.shadow.camera.right = 6;
+      rim.shadow.camera.top = 6;
+      rim.shadow.camera.bottom = -6;
+      rim.shadow.bias = 0.0003;
+      scene.add(rim);
+
+      // Small camera-facing fill light so front details are visible
+      const fill = new THREE.DirectionalLight(0xffffff, 0.35);
+      fill.position.set(0, 1.5, 3);
+      // Make fill light cast soft shadows too
+      fill.castShadow = true;
+      fill.shadow.mapSize.width = 1024;
+      fill.shadow.mapSize.height = 1024;
+      fill.shadow.camera.near = 0.5;
+      fill.shadow.camera.far = 30;
+      fill.shadow.camera.left = -4;
+      fill.shadow.camera.right = 4;
+      fill.shadow.camera.top = 4;
+      fill.shadow.camera.bottom = -4;
+      fill.shadow.bias = 0.0004;
+      scene.add(fill);
+
+      // Subtle ground so shadows have a surface to land on
+      const groundGeo = new THREE.PlaneGeometry(8, 8);
+      const groundMat = new THREE.ShadowMaterial({ opacity: 0.18 });
+      const ground = new THREE.Mesh(groundGeo, groundMat);
+      ground.rotation.x = -Math.PI / 2;
+      ground.position.y = -0.5;
+      ground.receiveShadow = true;
+      scene.add(ground);
+    })(this.previewScene);
+
+    // improve renderer color/tone so lighting looks correct
+    if (THREE.ACESFilmicToneMapping)
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    if (THREE.sRGBEncoding) renderer.outputEncoding = THREE.sRGBEncoding;
+    renderer.toneMappingExposure = 1.0;
+
+    // Append to the preview container
+    const container = document.getElementById("bike-preview-container");
+    if (container) {
+      container.appendChild(renderer.domElement);
+    }
+
+    // Try to reuse mountains from the main scene if present
+    try {
+      const mountains = this.scene
+        ? this.scene.getObjectByName("mountains")
+        : null;
+      if (mountains) {
+        this.previewScene.add(mountains.clone());
+      } else {
+        // fallback: attempt to load a mountains glb if available
+        const gl = new GLTFLoader();
+        gl.load(
+          "/models/mountains.glb",
+          (g) => {
+            if (g && g.scene) this.previewScene.add(g.scene);
+          },
+          undefined,
+          () => {}
+        );
+      }
+    } catch (e) {
+      // ignore if mountains not available
+    }
   }
 
   showSelectionUI() {
-    const ui = this.createSelectionUI();
-    document.body.appendChild(ui);
-
-    // If the preview container exists in the created UI, create a renderer attached to it
-    const previewContainer = ui.querySelector('#bike-preview-container');
-    if (previewContainer && !this.previewRenderer) {
-      const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-      renderer.setSize(previewContainer.clientWidth, previewContainer.clientHeight);
-      // nicer output encoding
-      if (THREE.sRGBEncoding) renderer.outputEncoding = THREE.sRGBEncoding;
-      // set a contrasting clear color so dark/black bike parts are visible
-      const clearColor = 0x243445; // desaturated blue-gray
-      renderer.setClearColor(clearColor, 1);
-      // also update the preview container CSS background to match the renderer
-      previewContainer.style.background = '#243445';
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-      previewContainer.appendChild(renderer.domElement);
-      this.previewRenderer = renderer;
-
-      // Ensure preview scene and camera exist
-      this._ensurePreviewRenderer();
-
-      // Resize handling
-      const resizeObserver = new ResizeObserver(() => {
-        if (!this.previewRenderer) return;
-        const w = previewContainer.clientWidth;
-        const h = previewContainer.clientHeight;
-        this.previewRenderer.setSize(w, h);
-        this.previewCamera.aspect = w / h;
-        this.previewCamera.updateProjectionMatrix();
-      });
-      resizeObserver.observe(previewContainer);
-      this._previewResizeObserver = resizeObserver;
+    // attach keyboard listeners for arrow navigation when showing
+    const onKey = (ev) => {
+      if (ev.key === "ArrowLeft") this._prevBike();
+      if (ev.key === "ArrowRight") this._nextBike();
+    };
+    window.addEventListener("keydown", onKey);
+    // store to remove later
+    this._selectionKeyHandler = onKey;
+    // call existing implementation (which creates UI)
+    if (!this.selectionUI) {
+      const ui = this.createSelectionUI();
+      document.body.appendChild(ui);
+      // remember the DOM node so hideSelectionUI can remove it
+      this.selectionUI = ui;
+      const previewContainer = ui.querySelector("#bike-preview-container");
+      if (previewContainer && !this.previewRenderer) {
+        this._ensurePreviewRenderer();
+        if (this.previewRenderer) {
+          this.previewRenderer.setSize(
+            previewContainer.clientWidth,
+            previewContainer.clientHeight
+          );
+          // only append the canvas if it's not already present
+          if (!previewContainer.contains(this.previewRenderer.domElement)) {
+            previewContainer.appendChild(this.previewRenderer.domElement);
+          }
+        }
+      }
     }
-
-    // Select the first bike by default if nothing selected yet
     const initial = this.selectedBike || this.availableBikes[0];
     if (initial) this.selectBike(initial);
   }
 
   hideSelectionUI() {
-    if (this.selectionUI && this.selectionUI.parentElement) {
+    // remove key handler
+    if (this._selectionKeyHandler) {
+      window.removeEventListener("keydown", this._selectionKeyHandler);
+      this._selectionKeyHandler = null;
+    }
+    // existing cleanup
+    if (this.selectionUI && this.selectionUI.parentElement)
       this.selectionUI.parentElement.removeChild(this.selectionUI);
-    }
-
-    // Clean up 3D models and dispose resources properly
-    // Dispose preview renderer and its scene/models
+    this.selectionUI = null;
     if (this.previewAnimationId) cancelAnimationFrame(this.previewAnimationId);
-
-    if (this.previewModel) {
-      this.previewModel.traverse((child) => {
-        if (child.geometry) child.geometry.dispose();
-        if (child.material) {
-          if (child.material.map) child.material.map.dispose();
-          child.material.dispose();
-        }
-      });
-      if (this.previewScene) this.previewScene.remove(this.previewModel);
-      this.previewModel = null;
-    }
-
     if (this.previewRenderer) {
-      // Dispose renderer and remove canvas
+      try {
+        this.previewRenderer.forceContextLoss();
+      } catch (e) {}
       const canvas = this.previewRenderer.domElement;
-      this.previewRenderer.forceContextLoss();
       if (canvas && canvas.parentElement)
         canvas.parentElement.removeChild(canvas);
-      this.previewRenderer.domElement = null;
       this.previewRenderer = null;
     }
-    if (this._previewResizeObserver) {
-      this._previewResizeObserver.disconnect();
-      this._previewResizeObserver = null;
+    if (this.previewModel && this.previewScene) {
+      this.previewScene.remove(this.previewModel);
+      this.previewModel = null;
     }
-
-    this.bikeModels.clear();
-  }
-
-  getSelectedBikeConfig() {
-    return this.selectedBike;
   }
 }

@@ -276,7 +276,7 @@ export class Highway101 {
     
     // Cacti (low poly)
     this.addCacti(segment, 0);
-    
+
     // Signs and landmarks
     this.addSignage(segment, 0);
   }
@@ -336,9 +336,9 @@ export class Highway101 {
 
     return cactus;
   }
-  
+
   // Removed createLowPolyTree - now using instanced rendering
-  
+
   addSignage(segment, zPosition) {
     const segmentData = this.segments.find(s => s.group === segment);
     
@@ -511,15 +511,15 @@ export class Highway101 {
       segment.detailGroups.markings.forEach(obj => {
         obj.visible = lodLevel < 2;
       });
-      
+
       // Trees are now handled via instanced mesh visibility
       // We could potentially update instance visibility here
-      
+
       // Signs - hide at far distances
       segment.detailGroups.signs.forEach(obj => {
         obj.visible = lodLevel < 3;
       });
-      
+
       // Roadside elements
       segment.detailGroups.roadside.forEach(obj => {
         obj.visible = lodLevel < 2;
@@ -625,13 +625,13 @@ export class Highway101 {
       // DON'T dispose materials - they're shared!
       segment.group.remove(child);
     });
-    
+
     // Clear detail groups
     if (segment.detailGroups) {
       segment.detailGroups.trees = [];
       segment.detailGroups.signs = [];
     }
-    
+
     // Add new ones
     this.addCacti(segment.group, 0);
     this.addSignage(segment.group, segment.z);
