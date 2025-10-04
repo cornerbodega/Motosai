@@ -284,10 +284,10 @@ export class Highway101 {
   addCacti(segment, zPosition) {
     const segmentData = this.segments.find(s => s.group === segment);
 
-    // Only add cacti to ~10% of segments for very sparse desert look
-    if (Math.random() > 0.1) return;
+    // Add cacti to ~40% of segments for more desert vegetation
+    if (Math.random() > 0.4) return;
 
-    const numCacti = 1; // Always just 1 cactus when they do spawn
+    const numCacti = Math.floor(1 + Math.random() * 3); // 1-3 cacti per segment
 
     for (let i = 0; i < numCacti; i++) {
       const cactus = this.createSimpleCactus();
@@ -572,9 +572,9 @@ export class Highway101 {
         });
         
         if (availableSegment) {
-          // Move this segment to fill the gap
-          availableSegment.z = requiredZ;
-          availableSegment.group.position.z = requiredZ;
+          // Move this segment to fill the gap - ensure exact alignment
+          availableSegment.z = Math.round(requiredZ / this.segmentLength) * this.segmentLength;
+          availableSegment.group.position.z = availableSegment.z;
           this.regenerateRoadside(availableSegment);
         } else {
           // MEMORY LEAK FIX: Create new segment if we have room
@@ -598,9 +598,9 @@ export class Highway101 {
             });
             
             if (furthestSegment) {
-              // Recycle the furthest segment
-              furthestSegment.z = requiredZ;
-              furthestSegment.group.position.z = requiredZ;
+              // Recycle the furthest segment - ensure exact alignment
+              furthestSegment.z = Math.round(requiredZ / this.segmentLength) * this.segmentLength;
+              furthestSegment.group.position.z = furthestSegment.z;
               this.regenerateRoadside(furthestSegment);
               // Successfully recycled segment
             } else {

@@ -93,8 +93,10 @@ export class TerrainSystem {
 
   generate() {
     // Create two terrain meshes for seamless transitions
-    // Position them to cover behind and ahead of starting position
-    const startPositions = [-this.terrainDepth, 0];
+    // Position them aligned to grid to prevent gaps
+    const startPositions = [-this.terrainDepth, 0].map(z =>
+      Math.round(z / this.terrainDepth) * this.terrainDepth
+    );
 
     for (let i = 0; i < 2; i++) {
       const geometry = new THREE.PlaneGeometry(
@@ -157,7 +159,8 @@ export class TerrainSystem {
 
     // If mesh 0 is too far behind (player passed it), move it ahead
     if (dist0 < -this.terrainDepth) {
-      const newZ = mesh1Z + this.terrainDepth;
+      // Align to terrain grid to prevent gaps
+      const newZ = Math.round((mesh1Z + this.terrainDepth) / this.terrainDepth) * this.terrainDepth;
       this.terrainMeshes[0].position.z = newZ;
       this.updateTerrainVertices(this.terrainMeshes[0].geometry, newZ);
       console.log(`Moved terrain 0 from ${mesh0Z} to ${newZ} (player at ${playerZ})`);
@@ -165,7 +168,8 @@ export class TerrainSystem {
 
     // If mesh 1 is too far behind (player passed it), move it ahead
     if (dist1 < -this.terrainDepth) {
-      const newZ = mesh0Z + this.terrainDepth;
+      // Align to terrain grid to prevent gaps
+      const newZ = Math.round((mesh0Z + this.terrainDepth) / this.terrainDepth) * this.terrainDepth;
       this.terrainMeshes[1].position.z = newZ;
       this.updateTerrainVertices(this.terrainMeshes[1].geometry, newZ);
       console.log(`Moved terrain 1 from ${mesh1Z} to ${newZ} (player at ${playerZ})`);
@@ -173,21 +177,25 @@ export class TerrainSystem {
 
     // Handle backward movement
     if (dist0 > this.terrainDepth * 2) {
-      const newZ = mesh1Z - this.terrainDepth;
+      // Align to terrain grid to prevent gaps
+      const newZ = Math.round((mesh1Z - this.terrainDepth) / this.terrainDepth) * this.terrainDepth;
       this.terrainMeshes[0].position.z = newZ;
       this.updateTerrainVertices(this.terrainMeshes[0].geometry, newZ);
     }
 
     if (dist1 > this.terrainDepth * 2) {
-      const newZ = mesh0Z - this.terrainDepth;
+      // Align to terrain grid to prevent gaps
+      const newZ = Math.round((mesh0Z - this.terrainDepth) / this.terrainDepth) * this.terrainDepth;
       this.terrainMeshes[1].position.z = newZ;
       this.updateTerrainVertices(this.terrainMeshes[1].geometry, newZ);
     }
   }
 
   reset() {
-    // Reset terrain positions for respawn
-    const startPositions = [-this.terrainDepth, 0];
+    // Reset terrain positions for respawn - aligned to grid
+    const startPositions = [-this.terrainDepth, 0].map(z =>
+      Math.round(z / this.terrainDepth) * this.terrainDepth
+    );
 
     this.terrainMeshes.forEach((mesh, i) => {
       if (mesh) {
