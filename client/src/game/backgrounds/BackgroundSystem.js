@@ -131,10 +131,10 @@ export class BackgroundSystem {
   }
   
   async updateLocation(absolutePosition, location) {
-    // Calculate segment (every 10 miles to prevent API spam)
-    // At 500mph, this is still only every 72 seconds
+    // Calculate segment (every 0.5 miles)
+    // At 500mph, this is every 3.6 seconds
     // Use Math.max to ensure we never get negative segment IDs
-    const segmentId = Math.max(0, Math.floor(absolutePosition / 16093.4)); // 10 miles in meters
+    const segmentId = Math.max(0, Math.floor(absolutePosition / 804.67)); // 0.5 miles in meters
     
     // Debug logging
     const milesTravel = (absolutePosition / 1609.34).toFixed(2);
@@ -142,13 +142,13 @@ export class BackgroundSystem {
     if (segmentId !== this.currentSegment) {
       console.log(`[BG] Segment change at ${milesTravel} miles (segment ${segmentId}), Location:`, location);
       
-      // Rate limit: Don't change backgrounds more than once every 30 seconds
+      // Rate limit: Don't change backgrounds more than once every 12 seconds
       const now = Date.now();
       if (!this.lastBackgroundChange) this.lastBackgroundChange = 0;
       const timeSinceLastChange = (now - this.lastBackgroundChange) / 1000;
-      
-      if (timeSinceLastChange < 30) {
-        console.log(`[BG] Skipping - only ${timeSinceLastChange.toFixed(1)}s since last change (min 30s)`);
+
+      if (timeSinceLastChange < 12) {
+        console.log(`[BG] Skipping - only ${timeSinceLastChange.toFixed(1)}s since last change (min 12s)`);
         return;
       }
       
