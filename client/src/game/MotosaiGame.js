@@ -371,6 +371,10 @@ export class MotosaiGame {
       initialPlayerPos.y + this.thirdPersonLookOffset.y,
       initialPlayerPos.z + this.thirdPersonLookOffset.z
     );
+
+    // Set initial camera position immediately
+    this.camera.position.copy(this.cameraPosition);
+    this.camera.lookAt(this.cameraTarget);
   }
 
   initLights() {
@@ -875,16 +879,34 @@ export class MotosaiGame {
   }
 
   showGameMessage(message, type = "info") {
-    // Create game message container if it doesn't exist
-    if (!this.gameMessageContainer) {
-      this.gameMessageContainer = document.createElement("div");
-      this.gameMessageContainer.style.position = "absolute";
-      this.gameMessageContainer.style.top = "50%";
-      this.gameMessageContainer.style.left = "50%";
-      this.gameMessageContainer.style.transform = "translate(-50%, -50%)";
-      this.gameMessageContainer.style.pointerEvents = "none";
-      this.gameMessageContainer.style.zIndex = "1000";
-      this.container.appendChild(this.gameMessageContainer);
+    // Use separate containers for death messages vs other messages
+    let container;
+
+    if (type === "death") {
+      // Create death message container (top-left)
+      if (!this.deathMessageContainer) {
+        this.deathMessageContainer = document.createElement("div");
+        this.deathMessageContainer.style.position = "absolute";
+        this.deathMessageContainer.style.top = "80px";
+        this.deathMessageContainer.style.left = "20px";
+        this.deathMessageContainer.style.pointerEvents = "none";
+        this.deathMessageContainer.style.zIndex = "1000";
+        this.container.appendChild(this.deathMessageContainer);
+      }
+      container = this.deathMessageContainer;
+    } else {
+      // Create game message container (centered)
+      if (!this.gameMessageContainer) {
+        this.gameMessageContainer = document.createElement("div");
+        this.gameMessageContainer.style.position = "absolute";
+        this.gameMessageContainer.style.top = "50%";
+        this.gameMessageContainer.style.left = "50%";
+        this.gameMessageContainer.style.transform = "translate(-50%, -50%)";
+        this.gameMessageContainer.style.pointerEvents = "none";
+        this.gameMessageContainer.style.zIndex = "1000";
+        this.container.appendChild(this.gameMessageContainer);
+      }
+      container = this.gameMessageContainer;
     }
 
     // Create message element
@@ -920,7 +942,7 @@ export class MotosaiGame {
     }
 
     messageElement.textContent = message;
-    this.gameMessageContainer.appendChild(messageElement);
+    container.appendChild(messageElement);
 
     // Animate in
     const fadeInTimer = setTimeout(() => {

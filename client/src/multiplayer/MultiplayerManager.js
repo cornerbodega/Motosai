@@ -276,7 +276,12 @@ export class MultiplayerManager {
         }
       });
     }
-    
+
+    // Remove from minimap
+    if (this.game && this.game.minimap) {
+      this.game.minimap.removePlayer(playerId);
+    }
+
     this.playerMeshes.delete(playerId);
     this.otherPlayers.delete(playerId);
   }
