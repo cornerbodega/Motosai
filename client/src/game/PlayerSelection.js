@@ -374,9 +374,10 @@ export class PlayerSelection {
     try {
       const caps = this.previewRenderer.capabilities || {};
       const maxAniso =
-        (this.previewRenderer.capabilities && this.previewRenderer.capabilities.getMaxAnisotropy
+        (this.previewRenderer.capabilities &&
+        this.previewRenderer.capabilities.getMaxAnisotropy
           ? this.previewRenderer.capabilities.getMaxAnisotropy()
-          : (caps.maxAnisotropy || 1)) || 1;
+          : caps.maxAnisotropy || 1) || 1;
       texture.anisotropy = Math.max(1, maxAniso);
       // Use sRGB for color maps so colors appear correct on most displays
       if (THREE && THREE.sRGBEncoding) texture.encoding = THREE.sRGBEncoding;
@@ -453,15 +454,29 @@ export class PlayerSelection {
         // If this mesh is likely a sky (name contains "sky" or very large sphere), ensure mapping is equirectangular
         const nameLower = (c.name || "").toLowerCase();
         let isSky = false;
-        if (nameLower.includes("sky") || nameLower.includes("skysphere") || nameLower.includes("skydome")) isSky = true;
+        if (
+          nameLower.includes("sky") ||
+          nameLower.includes("skysphere") ||
+          nameLower.includes("skydome")
+        )
+          isSky = true;
         try {
-          if (c.geometry && c.geometry.boundingSphere === null) c.geometry.computeBoundingSphere();
-          if (!isSky && c.geometry && c.geometry.boundingSphere && c.geometry.boundingSphere.radius > 50) isSky = true;
+          if (c.geometry && c.geometry.boundingSphere === null)
+            c.geometry.computeBoundingSphere();
+          if (
+            !isSky &&
+            c.geometry &&
+            c.geometry.boundingSphere &&
+            c.geometry.boundingSphere.radius > 50
+          )
+            isSky = true;
         } catch (e) {}
 
         if (isSky) {
-          if (m.map && m.map.mapping === undefined) m.map.mapping = THREE.EquirectangularReflectionMapping;
-          if (m.envMap && m.envMap.mapping === undefined) m.envMap.mapping = THREE.EquirectangularReflectionMapping;
+          if (m.map && m.map.mapping === undefined)
+            m.map.mapping = THREE.EquirectangularReflectionMapping;
+          if (m.envMap && m.envMap.mapping === undefined)
+            m.envMap.mapping = THREE.EquirectangularReflectionMapping;
         }
 
         m.needsUpdate = true;
@@ -517,7 +532,9 @@ export class PlayerSelection {
     if (this.previewAnimationId) cancelAnimationFrame(this.previewAnimationId);
 
     // Try to reuse preloaded model to save memory
-    const preloadedModel = window.__PRELOADED_BIKE_MODELS__ && window.__PRELOADED_BIKE_MODELS__["motor1"];
+    const preloadedModel =
+      window.__PRELOADED_BIKE_MODELS__ &&
+      window.__PRELOADED_BIKE_MODELS__["motor1"];
 
     if (preloadedModel) {
       // Clone the preloaded model for preview
@@ -694,7 +711,11 @@ export class PlayerSelection {
             const center = new THREE.Vector3();
             bbox.getCenter(center);
             if (this.previewCamera) {
-              this.previewCamera.position.set(center.x, center.y, bbox.max.z + 2);
+              this.previewCamera.position.set(
+                center.x,
+                center.y,
+                bbox.max.z + 2
+              );
               this.previewCamera.lookAt(center);
             }
 
@@ -702,7 +723,10 @@ export class PlayerSelection {
             const renderLoop = () => {
               if (!this.previewRenderer) return;
               if (this.previewModel) this.previewModel.rotation.y += 0.01;
-              this.previewRenderer.render(this.previewScene, this.previewCamera);
+              this.previewRenderer.render(
+                this.previewScene,
+                this.previewCamera
+              );
               this.previewAnimationId = requestAnimationFrame(renderLoop);
             };
             renderLoop();
@@ -835,7 +859,8 @@ export class PlayerSelection {
         renderer.setPixelRatio(dpi);
         renderer.setSize(container.clientWidth, container.clientHeight, false);
         if (this.previewCamera) {
-          this.previewCamera.aspect = container.clientWidth / container.clientHeight;
+          this.previewCamera.aspect =
+            container.clientWidth / container.clientHeight;
           this.previewCamera.updateProjectionMatrix();
         }
       } catch (e) {}
@@ -875,7 +900,13 @@ export class PlayerSelection {
 
       // If the main scene has a dedicated sky / skydome object, clone and add it explicitly
       try {
-        const skyNames = ["sky", "skydome", "skysphere", "sky_sphere", "skybox"];
+        const skyNames = [
+          "sky",
+          "skydome",
+          "skysphere",
+          "sky_sphere",
+          "skybox",
+        ];
         for (let i = 0; i < skyNames.length; i++) {
           if (!this.scene) break;
           const s = this.scene.getObjectByName(skyNames[i]);

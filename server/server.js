@@ -18,6 +18,11 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Serve static client files from dist directory
+const clientDistPath = path.join(__dirname, 'client', 'dist');
+console.log('Serving static files from:', clientDistPath);
+app.use(express.static(clientDistPath));
+
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
@@ -34,8 +39,8 @@ const playerSockets = new Map(); // socketId -> playerId mapping
 let trafficMaster = null; // socketId of the traffic master client
 
 // Health check endpoint for Cloud Run
-app.get('/', (req, res) => {
-  res.json({ 
+app.get('/health', (req, res) => {
+  res.json({
     message: 'Motosai Server Running',
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || 'development',
@@ -578,8 +583,14 @@ setInterval(() => {
   }
 }, 10000); // Check every 10 seconds
 
+// Serve index.html for all other routes (SPA fallback)
+app.get('*', (req, res) => {
+  res.sendFile(path.join(clientDistPath, 'index.html'));
+});
+
 const PORT = process.env.PORT || 8080;
-httpServer.listen(PORT, () => {
+httpServer.listen(PORT, '0.0.0.0', () => {
   console.log(`Motosai multiplayer server running on port ${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`Client files served from: ${clientDistPath}`);
 });

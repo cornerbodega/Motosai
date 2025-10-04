@@ -24,6 +24,13 @@ import {
 import { IntroAnimation } from "./IntroAnimation.js";
 import { PlayerSelection } from "./PlayerSelection.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
+import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
+import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
+import { HeatHazeShader } from "./shaders/HeatHazeShader.js";
+import { HeatHazeShaderV2 } from "./shaders/HeatHazeShaderV2.js";
+import { DevMenu } from "./DevMenu.js";
 // PowerupSystem removed
 
 export class MotosaiGame {
@@ -160,6 +167,8 @@ export class MotosaiGame {
     this.initRenderer();
     this.initScene();
     this.initCamera();
+    this.setupPostProcessing();
+    this.initDevMenu();
     this.initLights();
 
     // Show intro and player selection first
@@ -290,6 +299,157 @@ export class MotosaiGame {
       "webglcontextrestored",
       this.boundHandleContextRestored
     );
+  }
+
+  setupPostProcessing() {
+    // Create the effect composer
+    this.composer = new EffectComposer(this.renderer);
+
+    // Add the render pass (renders the actual scene)
+    this.renderPass = new RenderPass(this.scene, this.camera);
+    this.composer.addPass(this.renderPass);
+
+    // Add the heat haze shader pass
+    this.heatHazePass = new ShaderPass(HeatHazeShader);
+    this.heatHazePass.uniforms.distortionAmount.value = 0.05;
+    this.heatHazePass.uniforms.speed.value = 1.0;
+    this.heatHazePass.uniforms.scale.value = 2.0;
+    this.heatHazePass.uniforms.heightFactor.value = 0.5;
+    this.heatHazePass.enabled = false; // Start disabled
+    this.composer.addPass(this.heatHazePass);
+
+    // Add the heat haze v2 shader pass
+    this.heatHazeV2Pass = new ShaderPass(HeatHazeShaderV2);
+    this.heatHazeV2Pass.uniforms.distortionAmount.value = 0.03;
+    this.heatHazeV2Pass.uniforms.frequency.value = 4.0;
+    this.heatHazeV2Pass.uniforms.speed.value = 1.5;
+    this.heatHazeV2Pass.uniforms.heightFactor.value = 0.5;
+    this.heatHazeV2Pass.uniforms.bikeExclusionRadius.value = 0.15;
+    this.heatHazeV2Pass.enabled = true; // Start enabled
+    this.composer.addPass(this.heatHazeV2Pass);
+
+    // Add output pass (required for proper rendering in Three.js r150+)
+    this.outputPass = new OutputPass();
+    this.composer.addPass(this.outputPass);
+
+    // Initialize time for animation
+    this.heatHazeTime = 0;
+  }
+
+  initDevMenu() {
+    this.devMenu = new DevMenu(this);
+
+    // Add heat haze effect controls
+    this.devMenu.addEffect({
+      name: 'Heat Haze',
+      enabled: false,
+      onChange: (enabled) => {
+        this.heatHazePass.enabled = enabled;
+      },
+      parameters: [
+        {
+          name: 'Distortion',
+          value: 0.05,
+          min: 0,
+          max: 0.3,
+          step: 0.01,
+          onChange: (value) => {
+            this.heatHazePass.uniforms.distortionAmount.value = value;
+          }
+        },
+        {
+          name: 'Speed',
+          value: 1.0,
+          min: 0,
+          max: 5.0,
+          step: 0.1,
+          onChange: (value) => {
+            this.heatHazePass.uniforms.speed.value = value;
+          }
+        },
+        {
+          name: 'Scale',
+          value: 2.0,
+          min: 0.5,
+          max: 10.0,
+          step: 0.1,
+          onChange: (value) => {
+            this.heatHazePass.uniforms.scale.value = value;
+          }
+        },
+        {
+          name: 'Height',
+          value: 0.5,
+          min: 0,
+          max: 1.0,
+          step: 0.05,
+          onChange: (value) => {
+            this.heatHazePass.uniforms.heightFactor.value = value;
+          }
+        }
+      ]
+    });
+
+    // Add heat haze v2 effect controls
+    this.devMenu.addEffect({
+      name: 'Heat Haze v2 (Horizontal)',
+      enabled: true,
+      onChange: (enabled) => {
+        this.heatHazeV2Pass.enabled = enabled;
+      },
+      parameters: [
+        {
+          name: 'Distortion',
+          value: 0.03,
+          min: 0,
+          max: 0.2,
+          step: 0.01,
+          onChange: (value) => {
+            this.heatHazeV2Pass.uniforms.distortionAmount.value = value;
+          }
+        },
+        {
+          name: 'Frequency',
+          value: 4.0,
+          min: 1.0,
+          max: 20.0,
+          step: 0.5,
+          onChange: (value) => {
+            this.heatHazeV2Pass.uniforms.frequency.value = value;
+          }
+        },
+        {
+          name: 'Speed',
+          value: 1.5,
+          min: 0,
+          max: 5.0,
+          step: 0.1,
+          onChange: (value) => {
+            this.heatHazeV2Pass.uniforms.speed.value = value;
+          }
+        },
+        {
+          name: 'Height',
+          value: 0.5,
+          min: 0,
+          max: 1.0,
+          step: 0.05,
+          onChange: (value) => {
+            this.heatHazeV2Pass.uniforms.heightFactor.value = value;
+          }
+        },
+        {
+          name: 'Bike Exclusion',
+          value: 0.15,
+          min: 0,
+          max: 0.5,
+          step: 0.01,
+          onChange: (value) => {
+            this.heatHazeV2Pass.uniforms.bikeExclusionRadius.value = value;
+          }
+        }
+      ]
+    });
   }
 
   initScene() {
@@ -2752,9 +2912,18 @@ export class MotosaiGame {
       // The intro animation and player selection handle their own updates
     }
 
+    // Update heat haze time uniforms
+    if (this.heatHazePass) {
+      this.heatHazeTime += deltaTime;
+      this.heatHazePass.uniforms.time.value = this.heatHazeTime;
+    }
+    if (this.heatHazeV2Pass) {
+      this.heatHazeV2Pass.uniforms.time.value = this.heatHazeTime;
+    }
+
     // Render - wrapped to catch shader uniform errors
     try {
-      this.renderer.render(this.scene, this.camera);
+      this.composer.render();
     } catch (error) {
       // Log the error once to avoid spamming console
       if (!this.shaderErrorLogged) {
@@ -2772,6 +2941,10 @@ export class MotosaiGame {
     this.camera.updateProjectionMatrix();
 
     this.renderer.setSize(this.width, this.height);
+
+    if (this.composer) {
+      this.composer.setSize(this.width, this.height);
+    }
   }
 
   start() {

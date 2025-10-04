@@ -20,7 +20,6 @@ export class MaterialTracker {
       MeshLambertMaterial: THREE.MeshLambertMaterial,
       MeshPhysicalMaterial: THREE.MeshPhysicalMaterial,
       PointsMaterial: THREE.PointsMaterial,
-      LineMaterial: THREE.LineMaterial,
       LineBasicMaterial: THREE.LineBasicMaterial,
       SpriteMaterial: THREE.SpriteMaterial
     };
