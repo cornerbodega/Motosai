@@ -508,7 +508,7 @@ export class MotosaiGame {
     if (preloadedModel) {
       // Clone the model but SHARE geometries and textures to save memory
       console.log("Reusing preloaded motor1 model (sharing geometries)");
-      this.motorcycle = preloadedModel.clone(false); // shallow clone to share geometries/materials
+      this.motorcycle = preloadedModel.clone(true); // deep clone
       this._setupMotorcycleModel(this.motorcycle, bikeColor);
     } else {
       // Load the GLB model fresh
@@ -553,6 +553,9 @@ export class MotosaiGame {
   _setupMotorcycleModel(model, bikeColor) {
     // Scale to appropriate size (motor1.glb needs to be smaller)
     this.motorcycle.scale.setScalar(0.25);
+
+    // Set initial position
+    this.motorcycle.position.set(0, 0, 0);
 
     // Apply the selected bike color to all meshes using shared materials
     const materialManager = getMaterialManager();
