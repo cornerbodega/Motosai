@@ -38,6 +38,7 @@ export class PlayerSelection {
         handling: 1.0,
         unlocked: true,
         unlockRequirement: null,
+        modelPath: "/models/motor1.glb",
       },
       {
         id: "dragon",
@@ -49,6 +50,7 @@ export class PlayerSelection {
         handling: 0.9,
         unlocked: true, // All bikes unlocked - powerup system removed
         unlockRequirement: { powerup: "dragon", count: 2 }, // Reduced from 5
+        modelPath: "/models/motor1.glb",
       },
       {
         id: "rocket",
@@ -60,6 +62,7 @@ export class PlayerSelection {
         handling: 0.8,
         unlocked: true, // All bikes unlocked - powerup system removed
         unlockRequirement: { powerup: "rocket", count: 3 }, // Reduced from 10
+        modelPath: "/models/motor1.glb",
       },
       {
         id: "star",
@@ -71,6 +74,7 @@ export class PlayerSelection {
         handling: 1.2,
         unlocked: true, // All bikes unlocked - powerup system removed
         unlockRequirement: { powerup: "star", count: 2 }, // Reduced from 7
+        modelPath: "/models/motor1.glb",
       },
       {
         id: "fire",
@@ -82,6 +86,7 @@ export class PlayerSelection {
         handling: 1.0,
         unlocked: true, // All bikes unlocked - powerup system removed
         unlockRequirement: { powerup: "fire", count: 3 }, // Reduced from 8
+        modelPath: "/models/motor1.glb",
       },
       {
         id: "lightning",
@@ -93,6 +98,7 @@ export class PlayerSelection {
         handling: 1.1,
         unlocked: true, // All bikes unlocked - powerup system removed
         unlockRequirement: { powerup: "lightning", count: 4 }, // Reduced from 12
+        modelPath: "/models/motor1.glb",
       },
       {
         id: "skull",
@@ -104,6 +110,7 @@ export class PlayerSelection {
         handling: 1.3,
         unlocked: true, // All bikes unlocked - powerup system removed
         unlockRequirement: { powerup: "skull", count: 5 }, // Reduced from 15
+        modelPath: "/models/motor1.glb",
       },
       {
         id: "rainbow",
@@ -115,6 +122,7 @@ export class PlayerSelection {
         handling: 1.4,
         unlocked: true, // All bikes unlocked - powerup system removed
         unlockRequirement: { powerup: "rainbow", count: 7 }, // Reduced from 20
+        modelPath: "/models/motor1.glb",
       },
     ];
 
@@ -360,6 +368,107 @@ export class PlayerSelection {
     this._updateInfoUI();
   }
 
+  // Ensure textures used in the preview are configured for high-quality sampling
+  _configureTextureForPreview(texture) {
+    if (!texture || !this.previewRenderer) return;
+    try {
+      const caps = this.previewRenderer.capabilities || {};
+      const maxAniso =
+        (this.previewRenderer.capabilities && this.previewRenderer.capabilities.getMaxAnisotropy
+          ? this.previewRenderer.capabilities.getMaxAnisotropy()
+          : (caps.maxAnisotropy || 1)) || 1;
+      texture.anisotropy = Math.max(1, maxAniso);
+      // Use sRGB for color maps so colors appear correct on most displays
+      if (THREE && THREE.sRGBEncoding) texture.encoding = THREE.sRGBEncoding;
+      // Use trilinear mipmap filtering for crisper downscaled results
+      if (THREE && THREE.LinearMipmapLinearFilter) {
+        texture.minFilter = THREE.LinearMipmapLinearFilter;
+        texture.magFilter = THREE.LinearFilter;
+      }
+      texture.generateMipmaps = true;
+      texture.needsUpdate = true;
+    } catch (e) {
+      // ignore failures
+    }
+  }
+
+  _configureMaterialsForPreview(obj) {
+    if (!obj) return;
+    obj.traverse((c) => {
+      if (c.isMesh && c.material) {
+        const mats = Array.isArray(c.material) ? c.material : [c.material];
+        mats.forEach((m) => {
+          if (!m) return;
+          if (m.map) this._configureTextureForPreview(m.map);
+          if (m.emissiveMap) this._configureTextureForPreview(m.emissiveMap);
+          if (m.normalMap) this._configureTextureForPreview(m.normalMap);
+          if (m.roughnessMap) this._configureTextureForPreview(m.roughnessMap);
+          if (m.metalnessMap) this._configureTextureForPreview(m.metalnessMap);
+          m.needsUpdate = true;
+        });
+      }
+    });
+  }
+
+  // Clone texture so we don't mutate the main scene's texture settings
+  _cloneTextureIfNeeded(texture) {
+    if (!texture) return texture;
+    try {
+      // Some texture types expose a clone(); prefer that when available
+      if (typeof texture.clone === "function") {
+        const t = texture.clone();
+        t.needsUpdate = true;
+        return t;
+      }
+      // fallback shallow-copy for older textures
+      const copy = texture; // as a safe fallback, return original (we'll still configure it)
+      return copy;
+    } catch (e) {
+      return texture;
+    }
+  }
+
+  // Specifically configure sky sphere / env maps for the preview
+  _configureSkyForPreview(obj) {
+    if (!obj) return;
+    obj.traverse((c) => {
+      if (!c.isMesh || !c.material) return;
+      const mats = Array.isArray(c.material) ? c.material : [c.material];
+      mats.forEach((m) => {
+        if (!m) return;
+        // Clone color map/envMap so we don't alter the main scene textures
+        if (m.map) {
+          try {
+            m.map = this._cloneTextureIfNeeded(m.map);
+            this._configureTextureForPreview(m.map);
+          } catch (e) {}
+        }
+        if (m.envMap) {
+          try {
+            m.envMap = this._cloneTextureIfNeeded(m.envMap);
+            this._configureTextureForPreview(m.envMap);
+          } catch (e) {}
+        }
+
+        // If this mesh is likely a sky (name contains "sky" or very large sphere), ensure mapping is equirectangular
+        const nameLower = (c.name || "").toLowerCase();
+        let isSky = false;
+        if (nameLower.includes("sky") || nameLower.includes("skysphere") || nameLower.includes("skydome")) isSky = true;
+        try {
+          if (c.geometry && c.geometry.boundingSphere === null) c.geometry.computeBoundingSphere();
+          if (!isSky && c.geometry && c.geometry.boundingSphere && c.geometry.boundingSphere.radius > 50) isSky = true;
+        } catch (e) {}
+
+        if (isSky) {
+          if (m.map && m.map.mapping === undefined) m.map.mapping = THREE.EquirectangularReflectionMapping;
+          if (m.envMap && m.envMap.mapping === undefined) m.envMap.mapping = THREE.EquirectangularReflectionMapping;
+        }
+
+        m.needsUpdate = true;
+      });
+    });
+  }
+
   updateBikePreview(bike) {
     // Use a dedicated preview scene + renderer so UI does not overlap the bike
     this._ensurePreviewRenderer();
@@ -407,111 +516,149 @@ export class PlayerSelection {
     // Cancel previous animation frame
     if (this.previewAnimationId) cancelAnimationFrame(this.previewAnimationId);
 
-    // Load the GLB model from public folder
-    const glbPath = "/models/motor1.glb";
-    const loader = new GLTFLoader();
-    loader.load(
-      glbPath,
-      (gltf) => {
-        // ignore this result if a newer load started
-        if (loadId !== this._previewLoadId) {
-          // dispose loaded resources to avoid leaks
-          if (gltf && gltf.scene) disposeObject(gltf.scene);
-          return;
-        }
-        const model = gltf.scene || gltf.scenes[0];
-        if (!model) return;
+    // Try to reuse preloaded model to save memory
+    const preloadedModel = window.__PRELOADED_BIKE_MODELS__ && window.__PRELOADED_BIKE_MODELS__["motor1"];
 
-        // Basic framing
-        // Nudge down and scale smaller so the bike fits the preview properly
-        // Scale the model down so it fits the preview
-        model.scale.setScalar(0.6);
+    if (preloadedModel) {
+      // Clone the preloaded model for preview
+      const model = preloadedModel.clone(true);
+      if (!model) return;
 
-        // Compute bounding box center so we can pivot around the visual center
-        const bbox = new THREE.Box3().setFromObject(model);
-        const center = new THREE.Vector3();
-        bbox.getCenter(center);
+      // Basic framing
+      // Nudge down and scale smaller so the bike fits the preview properly
+      // Scale the model down so it fits the preview
+      model.scale.setScalar(0.6);
 
-        // Create a pivot wrapper so we can rotate around the model's true center
-        const pivot = new THREE.Group();
+      // Compute bounding box center so we can pivot around the visual center
+      const bbox = new THREE.Box3().setFromObject(model);
+      const center = new THREE.Vector3();
+      bbox.getCenter(center);
 
-        // Move the model so its center is at the pivot origin
-        model.position.sub(center);
-        pivot.add(model);
+      // Create a pivot wrapper so we can rotate around the model's true center
+      const pivot = new THREE.Group();
 
-        // Position the pivot slightly up relative to camera so bikes are visually centered
-        const verticalOffset = 0.06; // tuned offset to visually center bike
-        pivot.position.set(0, verticalOffset, 0);
+      // Move the model so its center is at the pivot origin
+      model.position.sub(center);
+      pivot.add(model);
 
-        // Apply preserved rotation to the pivot so swapping keeps the spin
-        pivot.rotation.y = preservedRotationY;
+      // Position the pivot slightly up relative to camera so bikes are visually centered
+      const verticalOffset = 0.06; // tuned offset to visually center bike
+      pivot.position.set(0, verticalOffset, 0);
 
-        // Ensure meshes cast/receive shadows and apply bike color
-        model.traverse((c) => {
-          if (c.isMesh && c.material) {
-            c.castShadow = true;
-            c.receiveShadow = true;
-            if (
-              this.selectedBike &&
-              this.selectedBike.color &&
-              c.material.color
-            ) {
-              try {
-                c.material.color.setHex(this.selectedBike.color);
-              } catch (e) {}
-            }
+      // Apply preserved rotation to the pivot so swapping keeps the spin
+      pivot.rotation.y = preservedRotationY;
+
+      // Ensure meshes cast/receive shadows and apply bike color
+      model.traverse((c) => {
+        if (c.isMesh && c.material) {
+          c.castShadow = true;
+          c.receiveShadow = true;
+          if (
+            this.selectedBike &&
+            this.selectedBike.color &&
+            c.material.color
+          ) {
+            try {
+              c.material.color.setHex(this.selectedBike.color);
+            } catch (e) {}
           }
-        });
-
-        // Add pivot (not the raw model) to the scene and set as previewModel
-        this.previewScene.add(pivot);
-        this.previewModel = pivot;
-
-        // Aim camera at the pivot so rotation appears centered and show mountains behind
-        if (this.previewCamera) {
-          // place camera slightly back & above the pivot for level-style framing
-          this.previewCamera.position.set(0.0, 1.4, 4.5);
-          this.previewCamera.lookAt(pivot.position);
         }
+      });
 
-        // Start render loop once model is present
-        const renderLoop = () => {
-          if (!this.previewRenderer) return;
-          if (this.previewModel) this.previewModel.rotation.y += 0.01;
-          this.previewRenderer.render(this.previewScene, this.previewCamera);
-          this.previewAnimationId = requestAnimationFrame(renderLoop);
-        };
-        renderLoop();
-      },
-      undefined,
-      (err) => {
-        // If this load fails but is stale, ignore to avoid triggering fallback for newer loads
-        if (loadId !== this._previewLoadId) return;
-        console.error("Failed to load preview GLB:", err);
-        // Fallback: use MotorcycleFactory as a fallback if GLB fails
-        try {
-          const fallback = MotorcycleFactory.createMotorcycle({
-            bikeColor: bike.color,
-            includeRider: true,
-          });
-          // if a newer load started while building fallback, discard it
+      // Configure textures/materials for crisper appearance in preview
+      this._configureMaterialsForPreview(model);
+
+      // Add pivot (not the raw model) to the scene and set as previewModel
+      this.previewScene.add(pivot);
+      this.previewModel = pivot;
+
+      // Aim camera at the pivot so rotation appears centered and show mountains behind
+      if (this.previewCamera) {
+        // place camera slightly back & above the pivot for level-style framing
+        this.previewCamera.position.set(0.0, 1.4, 4.5);
+        this.previewCamera.lookAt(pivot.position);
+      }
+
+      // Start render loop once model is present
+      const renderLoop = () => {
+        if (!this.previewRenderer) return;
+        if (this.previewModel) this.previewModel.rotation.y += 0.01;
+        this.previewRenderer.render(this.previewScene, this.previewCamera);
+        this.previewAnimationId = requestAnimationFrame(renderLoop);
+      };
+      renderLoop();
+    } else {
+      // Load fresh if no preloaded model available
+      const glbPath = "/models/motor1.glb";
+      const loader = new GLTFLoader();
+      loader.load(
+        glbPath,
+        (gltf) => {
+          // ignore this result if a newer load started
           if (loadId !== this._previewLoadId) {
-            disposeObject(fallback);
+            // dispose loaded resources to avoid leaks
+            if (gltf && gltf.scene) disposeObject(gltf.scene);
             return;
           }
-          this.previewModel = fallback;
-          this.previewScene.add(fallback);
+          const model = gltf.scene || gltf.scenes[0];
+          if (!model) return;
 
-          // Aim camera at the fallback model
-          const bbox = new THREE.Box3().setFromObject(fallback);
+          // Basic framing
+          // Nudge down and scale smaller so the bike fits the preview properly
+          // Scale the model down so it fits the preview
+          model.scale.setScalar(0.6);
+
+          // Compute bounding box center so we can pivot around the visual center
+          const bbox = new THREE.Box3().setFromObject(model);
           const center = new THREE.Vector3();
           bbox.getCenter(center);
+
+          // Create a pivot wrapper so we can rotate around the model's true center
+          const pivot = new THREE.Group();
+
+          // Move the model so its center is at the pivot origin
+          model.position.sub(center);
+          pivot.add(model);
+
+          // Position the pivot slightly up relative to camera so bikes are visually centered
+          const verticalOffset = 0.06; // tuned offset to visually center bike
+          pivot.position.set(0, verticalOffset, 0);
+
+          // Apply preserved rotation to the pivot so swapping keeps the spin
+          pivot.rotation.y = preservedRotationY;
+
+          // Ensure meshes cast/receive shadows and apply bike color
+          model.traverse((c) => {
+            if (c.isMesh && c.material) {
+              c.castShadow = true;
+              c.receiveShadow = true;
+              if (
+                this.selectedBike &&
+                this.selectedBike.color &&
+                c.material.color
+              ) {
+                try {
+                  c.material.color.setHex(this.selectedBike.color);
+                } catch (e) {}
+              }
+            }
+          });
+
+          // Configure textures/materials for crisper appearance in preview
+          this._configureMaterialsForPreview(model);
+
+          // Add pivot (not the raw model) to the scene and set as previewModel
+          this.previewScene.add(pivot);
+          this.previewModel = pivot;
+
+          // Aim camera at the pivot so rotation appears centered and show mountains behind
           if (this.previewCamera) {
-            this.previewCamera.position.set(center.x, center.y, bbox.max.z + 2);
-            this.previewCamera.lookAt(center);
+            // place camera slightly back & above the pivot for level-style framing
+            this.previewCamera.position.set(0.0, 1.4, 4.5);
+            this.previewCamera.lookAt(pivot.position);
           }
 
-          // Start render loop for fallback
+          // Start render loop once model is present
           const renderLoop = () => {
             if (!this.previewRenderer) return;
             if (this.previewModel) this.previewModel.rotation.y += 0.01;
@@ -519,11 +666,52 @@ export class PlayerSelection {
             this.previewAnimationId = requestAnimationFrame(renderLoop);
           };
           renderLoop();
-        } catch (e) {
-          console.error("Fallback model error:", e);
+        },
+        undefined,
+        (err) => {
+          // If this load fails but is stale, ignore to avoid triggering fallback for newer loads
+          if (loadId !== this._previewLoadId) return;
+          console.error("Failed to load preview GLB:", err);
+          // Fallback: use MotorcycleFactory as a fallback if GLB fails
+          try {
+            const fallback = MotorcycleFactory.createMotorcycle({
+              bikeColor: bike.color,
+              includeRider: true,
+            });
+            // if a newer load started while building fallback, discard it
+            if (loadId !== this._previewLoadId) {
+              disposeObject(fallback);
+              return;
+            }
+            this.previewModel = fallback;
+            this.previewScene.add(fallback);
+
+            // Configure fallback materials as well
+            this._configureMaterialsForPreview(fallback);
+
+            // Aim camera at the fallback model
+            const bbox = new THREE.Box3().setFromObject(fallback);
+            const center = new THREE.Vector3();
+            bbox.getCenter(center);
+            if (this.previewCamera) {
+              this.previewCamera.position.set(center.x, center.y, bbox.max.z + 2);
+              this.previewCamera.lookAt(center);
+            }
+
+            // Start render loop for fallback
+            const renderLoop = () => {
+              if (!this.previewRenderer) return;
+              if (this.previewModel) this.previewModel.rotation.y += 0.01;
+              this.previewRenderer.render(this.previewScene, this.previewCamera);
+              this.previewAnimationId = requestAnimationFrame(renderLoop);
+            };
+            renderLoop();
+          } catch (e) {
+            console.error("Fallback model error:", e);
+          }
         }
-      }
-    );
+      );
+    }
   }
 
   _ensurePreviewRenderer() {
@@ -542,8 +730,10 @@ export class PlayerSelection {
       alpha: false,
       antialias: true,
     });
+    // default size; will be resized to container shortly
     renderer.setSize(460, 360);
-    renderer.setPixelRatio(window.devicePixelRatio);
+    // cap pixel ratio to avoid extremely large textures on high-DPI displays
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     // set a matching clear color so the canvas shows this tan background
     renderer.setClearColor(previewBgColor, 1);
     // ensure the canvas fills the preview container and visually matches the scene
@@ -639,6 +829,16 @@ export class PlayerSelection {
     const container = document.getElementById("bike-preview-container");
     if (container) {
       container.appendChild(renderer.domElement);
+      // Resize renderer to match container and update camera aspect
+      try {
+        const dpi = Math.min(window.devicePixelRatio || 1, 2);
+        renderer.setPixelRatio(dpi);
+        renderer.setSize(container.clientWidth, container.clientHeight, false);
+        if (this.previewCamera) {
+          this.previewCamera.aspect = container.clientWidth / container.clientHeight;
+          this.previewCamera.updateProjectionMatrix();
+        }
+      } catch (e) {}
     }
 
     // Try to reuse mountains from the main scene if present
@@ -647,18 +847,48 @@ export class PlayerSelection {
         ? this.scene.getObjectByName("mountains")
         : null;
       if (mountains) {
-        this.previewScene.add(mountains.clone());
+        // clone so we don't detach mountains from main scene
+        const mClone = mountains.clone();
+        // configure textures on the cloned mountains to use high-quality sampling
+        this._configureMaterialsForPreview(mClone);
+        // also specifically configure any sky meshes/envmaps inside the cloned group
+        this._configureSkyForPreview(mClone);
+        this.previewScene.add(mClone);
       } else {
         // fallback: attempt to load a mountains glb if available
         const gl = new GLTFLoader();
         gl.load(
           "/models/mountains.glb",
           (g) => {
-            if (g && g.scene) this.previewScene.add(g.scene);
+            if (g && g.scene) {
+              // ensure any textures in the loaded mountains are configured for preview
+              this._configureMaterialsForPreview(g.scene);
+              // configure sky / envmap if present
+              this._configureSkyForPreview(g.scene);
+              this.previewScene.add(g.scene);
+            }
           },
           undefined,
           () => {}
         );
+      }
+
+      // If the main scene has a dedicated sky / skydome object, clone and add it explicitly
+      try {
+        const skyNames = ["sky", "skydome", "skysphere", "sky_sphere", "skybox"];
+        for (let i = 0; i < skyNames.length; i++) {
+          if (!this.scene) break;
+          const s = this.scene.getObjectByName(skyNames[i]);
+          if (s) {
+            // clone deeply and configure textures for preview (do not mutate main scene)
+            const skyClone = s.clone(true);
+            this._configureSkyForPreview(skyClone);
+            this.previewScene.add(skyClone);
+            break;
+          }
+        }
+      } catch (e) {
+        // ignore sky cloning errors
       }
     } catch (e) {
       // ignore if mountains not available

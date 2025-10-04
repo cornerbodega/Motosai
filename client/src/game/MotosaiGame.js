@@ -23,6 +23,7 @@ import {
 } from "../utils/MaterialManager.js";
 import { IntroAnimation } from "./IntroAnimation.js";
 import { PlayerSelection } from "./PlayerSelection.js";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 // PowerupSystem removed
 
 export class MotosaiGame {
@@ -444,9 +445,11 @@ export class MotosaiGame {
     // Use the bike selected from the player selection screen
     let bikeColor = 0xff0000; // default red
     let bikeStats = null;
+    let modelPath = "/models/motor1.glb"; // default model
 
     if (this.selectedBike) {
       bikeColor = this.selectedBike.color;
+      modelPath = this.selectedBike.modelPath || "/models/motor1.glb";
       bikeStats = {
         speed: this.selectedBike.speed,
         acceleration: this.selectedBike.acceleration,
@@ -460,6 +463,7 @@ export class MotosaiGame {
         try {
           const selectedBike = JSON.parse(selectedBikeData);
           bikeColor = selectedBike.color || 0xff0000;
+          modelPath = selectedBike.modelPath || "/models/motor1.glb";
           console.log("Using bike from sessionStorage:", selectedBike.name);
         } catch (e) {
           console.warn("Failed to parse selected bike data:", e);
@@ -472,19 +476,120 @@ export class MotosaiGame {
       this.physics.setBikeStats(bikeStats);
     }
 
-    // Use MotorcycleFactory to create the motorcycle with rider
-    this.motorcycle = MotorcycleFactory.createMotorcycle({
-      bikeColor: bikeColor,
-      riderColor: this.config.riderColor,
-      includeRider: true,
+    // Dispose of old motorcycle if it exists
+    if (this.motorcycle) {
+      this.motorcycle.traverse((child) => {
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) {
+          if (Array.isArray(child.material)) {
+            child.material.forEach(m => {
+              if (m.map) m.map.dispose();
+              if (m.normalMap) m.normalMap.dispose();
+              if (m.roughnessMap) m.roughnessMap.dispose();
+              if (m.metalnessMap) m.metalnessMap.dispose();
+              m.dispose();
+            });
+          } else {
+            if (child.material.map) child.material.map.dispose();
+            if (child.material.normalMap) child.material.normalMap.dispose();
+            if (child.material.roughnessMap) child.material.roughnessMap.dispose();
+            if (child.material.metalnessMap) child.material.metalnessMap.dispose();
+            child.material.dispose();
+          }
+        }
+      });
+      this.scene.remove(this.motorcycle);
+      this.motorcycle = null;
+    }
+
+    // Try to reuse preloaded model to save memory
+    const preloadedModel = window.__PRELOADED_BIKE_MODELS__ && window.__PRELOADED_BIKE_MODELS__["motor1"];
+
+    if (preloadedModel) {
+      // Clone the model but SHARE geometries and textures to save memory
+      console.log("Reusing preloaded motor1 model (sharing geometries)");
+      this.motorcycle = preloadedModel.clone(false); // shallow clone to share geometries/materials
+      this._setupMotorcycleModel(this.motorcycle, bikeColor);
+    } else {
+      // Load the GLB model fresh
+      const loader = new GLTFLoader();
+      loader.load(
+        modelPath,
+        (gltf) => {
+          this.motorcycle = gltf.scene || gltf.scenes[0];
+
+          console.log("GLB loaded fresh, checking for textures...");
+          let textureCount = 0;
+          gltf.scene.traverse((child) => {
+            if (child.material) {
+              if (child.material.map) textureCount++;
+              if (child.material.normalMap) textureCount++;
+            }
+          });
+          console.log(`Found ${textureCount} textures in GLB`);
+
+          this._setupMotorcycleModel(this.motorcycle, bikeColor);
+        },
+        undefined,
+        (error) => {
+          console.error("Failed to load bike model, using fallback:", error);
+          // Fallback to MotorcycleFactory
+          this.motorcycle = MotorcycleFactory.createMotorcycle({
+            bikeColor: bikeColor,
+            riderColor: this.config.riderColor,
+            includeRider: true,
+          });
+
+          this.frontWheel = this.motorcycle.userData.frontWheel;
+          this.rearWheel = this.motorcycle.userData.rearWheel;
+          this.rider = this.motorcycle.userData.rider;
+
+          this.scene.add(this.motorcycle);
+        }
+      );
+    }
+  }
+
+  _setupMotorcycleModel(model, bikeColor) {
+    // Scale to appropriate size (motor1.glb needs to be smaller)
+    this.motorcycle.scale.setScalar(0.25);
+
+    // Apply the selected bike color to all meshes using shared materials
+    const materialManager = getMaterialManager();
+    this.motorcycle.traverse((child) => {
+      if (child.isMesh && child.material) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+        // Use MaterialManager to get a shared material instead of modifying the original
+        if (child.material.color) {
+          const sharedMaterial = materialManager.getMaterial('standard', {
+            color: bikeColor,
+            metalness: child.material.metalness || 0.5,
+            roughness: child.material.roughness || 0.5,
+          });
+          child.material = sharedMaterial;
+        }
+      }
     });
 
-    // Get references to wheels and rider for animation
-    this.frontWheel = this.motorcycle.userData.frontWheel;
-    this.rearWheel = this.motorcycle.userData.rearWheel;
-    this.rider = this.motorcycle.userData.rider;
+    // Store references for animation (find wheels in the model)
+    // Only use named objects - don't fallback to children to avoid rotating wrong parts
+    this.frontWheel = this.motorcycle.getObjectByName("frontWheel");
+    this.rearWheel = this.motorcycle.getObjectByName("rearWheel");
+
+    // Store user data
+    this.motorcycle.userData.frontWheel = this.frontWheel;
+    this.motorcycle.userData.rearWheel = this.rearWheel;
+    this.motorcycle.userData.originalColor = new THREE.Color(bikeColor);
 
     this.scene.add(this.motorcycle);
+
+    // Create rider using MotorcycleFactory
+    this.rider = MotorcycleFactory.createRider(this.config.riderColor);
+    this.rider.scale.setScalar(1.0 / 0.25); // Scale relative to bike's 0.25 scale
+    this.rider.position.set(0, 1.2, -3.0); // Position on seat (negative Z = back)
+    this.motorcycle.add(this.rider);
+    this.motorcycle.userData.rider = this.rider;
   }
 
   initHighway() {
@@ -1596,7 +1701,7 @@ export class MotosaiGame {
         this.motorcycle.visible = false;
       } else {
         this.motorcycle.visible = true;
-        this.rider.visible = true; // Make sure rider is visible too in third person
+        if (this.rider) this.rider.visible = true; // Make sure rider is visible too in third person
       }
     }
 
@@ -1922,8 +2027,8 @@ export class MotosaiGame {
     // Store race state for later (after death animation completes)
     this.deathInRaceMode = this.raceMode;
 
-    this.motorcycle.visible = false; // Hide motorcycle immediately
-    this.rider.visible = false; // Hide rider immediately - they're now a puddle!
+    if (this.motorcycle) this.motorcycle.visible = false; // Hide motorcycle immediately
+    if (this.rider) this.rider.visible = false; // Hide rider immediately - they're now a puddle!
 
     // Play death/explosion sound
     if (this.audioManager) {
@@ -2005,13 +2110,13 @@ export class MotosaiGame {
     }
 
     // Make everything visible again
-    this.motorcycle.visible = true;
-    this.rider.visible = true; // Rider is back from being a puddle!
-
-    // Also make all children visible
-    this.motorcycle.traverse((child) => {
-      child.visible = true;
-    });
+    if (this.motorcycle) {
+      this.motorcycle.visible = true;
+      this.motorcycle.traverse((child) => {
+        child.visible = true;
+      });
+    }
+    if (this.rider) this.rider.visible = true; // Rider is back from being a puddle!
 
     // Reset physics but keep Z position (player has fallen behind)
     const currentState = this.physics.getState();
@@ -2037,9 +2142,9 @@ export class MotosaiGame {
     };
 
     // Reset visual elements
-    this.rider.rotation.set(0, 0, 0);
-    this.frontWheel.rotation.x = 0;
-    this.rearWheel.rotation.x = 0;
+    if (this.rider) this.rider.rotation.set(0, 0, 0);
+    if (this.frontWheel) this.frontWheel.rotation.x = 0;
+    if (this.rearWheel) this.rearWheel.rotation.x = 0;
 
     // Play rev engine sound on respawn
     if (this.audioManager) {
@@ -2426,19 +2531,20 @@ export class MotosaiGame {
         // Handle motorcycle visibility and updates - DEATH CHECK FIRST!
         if (this.isDead) {
           // ALWAYS force hide when dead - this is the FIRST check
-          this.motorcycle.visible = false;
-          this.rider.visible = false;
-          // Also hide all children to be absolutely sure
-          this.motorcycle.traverse((child) => {
-            child.visible = false;
-          });
+          if (this.motorcycle) {
+            this.motorcycle.visible = false;
+            this.motorcycle.traverse((child) => {
+              child.visible = false;
+            });
+          }
+          if (this.rider) this.rider.visible = false;
           // Don't do any other updates when dead
         } else if (this.motorcycle) {
           // Only update when alive
           // Handle invulnerability flashing - DISABLED to prevent flickering
           // Just show normally even during invulnerability
           this.motorcycle.visible = true;
-          this.rider.visible = true;
+          if (this.rider) this.rider.visible = true;
 
           // Update motorcycle position and rotation
           // Simplified position - no lean offset to prevent jitter
@@ -2459,14 +2565,20 @@ export class MotosaiGame {
             0.1,
             0.1 / (1 + state.speed / 100)
           ); // Reduce at high speeds
-          this.frontWheel.rotation.x +=
-            state.speed * deltaTime * wheelSpeedMultiplier;
-          this.rearWheel.rotation.x +=
-            state.speed * deltaTime * wheelSpeedMultiplier;
+          if (this.frontWheel) {
+            this.frontWheel.rotation.x +=
+              state.speed * deltaTime * wheelSpeedMultiplier;
+          }
+          if (this.rearWheel) {
+            this.rearWheel.rotation.x +=
+              state.speed * deltaTime * wheelSpeedMultiplier;
+          }
 
           // Rider lean animation
-          this.rider.rotation.z = -state.rotation.roll * 0.5;
-          this.rider.rotation.x = state.rotation.pitch * 0.3;
+          if (this.rider) {
+            this.rider.rotation.z = -state.rotation.roll * 0.5;
+            this.rider.rotation.x = state.rotation.pitch * 0.3;
+          }
         }
 
         // Update backgrounds with memory management

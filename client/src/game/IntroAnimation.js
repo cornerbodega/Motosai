@@ -31,7 +31,8 @@ export class IntroAnimation {
         // Don't run a spinning intro. Instead register the loaded model
         // in a global registry so selection UI can reuse it.
         try {
-          if (!window.__PRELOADED_BIKE_MODELS__) window.__PRELOADED_BIKE_MODELS__ = {};
+          if (!window.__PRELOADED_BIKE_MODELS__)
+            window.__PRELOADED_BIKE_MODELS__ = {};
           // store a clone to avoid accidental shared transforms
           window.__PRELOADED_BIKE_MODELS__["motor1"] = model.clone(true);
           // also preserve original gltf for later disposal if needed
