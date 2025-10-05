@@ -1202,7 +1202,7 @@ export class MotosaiGame {
         this.ufoController.ufo.scale.setScalar(2);
 
         // Position immediately at default starting position (player starts at 0,0,0)
-        this.ufoController.ufo.position.set(0, 15, 40);
+        this.ufoController.ufo.position.set(0, 30, 120);
         this.ufoController.ufo.visible = true;
         console.log('UFO positioned at start:', this.ufoController.ufo.position);
         console.log('UFO visible?', this.ufoController.ufo.visible);
@@ -2625,8 +2625,8 @@ export class MotosaiGame {
     if (this.ufo) {
       this.ufo.position.set(
         this.physics.position.x,
-        15,
-        this.physics.position.z + 40
+        30,  // Higher up for more floaty feel
+        this.physics.position.z + 120  // Further ahead
       );
       this.ufo.rotation.set(0, 0, 0);
       console.log('UFO positioned at:', this.ufo.position, 'Player at:', this.physics.position);

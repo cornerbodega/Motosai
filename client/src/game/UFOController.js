@@ -6,9 +6,9 @@ export class UFOController {
   constructor(scene) {
     this.scene = scene;
     this.ufo = null;
-    this.targetDistance = 60; // meters ahead of player
-    this.minDistance = 45;
-    this.maxDistance = 75;
+    this.targetDistance = 120; // meters ahead of player (matches starting position)
+    this.minDistance = 100;
+    this.maxDistance = 140;
 
     // Movement
     this.baseSpeed = 0;
@@ -143,6 +143,12 @@ export class UFOController {
   }
 
   addGlow() {
+    // Don't add glow if it already exists
+    if (this.glowMesh) {
+      console.log('Glow already exists, skipping');
+      return;
+    }
+
     // Glow halo around UFO
     const glowGeometry = new THREE.SphereGeometry(3, 16, 16);
     const glowMaterial = new THREE.MeshBasicMaterial({
@@ -156,6 +162,12 @@ export class UFOController {
   }
 
   addParticleTrail() {
+    // Don't add particle trail if it already exists
+    if (this.particleSystem) {
+      console.log('Particle trail already exists, skipping');
+      return;
+    }
+
     // Simple particle system for trail
     const particleCount = 50;
     const geometry = new THREE.BufferGeometry();
@@ -216,19 +228,19 @@ export class UFOController {
     const slowFactor = 1 - speedFactor; // Inverse for slow-speed behaviors
 
     // At high speeds: tighter, more stable, angled forward
-    // At low speeds: wider spirals, more playful
-    this.spiralAngle += deltaTime * (0.5 + slowFactor * 0.5); // Slower spiral when fast
+    // At low speeds: wider spirals, more playful, floaty
+    this.spiralAngle += deltaTime * (0.5 + slowFactor * 0.8); // More spiraling
 
-    const baseRadius = 8 + slowFactor * 8; // 8-16m radius (tighter when fast)
-    const baseHeight = 4 + slowFactor * 4; // 4-8m height (flatter when fast)
+    const baseRadius = 15 + slowFactor * 20; // 15-35m radius (much wider spirals)
+    const baseHeight = 8 + slowFactor * 12; // 8-20m height (more vertical motion)
 
-    // Wobble only at slower speeds
-    this.wobbleTime += deltaTime * 1.2;
-    const radiusWobble = Math.sin(this.wobbleTime) * (2 * slowFactor);
+    // Wobble only at slower speeds - more gentle and floaty
+    this.wobbleTime += deltaTime * 1.0;
+    const radiusWobble = Math.sin(this.wobbleTime) * (5 * slowFactor);
     const spiralRadius = baseRadius + radiusWobble;
 
-    // Figure-8 pattern less pronounced at speed
-    const heightWobble = Math.cos(this.spiralAngle * 2) * (2 * slowFactor);
+    // Figure-8 pattern less pronounced at speed - more gentle bobbing
+    const heightWobble = Math.cos(this.spiralAngle * 2) * (6 * slowFactor);
     const spiralHeight = baseHeight + heightWobble;
 
     // Calculate base spiral position
@@ -248,9 +260,9 @@ export class UFOController {
     const dartOffset = this.dartDirection * (4 + slowFactor * 4) * dartDecay * Math.sin(dartDecay * Math.PI);
     spiralX += dartOffset;
 
-    // Apply all motion
+    // Apply all motion (higher base altitude for floaty feel)
     this.ufo.position.x = playerPosition.x + spiralX;
-    this.ufo.position.y = 20 + spiralY;
+    this.ufo.position.y = 35 + spiralY;
 
     // Faster rotation at high speed (aggressive forward motion)
     this.ufo.rotation.y += deltaTime * (0.4 + speedFactor * 0.8);
