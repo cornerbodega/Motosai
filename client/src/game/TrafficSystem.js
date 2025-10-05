@@ -419,18 +419,12 @@ export class TrafficSystem {
         if (child.isMesh && child.material && !colorMaterials.has(child.material)) {
           const clonedMat = child.material.clone();
 
-          // Apply color to body parts
-          const meshName = child.name.toLowerCase();
-          if (meshName.includes('body') || meshName.includes('hood') ||
-              meshName.includes('door') || meshName.includes('roof') ||
-              meshName.includes('trunk') || meshName.includes('fender') ||
-              meshName.includes('panel') || meshName.includes('bumper') ||
-              meshName.includes('car') || meshName.includes('paint') ||
-              (!meshName.includes('wheel') && !meshName.includes('glass') &&
-               !meshName.includes('window') && !meshName.includes('light') &&
-               !meshName.includes('tire') && !meshName.includes('rim'))) {
+          // Apply color only to body color materials (not black trim, windows, lights, wheels)
+          const materialName = child.material.name ? child.material.name.toLowerCase() : '';
+          if (materialName.includes('body grey') || materialName.includes('body white')) {
             clonedMat.color.copy(randomColor);
           }
+          // Keep other materials (windows, headlights, rear lights, body black, wheels, tires) as original
 
           colorMaterials.set(child.material, clonedMat);
         }
