@@ -439,7 +439,7 @@ export class SimpleBikePhysics {
 
       // Front brake causes forward pitch (nose dive)
       if (this.controls.frontBrake > 0) {
-        targetPitch -= this.controls.frontBrake * 0.12; // Strong nose dive
+        targetPitch += this.controls.frontBrake * 0.12; // Strong nose dive
       }
 
       // Rear brake causes slight backward pitch (squat) or stays level
