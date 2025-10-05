@@ -1,98 +1,161 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { TitleAnimation } from "./TitleAnimation.js";
+import { FontLoader } from "three/examples/jsm/loaders/FontLoader.js";
+import { TextGeometry } from "three/examples/jsm/geometries/TextGeometry.js";
 
 export class UFORaceIntro {
   constructor(scene, camera, renderer) {
     this.scene = scene;
     this.camera = camera;
     this.renderer = renderer;
-    this.phase = "loading"; // loading, earth, descent, title, ground, complete
-    this.progress = 0;
+    this.isComplete = false;
     this.onComplete = null;
+    this.onStartGame = null; // Callback for start button
 
     // Animation objects
     this.earthModel = null;
+    this.atmosphereModel = null;
     this.ufoModel = null;
-    this.titleAnimation = null;
+    this.text3D = null;
+    this.starField = null;
+    this.lights = [];
+
+    // Track textures for disposal
+    this.textures = [];
+
+    // UI elements
+    this.uiContainer = null;
+    this.selectedColor = 0x1a1a1a; // Default black
+    this.boundStartHandler = null; // Store bound event handler
 
     // Timing
     this.startTime = 0;
-    this.phaseStartTime = 0;
+    this.introDuration = 6000; // 6 seconds total
+    this.animationComplete = false;
+    this.waitingForUser = false;
+    this.animationFrameId = null; // Track animation frame
 
-    // Assets
-    this.loader = new GLTFLoader();
-    this.assetsLoaded = {
-      earth: false,
-      ufo: false
-    };
+    // UFO transition animation when START GAME is clicked
+    this.ufoTransitioning = false;
+    this.ufoTransitionStart = 0;
+    this.ufoTransitionDuration = 2000; // 2 seconds
+    this.ufoStartPosition = null;
+    this.ufoStartScale = null;
+
+    // Loaders
+    this.gltfLoader = new GLTFLoader();
+    this.fontLoader = new FontLoader();
+    this.textureLoader = new THREE.TextureLoader();
   }
 
   async start() {
     this.startTime = Date.now();
-    this.phase = "loading";
 
-    // Load assets in parallel
+    // Set black space background
+    this.scene.background = new THREE.Color(0x000000);
+
+    // Load all assets
     await Promise.all([
       this.loadEarth(),
-      this.loadUFO()
+      this.loadUFO(),
+      this.createStarField(),
+      this.create3DText(),
+      this.setupLighting()
     ]);
 
-    // Start Earth phase
-    this.phase = "earth";
-    this.phaseStartTime = Date.now();
-    this.setupEarthScene();
+    // Position camera for intro view
+    this.camera.position.set(0, 0, 10);
+    this.camera.lookAt(0, 0, 0);
+
+    // Show UI immediately - start button available right away
+    this.showUI();
+
+    // Start animation loop
     this.animate();
   }
 
   async loadEarth() {
-    return new Promise((resolve, reject) => {
-      this.loader.load(
-        "/models/earth-v6.glb",
-        (gltf) => {
-          this.earthModel = gltf.scene;
-          this.assetsLoaded.earth = true;
-          resolve();
-        },
-        undefined,
-        (error) => {
-          console.warn("Earth model failed to load:", error);
-          this.createFallbackEarth();
-          resolve();
-        }
-      );
+    // Create realistic Earth with textures
+    const earthColorTexture = this.textureLoader.load("/textures/earth/earth_color_10K.png");
+    const earthRoughnessMap = this.textureLoader.load("/textures/earth/earth_landocean_4K.png");
+    const earthHeightMap = this.textureLoader.load("/textures/earth/topography_5K.png");
+
+    // Track textures for disposal
+    this.textures.push(earthColorTexture, earthRoughnessMap, earthHeightMap);
+
+    const earthGeometry = new THREE.SphereGeometry(1, 64, 64);
+    const earthMaterial = new THREE.MeshStandardMaterial({
+      map: earthColorTexture,
+      roughnessMap: earthRoughnessMap,
+      displacementMap: earthHeightMap,
+      displacementScale: 0.05,
     });
+
+    this.earthModel = new THREE.Mesh(earthGeometry, earthMaterial);
+    this.earthModel.position.set(-1, -10, 0);
+    this.earthModel.rotation.y = Math.PI / 4;
+    this.earthModel.rotation.x = Math.PI / 4;
+    this.earthModel.rotation.z = Math.PI / 2;
+    this.earthModel.scale.set(10, 10, 10);
+    this.scene.add(this.earthModel);
+
+    // Create atmosphere layer - match RhymeWithUs exactly
+    const atmosphereTexture = this.textureLoader.load("/textures/smoke/fog3.png");
+    this.textures.push(atmosphereTexture);
+
+    const atmosphereGeometry = new THREE.SphereGeometry(1, 1024, 256);
+    const atmosphereMaterial = new THREE.MeshStandardMaterial({
+      transparent: true,
+      map: atmosphereTexture,
+    });
+
+    this.atmosphereModel = new THREE.Mesh(atmosphereGeometry, atmosphereMaterial);
+    this.atmosphereModel.position.set(-1, -10, 0);
+    this.atmosphereModel.rotation.y = Math.PI / 4;
+    this.atmosphereModel.rotation.x = Math.PI / 4;
+    this.atmosphereModel.rotation.z = Math.PI / 2;
+    this.atmosphereModel.scale.set(11, 11, 11);
+    this.scene.add(this.atmosphereModel);
   }
 
   async loadUFO() {
-    return new Promise((resolve, reject) => {
-      this.loader.load(
+    return new Promise((resolve) => {
+      this.gltfLoader.load(
         "/models/ufo.glb",
         (gltf) => {
           this.ufoModel = gltf.scene;
-          this.assetsLoaded.ufo = true;
+
+          // Center the model
+          const box = new THREE.Box3().setFromObject(this.ufoModel);
+          const center = box.getCenter(new THREE.Vector3());
+          this.ufoModel.position.sub(center);
+
+          // Calculate size and scale appropriately
+          const size = box.getSize(new THREE.Vector3());
+          const maxDim = Math.max(size.x, size.y, size.z);
+          const scale = 4 / maxDim; // Target size of 4 units (bigger)
+          this.ufoModel.scale.setScalar(scale);
+          this.ufoModel.userData.baseScale = scale; // Store for animation
+
+          // Position for intro - visible UFO position
+          this.ufoModel.position.set(0, -1, 6);
+          this.ufoModel.rotation.x = -0.2;
+          this.ufoModel.rotation.y = Math.PI;
+
+          console.log("UFO loaded successfully, size:", size, "scale:", scale);
+          this.scene.add(this.ufoModel);
           resolve();
         },
-        undefined,
+        (progress) => {
+          console.log("Loading UFO:", (progress.loaded / progress.total * 100).toFixed(0) + "%");
+        },
         (error) => {
-          console.warn("UFO model failed to load:", error);
+          console.error("UFO model failed to load:", error);
           this.createFallbackUFO();
           resolve();
         }
       );
     });
-  }
-
-  createFallbackEarth() {
-    // Simple textured sphere
-    const geometry = new THREE.SphereGeometry(5, 32, 32);
-    const material = new THREE.MeshStandardMaterial({
-      color: 0x1e90ff,
-      roughness: 0.8,
-      metalness: 0.2
-    });
-    this.earthModel = new THREE.Mesh(geometry, material);
-    this.assetsLoaded.earth = true;
   }
 
   createFallbackUFO() {
@@ -140,247 +203,349 @@ export class UFORaceIntro {
     }
 
     this.ufoModel = group;
-    this.assetsLoaded.ufo = true;
+    this.ufoModel.position.set(0, -1, 6);
+    this.ufoModel.rotation.x = -0.2;
+    this.scene.add(this.ufoModel);
   }
 
-  setupEarthScene() {
-    // Clear scene
-    while (this.scene.children.length > 0) {
-      this.scene.remove(this.scene.children[0]);
+  async createStarField() {
+    const starsGeometry = new THREE.BufferGeometry();
+    const starsMaterial = new THREE.PointsMaterial({
+      color: 0xffffff,
+      size: 0.1,
+      sizeAttenuation: true
+    });
+
+    const starsVertices = [];
+    for (let i = 0; i < 5000; i++) {
+      const x = (Math.random() - 0.5) * 300;
+      const y = (Math.random() - 0.5) * 300;
+      const z = (Math.random() - 0.5) * 300;
+      starsVertices.push(x, y, z);
     }
 
-    // Add Earth
-    if (this.earthModel) {
-      this.earthModel.position.set(0, 0, 0);
-      this.earthModel.scale.setScalar(1);
-      this.scene.add(this.earthModel);
-    }
+    starsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starsVertices, 3));
+    this.starField = new THREE.Points(starsGeometry, starsMaterial);
+    this.scene.add(this.starField);
+  }
 
-    // Add UFO far away
-    if (this.ufoModel) {
-      this.ufoModel.position.set(50, 20, -100);
-      this.ufoModel.scale.setScalar(1);
-      this.scene.add(this.ufoModel);
-    }
+  async create3DText() {
+    return new Promise((resolve) => {
+      this.fontLoader.load('/fonts/4.json', (font) => {
+        const textGeometry = new TextGeometry('Chase the UFO', {
+          font: font,
+          size: 0.6,
+          height: 0.15,
+          curveSegments: 12,
+          bevelEnabled: true,
+          bevelThickness: 0.03,
+          bevelSize: 0.02,
+          bevelOffset: 0,
+          bevelSegments: 5
+        });
+        textGeometry.center();
 
-    // Add space lights
-    const ambientLight = new THREE.AmbientLight(0x404040, 1);
+        const textMaterial = new THREE.MeshStandardMaterial({
+          color: 0x00ffff,
+          metalness: 0.8,
+          roughness: 0.2,
+          emissive: 0x00ffff,
+          emissiveIntensity: 0.4
+        });
+
+        this.text3D = new THREE.Mesh(textGeometry, textMaterial);
+        this.text3D.position.set(0, 3, 0);
+        this.scene.add(this.text3D);
+        resolve();
+      }, undefined, (error) => {
+        console.warn("Font failed to load:", error);
+        resolve();
+      });
+    });
+  }
+
+  async setupLighting() {
+    // Ambient light for overall illumination
+    const ambientLight = new THREE.AmbientLight(0x202020, 0.8);
     this.scene.add(ambientLight);
+    this.lights.push(ambientLight);
 
-    const sunLight = new THREE.DirectionalLight(0xffffff, 2);
+    // Main spotlight on UFO
+    const ufoSpotlight = new THREE.SpotLight(0xffffff, 3);
+    ufoSpotlight.position.set(5, 10, 10);
+    ufoSpotlight.angle = Math.PI / 6;
+    ufoSpotlight.penumbra = 0.5;
+    this.scene.add(ufoSpotlight);
+    this.lights.push(ufoSpotlight);
+
+    // Blue point light
+    const blueLight = new THREE.PointLight(0x00ffff, 2, 50);
+    blueLight.position.set(-8, 5, 5);
+    this.scene.add(blueLight);
+    this.lights.push(blueLight);
+
+    // Purple point light
+    const purpleLight = new THREE.PointLight(0xff00ff, 2, 50);
+    purpleLight.position.set(8, 5, 5);
+    this.scene.add(purpleLight);
+    this.lights.push(purpleLight);
+
+    // Orange point light for warmth
+    const orangeLight = new THREE.PointLight(0xff8800, 1.5, 40);
+    orangeLight.position.set(0, -5, 10);
+    this.scene.add(orangeLight);
+    this.lights.push(orangeLight);
+
+    // Directional light simulating distant sun
+    const sunLight = new THREE.DirectionalLight(0xffffee, 1.5);
     sunLight.position.set(10, 10, 10);
     this.scene.add(sunLight);
-
-    // Position camera for space view
-    this.camera.position.set(0, 0, 15);
-    this.camera.lookAt(0, 0, 0);
-
-    // Black space background
-    this.scene.background = new THREE.Color(0x000000);
+    this.lights.push(sunLight);
   }
 
   animate() {
-    if (this.phase === "complete") return;
-
-    const elapsed = Date.now() - this.phaseStartTime;
-
-    switch (this.phase) {
-      case "earth":
-        this.animateEarthPhase(elapsed);
-        break;
-      case "descent":
-        this.animateDescentPhase(elapsed);
-        break;
-      case "title":
-        this.animateTitlePhase(elapsed);
-        break;
-      case "selection":
-        this.animateSelectionPhase(elapsed);
-        break;
-      case "ground":
-        this.animateGroundPhase(elapsed);
-        break;
+    if (this.isComplete) {
+      // Cancel animation frame to prevent memory leaks
+      if (this.animationFrameId) {
+        cancelAnimationFrame(this.animationFrameId);
+        this.animationFrameId = null;
+      }
+      return;
     }
 
-    requestAnimationFrame(() => this.animate());
-  }
+    const elapsed = Date.now() - this.startTime;
+    const progress = Math.min(elapsed / this.introDuration, 1);
 
-  animateEarthPhase(elapsed) {
-    // Duration: 0-5 seconds
-    const duration = 5000;
-    const t = Math.min(elapsed / duration, 1);
-
-    // Rotate Earth slowly
+    // Rotate Earth and atmosphere slowly
     if (this.earthModel) {
-      this.earthModel.rotation.y = t * Math.PI * 0.5;
+      this.earthModel.rotation.y += 0.003;
+      this.earthModel.rotation.x += 0.001;
+    }
+    if (this.atmosphereModel) {
+      this.atmosphereModel.rotation.y += 0.003;
+      this.atmosphereModel.rotation.x += 0.001;
     }
 
-    // UFO approaches Earth
+    // UFO animation - gentle floating or transitioning to Earth
     if (this.ufoModel) {
-      // Move from far to near Earth
-      const startPos = new THREE.Vector3(50, 20, -100);
-      const endPos = new THREE.Vector3(10, 5, -20);
-      this.ufoModel.position.lerpVectors(startPos, endPos, t);
+      if (this.ufoTransitioning) {
+        // Animate UFO: scale down fast first, then move toward Earth
+        const transitionElapsed = Date.now() - this.ufoTransitionStart;
+        const transitionProgress = Math.min(transitionElapsed / this.ufoTransitionDuration, 1);
 
-      // Rotate UFO
-      this.ufoModel.rotation.y += 0.02;
-    }
+        // Scale shrinks very fast in the first 30% of animation
+        let scaleProgress = Math.min(transitionProgress / 0.3, 1);
+        scaleProgress = scaleProgress * scaleProgress; // Ease-in for faster shrinking
 
-    // Camera slowly zooms
-    const startZ = 15;
-    const endZ = 12;
-    this.camera.position.z = startZ + (endZ - startZ) * t;
-
-    // Transition to descent phase
-    if (t >= 1) {
-      this.phase = "descent";
-      this.phaseStartTime = Date.now();
-    }
-  }
-
-  animateDescentPhase(elapsed) {
-    // Duration: 5-6 seconds (1 second transition)
-    const duration = 1000;
-    const t = Math.min(elapsed / duration, 1);
-
-    // Zoom to UFO closeup
-    if (this.ufoModel) {
-      const startCamPos = new THREE.Vector3(0, 0, 12);
-      const endCamPos = new THREE.Vector3(
-        this.ufoModel.position.x,
-        this.ufoModel.position.y,
-        this.ufoModel.position.z + 3
-      );
-      this.camera.position.lerpVectors(startCamPos, endCamPos, t);
-      this.camera.lookAt(this.ufoModel.position);
-
-      // UFO continues rotating
-      this.ufoModel.rotation.y += 0.04;
-    }
-
-    // Fade Earth
-    if (this.earthModel && this.earthModel.traverse) {
-      this.earthModel.traverse((child) => {
-        if (child.material) {
-          child.material.opacity = 1 - t * 0.5;
-          child.material.transparent = true;
+        // Movement starts after scale is mostly done (after 30% of animation)
+        let moveProgress = 0;
+        if (transitionProgress > 0.3) {
+          moveProgress = (transitionProgress - 0.3) / 0.7;
+          // Ease-in-out for smooth movement
+          moveProgress = moveProgress < 0.5
+            ? 2 * moveProgress * moveProgress
+            : 1 - Math.pow(-2 * moveProgress + 2, 2) / 2;
         }
-      });
-    }
 
-    // Transition to title phase
-    if (t >= 1) {
-      this.phase = "title";
-      this.phaseStartTime = Date.now();
-      this.setupTitleScene();
-    }
-  }
+        // Scale down to 5% of original size (much smaller)
+        const targetScale = this.ufoStartScale * 0.05;
+        const currentScale = this.ufoStartScale + (targetScale - this.ufoStartScale) * scaleProgress;
+        this.ufoModel.scale.setScalar(currentScale);
 
-  setupTitleScene() {
-    // Remove Earth (keep UFO in background)
-    if (this.earthModel) {
-      this.scene.remove(this.earthModel);
-    }
+        // Move toward Earth position (-1, -10, 0)
+        const targetX = -1;
+        const targetY = -10;
+        const targetZ = 0;
 
-    // Position camera for title view (sky/atmosphere)
-    this.camera.position.set(0, 5, 10);
-    this.camera.lookAt(0, 0, -10);
+        this.ufoModel.position.x = this.ufoStartPosition.x + (targetX - this.ufoStartPosition.x) * moveProgress;
+        this.ufoModel.position.y = this.ufoStartPosition.y + (targetY - this.ufoStartPosition.y) * moveProgress;
+        this.ufoModel.position.z = this.ufoStartPosition.z + (targetZ - this.ufoStartPosition.z) * moveProgress;
 
-    // Change background to sky blue
-    this.scene.background = new THREE.Color(0x87ceeb);
+        // Spin faster while transitioning
+        this.ufoModel.rotation.y += 0.05;
 
-    // Move UFO to background (smaller, in distance)
-    if (this.ufoModel) {
-      this.ufoModel.position.set(0, 10, -50);
-      this.ufoModel.scale.setScalar(2);
-    }
-
-    // Create title animation
-    this.titleAnimation = new TitleAnimation(this.scene, this.camera);
-    this.titleAnimation.start();
-  }
-
-  animateTitlePhase(elapsed) {
-    // Duration: 6-10 seconds (4 seconds for title animation)
-    const duration = 4000;
-    const t = Math.min(elapsed / duration, 1);
-
-    // UFO slowly descends in background
-    if (this.ufoModel) {
-      this.ufoModel.position.y = 10 - t * 3;
-      this.ufoModel.rotation.y += 0.01;
-    }
-
-    // Update title animation
-    if (this.titleAnimation) {
-      this.titleAnimation.update(elapsed);
-    }
-
-    // When title animation is complete, pause and wait for bike selection
-    if (t >= 1 && this.titleAnimation.isComplete) {
-      this.phase = "selection";
-      this.phaseStartTime = Date.now();
-
-      // Callback to show bike selection overlay
-      if (this.onSelectionReady) {
-        this.onSelectionReady();
+        // Check if animation is complete
+        if (transitionProgress >= 1) {
+          this.isComplete = true;
+          if (this.onStartGame) {
+            this.onStartGame(this.selectedColor);
+          }
+        }
+      } else {
+        // Gentle bobbing motion
+        this.ufoModel.position.y = -1 + Math.sin(elapsed * 0.001) * 0.2;
+        // Slow rotation
+        this.ufoModel.rotation.y += 0.005;
       }
     }
+
+    // Pulse 3D text
+    if (this.text3D) {
+      const pulse = 1 + Math.sin(elapsed * 0.004) * 0.08;
+      this.text3D.scale.set(pulse, pulse, pulse);
+    }
+
+    // Animate lights for cool effect
+    if (this.lights[2]) { // Blue light
+      this.lights[2].intensity = 2 + Math.sin(elapsed * 0.003) * 0.8;
+    }
+    if (this.lights[3]) { // Purple light
+      this.lights[3].intensity = 2 + Math.cos(elapsed * 0.003) * 0.8;
+    }
+
+    // Slowly rotate star field
+    if (this.starField) {
+      this.starField.rotation.y += 0.0001;
+    }
+
+    // Render scene
+    this.renderer.render(this.scene, this.camera);
+
+    // Keep animating until user clicks start
+    if (!this.isComplete) {
+      this.animationFrameId = requestAnimationFrame(() => this.animate());
+    }
   }
 
-  animateSelectionPhase(elapsed) {
-    // Just maintain the scene while player selects bike
-    // UFO continues gentle movement in background
+  showUI() {
+    // Create UI overlay
+    this.uiContainer = document.createElement('div');
+    this.uiContainer.style.cssText = `
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+      pointer-events: none;
+    `;
+
+    // Color chooser container
+    const colorContainer = document.createElement('div');
+    colorContainer.style.cssText = `
+      margin: 20px 0;
+      pointer-events: auto;
+    `;
+
+    const colorLabel = document.createElement('label');
+    colorLabel.textContent = 'Rider Gear Color:';
+    colorLabel.style.cssText = `
+      color: white;
+      font-size: 18px;
+      margin-right: 10px;
+      text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+    `;
+    colorContainer.appendChild(colorLabel);
+
+    const colorSelect = document.createElement('select');
+    colorSelect.id = 'introRiderColor';
+    colorSelect.style.cssText = `
+      padding: 8px 15px;
+      font-size: 16px;
+      border-radius: 5px;
+      background: rgba(255, 255, 255, 0.9);
+      border: none;
+      cursor: pointer;
+    `;
+    colorSelect.innerHTML = `
+      <option value="0x1a1a1a">Black</option>
+      <option value="0xff0000">Red</option>
+      <option value="0x0066cc">Blue</option>
+      <option value="0xffff00">Hi-Viz Yellow</option>
+      <option value="0xff6600">Orange</option>
+      <option value="0x00ff00">Green</option>
+      <option value="0xffffff">White</option>
+      <option value="0x800080">Purple</option>
+      <option value="0x00ffff">Cyan</option>
+    `;
+    colorSelect.addEventListener('change', (e) => {
+      this.selectedColor = parseInt(e.target.value);
+    });
+    colorContainer.appendChild(colorSelect);
+    this.uiContainer.appendChild(colorContainer);
+
+    // Start button
+    const startButton = document.createElement('button');
+    startButton.textContent = 'START GAME';
+    startButton.style.cssText = `
+      padding: 15px 40px;
+      font-size: 20px;
+      color: white;
+      background: rgba(255, 255, 255, 0.2);
+      border: 2px solid white;
+      border-radius: 50px;
+      cursor: pointer;
+      transition: all 0.3s;
+      margin: 10px;
+      pointer-events: auto;
+      text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+    `;
+    startButton.addEventListener('mouseenter', () => {
+      startButton.style.background = 'rgba(255, 255, 255, 0.3)';
+      startButton.style.transform = 'scale(1.05)';
+    });
+    startButton.addEventListener('mouseleave', () => {
+      startButton.style.background = 'rgba(255, 255, 255, 0.2)';
+      startButton.style.transform = 'scale(1)';
+    });
+
+    // Store bound handler for cleanup
+    this.boundStartHandler = () => this.handleStartGame();
+    startButton.addEventListener('click', this.boundStartHandler);
+    this.uiContainer.appendChild(startButton);
+
+    document.body.appendChild(this.uiContainer);
+  }
+
+  handleStartGame() {
+    // Remove UI immediately
+    if (this.uiContainer) {
+      this.uiContainer.remove();
+      this.uiContainer = null;
+    }
+
+    // Start UFO transition animation
     if (this.ufoModel) {
-      this.ufoModel.rotation.y += 0.01;
-      this.ufoModel.position.y = 7 + Math.sin(elapsed * 0.0005) * 1;
-    }
+      this.ufoTransitioning = true;
+      this.ufoTransitionStart = Date.now();
 
-    // Keep animating until bike is selected (external trigger)
-    // Will be advanced by continueToGround() method
-  }
-
-  continueToGround() {
-    // Called externally when bike is selected
-    this.phase = "ground";
-    this.phaseStartTime = Date.now();
-  }
-
-  animateGroundPhase(elapsed) {
-    // Duration: 10-11 seconds (1 second transition)
-    const duration = 1000;
-    const t = Math.min(elapsed / duration, 1);
-
-    // Descend camera to ground level
-    const startCamPos = new THREE.Vector3(0, 5, 10);
-    const endCamPos = new THREE.Vector3(0, 1.5, 5); // Behind bike view
-    this.camera.position.lerpVectors(startCamPos, endCamPos, t);
-
-    // Look forward down the road
-    const lookTarget = new THREE.Vector3(0, 2, -20);
-    this.camera.lookAt(lookTarget);
-
-    // Fade title to persistent position
-    if (this.titleAnimation) {
-      this.titleAnimation.fadeToSky(t);
-    }
-
-    // Complete
-    if (t >= 1) {
-      this.phase = "complete";
-      if (this.onComplete) {
-        this.onComplete();
+      // Store current UFO position and scale
+      this.ufoStartPosition = {
+        x: this.ufoModel.position.x,
+        y: this.ufoModel.position.y,
+        z: this.ufoModel.position.z
+      };
+      this.ufoStartScale = this.ufoModel.scale.x; // Assuming uniform scale
+    } else {
+      // If no UFO model, complete immediately
+      this.isComplete = true;
+      if (this.onStartGame) {
+        this.onStartGame(this.selectedColor);
       }
     }
+    // Note: isComplete will be set to true in the animate loop when transition finishes
   }
 
-  cleanup() {
+  cleanup(keepUFO = false) {
+    // Stop animation loop
+    this.isComplete = true;
+    if (this.animationFrameId) {
+      cancelAnimationFrame(this.animationFrameId);
+      this.animationFrameId = null;
+    }
+
     // Clean up Earth
     if (this.earthModel) {
       this.earthModel.traverse((child) => {
         if (child.geometry) child.geometry.dispose();
         if (child.material) {
           if (child.material.map) child.material.map.dispose();
+          if (child.material.roughnessMap) child.material.roughnessMap.dispose();
+          if (child.material.displacementMap) child.material.displacementMap.dispose();
           child.material.dispose();
         }
       });
@@ -388,12 +553,86 @@ export class UFORaceIntro {
       this.earthModel = null;
     }
 
-    // Keep UFO and title for game
-
-    // Clean up title animation
-    if (this.titleAnimation) {
-      this.titleAnimation.cleanup();
-      this.titleAnimation = null;
+    // Clean up atmosphere
+    if (this.atmosphereModel) {
+      this.atmosphereModel.traverse((child) => {
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) {
+          if (child.material.map) child.material.map.dispose();
+          child.material.dispose();
+        }
+      });
+      this.scene.remove(this.atmosphereModel);
+      this.atmosphereModel = null;
     }
+
+    // Clean up UFO (unless we want to keep it for gameplay)
+    if (this.ufoModel && !keepUFO) {
+      this.ufoModel.traverse((child) => {
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) {
+          // Dispose textures
+          if (child.material.map) child.material.map.dispose();
+          if (child.material.emissiveMap) child.material.emissiveMap.dispose();
+          if (child.material.normalMap) child.material.normalMap.dispose();
+          if (child.material.roughnessMap) child.material.roughnessMap.dispose();
+          if (child.material.metalnessMap) child.material.metalnessMap.dispose();
+          child.material.dispose();
+        }
+      });
+      this.scene.remove(this.ufoModel);
+      this.ufoModel = null;
+    }
+
+    // Clean up text
+    if (this.text3D) {
+      if (this.text3D.geometry) this.text3D.geometry.dispose();
+      if (this.text3D.material) {
+        if (this.text3D.material.matcap) this.text3D.material.matcap.dispose();
+        this.text3D.material.dispose();
+      }
+      this.scene.remove(this.text3D);
+      this.text3D = null;
+    }
+
+    // Clean up star field
+    if (this.starField) {
+      if (this.starField.geometry) this.starField.geometry.dispose();
+      if (this.starField.material) this.starField.material.dispose();
+      this.scene.remove(this.starField);
+      this.starField = null;
+    }
+
+    // Clean up lights
+    this.lights.forEach(light => {
+      this.scene.remove(light);
+      if (light.dispose) light.dispose();
+    });
+    this.lights = [];
+
+    // Dispose all tracked textures
+    this.textures.forEach(texture => {
+      if (texture && texture.dispose) texture.dispose();
+    });
+    this.textures = [];
+
+    // Clean up UI and remove event listeners
+    if (this.uiContainer) {
+      // Remove all event listeners by removing the DOM element
+      this.uiContainer.remove();
+      this.uiContainer = null;
+    }
+    this.boundStartHandler = null;
+
+    // Clear callbacks to prevent memory leaks
+    this.onComplete = null;
+    this.onStartGame = null;
+
+    console.log('UFORaceIntro cleaned up successfully');
+  }
+
+  // Get the UFO model to use in gameplay
+  getUFO() {
+    return this.ufoModel;
   }
 }

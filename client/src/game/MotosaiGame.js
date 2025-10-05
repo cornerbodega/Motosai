@@ -22,6 +22,8 @@ import {
   resetMaterialManager,
 } from "../utils/MaterialManager.js";
 import { IntroAnimation } from "./IntroAnimation.js";
+import { UFORaceIntro } from "./UFORaceIntro.js";
+import { UFOController } from "./UFOController.js";
 import { PlayerSelection } from "./PlayerSelection.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
@@ -86,6 +88,12 @@ export class MotosaiGame {
     this.score = 0;
     this.distance = 0; // miles traveled
     this.showDevHUD = false; // Toggle for dev HUD visibility (default hidden)
+
+    // UFO that follows player
+    this.ufo = null;
+    this.ufoController = null;
+    this.ufoState = 'following'; // 'following', 'flyingAway', 'returning'
+    this.ufoFlyAwayProgress = 0;
 
     // Race state
     this.raceMode = false;
@@ -171,11 +179,7 @@ export class MotosaiGame {
     this.initDevMenu();
     this.initLights();
 
-    // Load level (highway and backgrounds) before bike selection
-    this.initHighway();
-    this.initBackgrounds();
-
-    // Show intro and player selection with loaded level
+    // Show intro FIRST, then show selection with desert background
     this.showIntroAndSelection(() => {
       // After selection, initialize player-specific components
       this.initPhysics();
@@ -1127,11 +1131,11 @@ export class MotosaiGame {
   }
 
   showIntroAndSelection(callback) {
-    // Create intro animation
-    this.introAnimation = new IntroAnimation(
+    // Create UFO Race intro animation
+    this.introAnimation = new UFORaceIntro(
       this.scene,
       this.camera,
-      this.audioManager
+      this.renderer
     );
 
     // Create player selection
@@ -1141,12 +1145,24 @@ export class MotosaiGame {
       this.audioManager
     );
 
-    // Start intro animation
-    this.introAnimation.onComplete = () => {
-      // Clean up intro
-      this.introAnimation.cleanup();
+    // Start intro animation - wait for user to click START GAME
+    this.introAnimation.onStartGame = (selectedColor) => {
+      console.log("User clicked START GAME with color:", selectedColor);
 
-      // Show player selection
+      // Store selected rider color
+      this.config.riderColor = selectedColor;
+
+      // Get UFO from intro before cleanup
+      this.ufo = this.introAnimation.getUFO();
+
+      // Clean up intro but keep the UFO
+      this.introAnimation.cleanup(true);
+
+      // Load desert/highway scene for bike selection
+      this.initHighway();
+      this.initBackgrounds();
+
+      // Show player selection on top of desert
       this.playerSelection.showSelectionUI();
 
       // Set up selection callback
@@ -1158,6 +1174,39 @@ export class MotosaiGame {
 
         // Hide selection UI
         this.playerSelection.hideSelectionUI();
+
+        // Initialize UFOController with the UFO from intro
+        this.ufoController = new UFOController(this.scene);
+
+        if (this.ufo) {
+          // Use UFO from intro
+          this.ufoController.ufo = this.ufo;
+          console.log('UFOController initialized with intro UFO');
+        } else {
+          // Fallback: create UFO if intro didn't provide one
+          this.ufoController.createFallbackUFO();
+          this.ufo = this.ufoController.ufo;
+          console.warn('Intro UFO not found, using fallback');
+        }
+
+        // Add the effects
+        this.ufoController.addGlow();
+        this.ufoController.addParticleTrail();
+
+        // Add point light
+        const ufoLight = new THREE.PointLight(0x00ffff, 2, 50);
+        ufoLight.position.set(0, 0, 0);
+        this.ufoController.ufo.add(ufoLight);
+
+        // Scale it properly
+        this.ufoController.ufo.scale.setScalar(2);
+
+        // Position immediately at default starting position (player starts at 0,0,0)
+        this.ufoController.ufo.position.set(0, 15, 40);
+        this.ufoController.ufo.visible = true;
+        console.log('UFO positioned at start:', this.ufoController.ufo.position);
+        console.log('UFO visible?', this.ufoController.ufo.visible);
+        console.log('UFO in scene?', this.scene.children.includes(this.ufoController.ufo));
 
         // Continue with game initialization
         callback();
@@ -2064,6 +2113,19 @@ export class MotosaiGame {
     });
   }
 
+  updateUFO(deltaTime, state) {
+    if (!this.ufoController || !this.ufo) return;
+
+    // Use UFOController's update method
+    // state.velocity is {x, y, z}, calculate magnitude manually
+    const speed = Math.sqrt(
+      state.velocity.x ** 2 +
+      state.velocity.y ** 2 +
+      state.velocity.z ** 2
+    );
+    this.ufoController.update(deltaTime, state.position, speed);
+  }
+
   updateCamera(deltaTime) {
     const state = this.physics.getState();
 
@@ -2397,6 +2459,13 @@ export class MotosaiGame {
 
     this.isDead = true;
 
+    // Trigger UFO escape animation
+    if (this.ufoController) {
+      this.ufoController.playEscapeAnimation(() => {
+        console.log('UFO escape animation completed');
+      });
+    }
+
     // Store race state for later (after death animation completes)
     this.deathInRaceMode = this.raceMode;
 
@@ -2443,12 +2512,19 @@ export class MotosaiGame {
   }
 
   respawnPlayer() {
+    console.log('RESPAWNING PLAYER');
+
+    // Set isDead to false FIRST to prevent re-triggering
     this.isDead = false;
 
     // MEMORY LEAK FIX: Clean up death animation objects before respawn
-    if (this.deathAnimation) {
+    // (Death animation already cleans itself up, but call it to be safe)
+    if (this.deathAnimation && !this.deathAnimation.isAnimating) {
       this.deathAnimation.cleanup();
     }
+
+    // Reset physics completely FIRST - back to start
+    this.physics.reset();
 
     // Reset terrain system for respawn
     if (this.terrain && typeof this.terrain.reset === "function") {
@@ -2465,9 +2541,6 @@ export class MotosaiGame {
       this.bloodTrackSystem.clearAllBloodData();
     }
 
-    // Reset physics completely - back to start
-    this.physics.reset();
-
     // Reset distance and score
     this.distance = 0;
     this.score = 0;
@@ -2482,6 +2555,54 @@ export class MotosaiGame {
       this.traffic.reset();
     }
 
+    // Reset UFO position AFTER physics reset (so we know player's new position)
+    // This needs to happen after all the resets above
+    if (this.ufoController && this.ufo) {
+      console.log('UFO exists, resetting...');
+
+      // Make sure ufoController and game both reference the same UFO
+      if (this.ufoController.ufo !== this.ufo) {
+        console.warn('UFO reference mismatch! Syncing...');
+        this.ufoController.ufo = this.ufo;
+      }
+
+      // Cancel any running escape animation and reset escape state
+      this.ufoController.escapeAnimationRunning = false;
+      this.ufoController.isEscaping = false;
+      console.log('Cancelled escape animation and reset escape state');
+
+      // Reset material opacity in case escape animation faded it
+      let materialsReset = 0;
+      this.ufo.traverse((child) => {
+        if (child.material) {
+          // Check if this is a glow material by checking its properties
+          const isGlow = child.material.side === THREE.BackSide;
+          const oldOpacity = child.material.opacity;
+          child.material.opacity = isGlow ? 0.2 : 1.0;
+          child.material.transparent = true;
+          child.material.needsUpdate = true;
+          materialsReset++;
+          if (oldOpacity < 0.1) {
+            console.log('Reset material from', oldOpacity, 'to', child.material.opacity, 'isGlow:', isGlow);
+          }
+        }
+      });
+
+      // Also reset particle system opacity
+      if (this.ufoController.particleSystem) {
+        this.ufoController.particleSystem.material.opacity = 0.6;
+        this.ufoController.particleSystem.material.needsUpdate = true;
+      }
+
+      console.log('UFO materials reset:', materialsReset, 'will be positioned next');
+    } else {
+      console.error('UFO or UFOController is null during respawn!', {
+        ufoController: !!this.ufoController,
+        ufo: !!this.ufo,
+        ufoInScene: this.ufo ? this.scene.children.includes(this.ufo) : false
+      });
+    }
+
     // Make everything visible again
     if (this.motorcycle) {
       this.motorcycle.visible = true;
@@ -2491,14 +2612,25 @@ export class MotosaiGame {
     }
     if (this.rider) this.rider.visible = true; // Rider is back from being a puddle!
 
-    // Reset physics but keep Z position (player has fallen behind)
+    // Reset physics position (already reset to 0,0,0 by physics.reset() above)
     const currentState = this.physics.getState();
     this.physics.position.x = 0; // Reset to center of road
     this.physics.position.y = 0.3; // Reset to proper height
-    // Keep Z position so player respawns where they died
+    // Z is already 0 from reset()
     this.physics.speed = 20 / 2.237; // Start at low speed (20 mph)
     this.physics.velocity = { x: 0, y: 0, z: this.physics.speed };
     this.physics.rotation = { pitch: 0, yaw: 0, roll: 0 };
+
+    // NOW position UFO relative to player's reset position
+    if (this.ufo) {
+      this.ufo.position.set(
+        this.physics.position.x,
+        15,
+        this.physics.position.z + 40
+      );
+      this.ufo.rotation.set(0, 0, 0);
+      console.log('UFO positioned at:', this.ufo.position, 'Player at:', this.physics.position);
+    }
 
     // Clear collision state
     this.physics.collision = {
@@ -2838,7 +2970,9 @@ export class MotosaiGame {
         }
 
         // ALWAYS update traffic regardless of death state
-        this.traffic.update(deltaTime, state.position, state.velocity);
+        if (this.traffic) {
+          this.traffic.update(deltaTime, state.position, state.velocity);
+        }
 
         // Update minimap with traffic vehicles
         if (this.minimap && this.traffic) {
@@ -3005,6 +3139,9 @@ export class MotosaiGame {
 
         // Update camera (includes FOV updates)
         this.updateCamera(deltaTime);
+
+        // Update UFO position
+        this.updateUFO(deltaTime, state);
 
         // Update HUD
         this.updateHUD();
@@ -3230,6 +3367,13 @@ export class MotosaiGame {
     }
     if (this.terrain && typeof this.terrain.dispose === "function") {
       this.terrain.dispose();
+    }
+
+    // Dispose of UFO Controller
+    if (this.ufoController) {
+      this.ufoController.cleanup();
+      this.ufoController = null;
+      this.ufo = null;
     }
     if (this.backgrounds) {
       this.backgrounds.dispose();

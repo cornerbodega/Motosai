@@ -254,13 +254,14 @@
 
       function onLoadingComplete() {
         const loadingScreen = document.getElementById("loadingScreen");
-        const startScreen = document.getElementById("startScreen");
 
         loadingScreen.style.opacity = "0";
         setTimeout(() => {
           loadingScreen.style.display = "none";
-          startScreen.style.display = "flex";
           isLoading = false;
+
+          // Start game directly - UFO intro will handle color selection
+          startGame();
         }, 500);
       }
 
@@ -271,17 +272,11 @@
           game = null;
         }
 
-        const startScreen = document.getElementById("startScreen");
-        startScreen.style.display = "none";
-
-        // Get selected rider color
-        const riderColorSelect = document.getElementById("riderColor");
-        const riderColor = parseInt(riderColorSelect.value);
-
-        // Initialize game with configuration
+        // Initialize game with default configuration
+        // Color will be set by UFO intro
         const container = document.getElementById("gameContainer");
         const config = {
-          riderColor: riderColor,
+          riderColor: 0x1a1a1a, // Default, will be overridden by intro
           multiplayer: true, // Enable multiplayer
         };
         game = new MotosaiGame(container, config);

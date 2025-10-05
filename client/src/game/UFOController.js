@@ -6,19 +6,26 @@ export class UFOController {
   constructor(scene) {
     this.scene = scene;
     this.ufo = null;
-    this.targetDistance = 75; // meters ahead of player
-    this.minDistance = 50;
-    this.maxDistance = 100;
+    this.targetDistance = 60; // meters ahead of player
+    this.minDistance = 45;
+    this.maxDistance = 75;
 
     // Movement
     this.baseSpeed = 0;
     this.weaveTime = 0;
     this.bobTime = 0;
+    this.spiralAngle = 0; // Track current angle in spiral
+    this.wobbleTime = 0; // For additional wobble
+    this.dartTime = 0; // For sudden dart movements
+    this.nextDartTime = Math.random() * 3 + 2; // Random time until next dart
 
     // Visual effects
     this.lights = [];
     this.glowMesh = null;
     this.particleSystem = null;
+
+    // Animation state
+    this.isEscaping = false;
   }
 
   async load() {
@@ -173,38 +180,86 @@ export class UFOController {
   }
 
   update(deltaTime, playerPosition, playerSpeed) {
-    if (!this.ufo) return;
-
-    // Calculate distance to player
-    const playerX = playerPosition.x;
-    const currentDistance = this.ufo.position.x - playerX;
-
-    // Adjust UFO speed to maintain distance
-    let speedAdjustment = 0;
-
-    if (currentDistance < this.minDistance) {
-      // Speed up
-      speedAdjustment = 10;
-    } else if (currentDistance > this.maxDistance) {
-      // Slow down
-      speedAdjustment = -5;
+    if (!this.ufo) {
+      console.warn('UFOController.update called but ufo is null');
+      return;
+    }
+    if (this.isEscaping) {
+      // Don't update position while escaping
+      return;
     }
 
-    // Move UFO forward (matching player + adjustment)
-    this.ufo.position.x += (playerSpeed + speedAdjustment) * deltaTime;
+    // Calculate distance to player (Z axis is forward in Motosai)
+    const playerZ = playerPosition.z;
+    const currentDistance = this.ufo.position.z - playerZ; // How far ahead UFO is (positive = ahead)
 
-    // Horizontal weaving
-    this.weaveTime += deltaTime;
-    const weaveAmount = Math.sin(this.weaveTime * 0.5) * 5;
-    this.ufo.position.z = weaveAmount;
+    // Adjust UFO speed to maintain distance ahead (more aggressive correction)
+    let speedAdjustment = 0;
+    const distanceError = currentDistance - this.targetDistance;
 
-    // Vertical bobbing
-    this.bobTime += deltaTime;
-    const bobAmount = Math.sin(this.bobTime * 0.8) * 3;
-    this.ufo.position.y = 20 + bobAmount;
+    if (distanceError < -5) {
+      // UFO is falling behind - speed up more
+      speedAdjustment = 15;
+    } else if (distanceError > 5) {
+      // Too far ahead - slow down more
+      speedAdjustment = -10;
+    } else {
+      // Fine-tune with proportional control
+      speedAdjustment = -distanceError * 0.5;
+    }
 
-    // Rotate UFO
-    this.ufo.rotation.y += deltaTime * 0.5;
+    // Move UFO forward (matching player + adjustment) along Z axis
+    this.ufo.position.z += (playerSpeed + speedAdjustment) * deltaTime;
+
+    // Speed-based behavior (normalized to 0-1, where 1 is ~200mph / 90 m/s)
+    const speedFactor = Math.min(playerSpeed / 90, 1);
+    const slowFactor = 1 - speedFactor; // Inverse for slow-speed behaviors
+
+    // At high speeds: tighter, more stable, angled forward
+    // At low speeds: wider spirals, more playful
+    this.spiralAngle += deltaTime * (0.5 + slowFactor * 0.5); // Slower spiral when fast
+
+    const baseRadius = 8 + slowFactor * 8; // 8-16m radius (tighter when fast)
+    const baseHeight = 4 + slowFactor * 4; // 4-8m height (flatter when fast)
+
+    // Wobble only at slower speeds
+    this.wobbleTime += deltaTime * 1.2;
+    const radiusWobble = Math.sin(this.wobbleTime) * (2 * slowFactor);
+    const spiralRadius = baseRadius + radiusWobble;
+
+    // Figure-8 pattern less pronounced at speed
+    const heightWobble = Math.cos(this.spiralAngle * 2) * (2 * slowFactor);
+    const spiralHeight = baseHeight + heightWobble;
+
+    // Calculate base spiral position
+    let spiralX = Math.cos(this.spiralAngle) * spiralRadius;
+    let spiralY = Math.sin(this.spiralAngle) * spiralHeight;
+
+    // Occasional dart movements (less frequent at high speed)
+    this.dartTime += deltaTime;
+    if (this.dartTime >= this.nextDartTime) {
+      this.dartTime = 0;
+      this.nextDartTime = Math.random() * 5 + (3 * speedFactor); // Longer wait when fast
+      this.dartDirection = (Math.random() - 0.5) * 2;
+    }
+
+    // Smaller darts at high speed
+    const dartDecay = Math.max(0, 1 - (this.dartTime / 1.0));
+    const dartOffset = this.dartDirection * (4 + slowFactor * 4) * dartDecay * Math.sin(dartDecay * Math.PI);
+    spiralX += dartOffset;
+
+    // Apply all motion
+    this.ufo.position.x = playerPosition.x + spiralX;
+    this.ufo.position.y = 20 + spiralY;
+
+    // Faster rotation at high speed (aggressive forward motion)
+    this.ufo.rotation.y += deltaTime * (0.4 + speedFactor * 0.8);
+
+    // Forward tilt increases with speed (looks like it's racing ahead)
+    this.ufo.rotation.x = -0.3 * speedFactor + Math.cos(this.spiralAngle * 0.5) * 0.1 * slowFactor;
+
+    // Banking tilt based on spiral position (less at high speed)
+    this.ufo.rotation.z = Math.sin(this.spiralAngle) * (0.2 * slowFactor);
 
     // Pulse glow
     if (this.glowMesh) {
@@ -251,47 +306,84 @@ export class UFOController {
       return;
     }
 
+    // Set escaping flag to prevent update() from interfering
+    this.isEscaping = true;
+    this.escapeAnimationRunning = true; // Track if animation is actively running
+
     const startPos = this.ufo.position.clone();
     const startRotation = this.ufo.rotation.clone();
     const startTime = Date.now();
-    const duration = 3000; // 3 seconds
+    const waitDuration = 1000; // Wait 1 second before escaping
+    const escapeDuration = 3000; // 3 seconds for escape
+    const totalDuration = waitDuration + escapeDuration;
+
+    // Pick a random direction on the horizon (left or right)
+    const randomAngle = (Math.random() - 0.5) * Math.PI; // -90° to +90°
+    const escapeDistance = 500; // How far it travels
+    const escapeX = Math.sin(randomAngle) * escapeDistance;
+    const escapeZ = Math.cos(randomAngle) * escapeDistance;
+
+    // Calculate how high it needs to go based on distance to avoid mountains
+    // Mountains are ~200 units tall, so go higher the further out we go
+    const escapeHeight = 250; // Always go up to 250 units to clear mountains
 
     const animate = () => {
-      const elapsed = Date.now() - startTime;
-      const t = Math.min(elapsed / duration, 1);
-
-      if (t < 0.4) {
-        // Phase 1: 90° vertical turn (0-1.2s)
-        const verticalT = t / 0.4;
-        this.ufo.position.y = startPos.y + verticalT * 100;
-        this.ufo.rotation.x = startRotation.x - verticalT * Math.PI / 2;
-      } else if (t < 0.7) {
-        // Phase 2: 90° horizontal turn (1.2-2.1s)
-        const horizontalT = (t - 0.4) / 0.3;
-        const randomDir = Math.random() > 0.5 ? 1 : -1;
-        this.ufo.position.z = startPos.z + horizontalT * 50 * randomDir;
-        this.ufo.rotation.y = startRotation.y + horizontalT * Math.PI / 2 * randomDir;
-      } else {
-        // Phase 3: Zip away (2.1-3s)
-        const zipT = (t - 0.7) / 0.3;
-        const accel = Math.pow(zipT, 2);
-        this.ufo.position.x += accel * 5;
-        this.ufo.position.y += accel * 3;
-
-        // Fade out
-        this.ufo.traverse((child) => {
-          if (child.material) {
-            child.material.opacity = 1 - zipT;
-            child.material.transparent = true;
-          }
-        });
+      // Check if animation was cancelled (e.g., by respawn)
+      if (!this.escapeAnimationRunning) {
+        console.log('UFO escape animation cancelled');
+        if (onComplete) onComplete();
+        return;
       }
 
-      if (t < 1) {
+      const elapsed = Date.now() - startTime;
+      const totalT = Math.min(elapsed / totalDuration, 1);
+
+      // Wait phase - UFO just hovers in place
+      if (elapsed < waitDuration) {
+        // Just do gentle bobbing while waiting
+        const bobTime = elapsed / 1000;
+        this.ufo.position.y = startPos.y + Math.sin(bobTime * 3) * 1;
+        this.ufo.rotation.y += 0.02;
+        requestAnimationFrame(animate);
+        return;
+      }
+
+      // Escape phase
+      const escapeElapsed = elapsed - waitDuration;
+      const t = Math.min(escapeElapsed / escapeDuration, 1);
+
+      // Ease-out cubic for smooth deceleration at the end
+      const eased = 1 - Math.pow(1 - t, 3);
+
+      // Move toward horizon in random direction
+      this.ufo.position.x = startPos.x + escapeX * eased;
+      this.ufo.position.z = startPos.z + escapeZ * eased;
+
+      // Rise up and away to clear mountains
+      if (t < 0.2) {
+        // Quick initial rise
+        const riseT = t / 0.2;
+        this.ufo.position.y = startPos.y + (riseT * escapeHeight * 0.3);
+      } else {
+        // Continue rising to full escape height
+        const riseT = (t - 0.2) / 0.8;
+        const easedRise = 1 - Math.pow(1 - riseT, 2); // Ease out
+        this.ufo.position.y = startPos.y + (0.3 * escapeHeight) + (easedRise * 0.7 * escapeHeight);
+      }
+
+      // Spin while escaping
+      this.ufo.rotation.y += 0.1;
+      this.ufo.rotation.x = Math.sin(t * Math.PI * 2) * 0.2;
+
+      // Don't fade - just let it fly away (keeps materials opaque for respawn)
+
+      if (totalT < 1) {
         requestAnimationFrame(animate);
       } else {
-        // Remove UFO
-        this.cleanup();
+        // Escape complete - just mark as not escaping, UFO stays in scene
+        this.isEscaping = false;
+        this.escapeAnimationRunning = false;
+        console.log('UFO escape complete - ready for respawn');
         if (onComplete) onComplete();
       }
     };
