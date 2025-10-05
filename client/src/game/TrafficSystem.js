@@ -22,10 +22,14 @@ export class TrafficSystem {
     // Use centralized material manager
     this.materialManager = getMaterialManager();
 
-    // Sedan model loading
+    // Vehicle model loading
     this.sedanModel = null;
     this.sedanModelLoaded = false;
     this.loadSedanModel();
+
+    this.semiModel = null;
+    this.semiModelLoaded = false;
+    this.loadSemiModel();
 
     // Color palette for cars (will be applied to the sedan body material)
     this.carColors = [
@@ -45,6 +49,9 @@ export class TrafficSystem {
 
     // Shared materials cache for sedan vehicles - one set per color
     this.sedanMaterialCache = new Map();
+
+    // Shared materials cache for semi vehicles - one set per color
+    this.semiMaterialCache = new Map();
 
     // Create shared geometry ONCE for all vehicles to prevent memory leaks (fallback)
     // Using unit cubes to scale per vehicle type
@@ -67,11 +74,11 @@ export class TrafficSystem {
     
     // Vehicle types (realistic highway speeds in m/s)
     this.vehicleTypes = [
-      { type: 'car', probability: 0.5, length: 4.5, width: 1.8, height: 1.4, speed: 31 }, // ~70 mph
-      { type: 'suv', probability: 0.2, length: 5, width: 2, height: 1.8, speed: 29 }, // ~65 mph
-      { type: 'truck', probability: 0.15, length: 6, width: 2.2, height: 2.5, speed: 27 }, // ~60 mph (trucks slower)
-      { type: 'van', probability: 0.1, length: 5.5, width: 2, height: 2, speed: 29 }, // ~65 mph
-      { type: 'sports', probability: 0.05, length: 4.2, width: 1.8, height: 1.2, speed: 36 } // ~80 mph (sports cars faster)
+      { type: 'car', probability: 0.5, length: 4.5, width: 1.8, height: 1.4, speed: 31, preferredLane: null }, // ~70 mph
+      { type: 'suv', probability: 0.2, length: 5, width: 2, height: 1.8, speed: 29, preferredLane: null }, // ~65 mph
+      { type: 'semi', probability: 0.15, length: 16, width: 2.5, height: 4, speed: 27, preferredLane: 0 }, // ~60 mph, 18-wheeler, prefers right lane
+      { type: 'van', probability: 0.1, length: 5.5, width: 2, height: 2, speed: 29, preferredLane: null }, // ~65 mph
+      { type: 'sports', probability: 0.05, length: 4.2, width: 1.8, height: 1.2, speed: 36, preferredLane: null } // ~80 mph (sports cars faster)
     ];
     
     // Materials are now managed by MaterialManager - no need to create them here
@@ -222,6 +229,23 @@ export class TrafficSystem {
     );
   }
 
+  loadSemiModel() {
+    const loader = new GLTFLoader();
+    loader.load(
+      '/models/semi.glb',
+      (gltf) => {
+        this.semiModel = gltf.scene;
+        this.semiModelLoaded = true;
+        console.log('Semi model loaded successfully');
+      },
+      undefined,
+      (error) => {
+        console.error('Failed to load semi model, using fallback geometry:', error);
+        this.semiModelLoaded = false;
+      }
+    );
+  }
+
   initMaterials() {
     // Use materials from the MaterialManager pool (fallback only)
     const vehicleColors = [
@@ -295,9 +319,10 @@ export class TrafficSystem {
     } else {
       // Generate new vehicle (master client only, or no multiplayer)
       if (this.multiplayerManager && !this.isMaster) return;
-      
+
       const type = this.selectVehicleType();
-      const lane = Math.floor(Math.random() * 3);
+      // Use preferred lane if specified, otherwise random
+      const lane = type.preferredLane !== null ? type.preferredLane : Math.floor(Math.random() * 3);
       
       // Randomly select sublane for more variety
       let subLane;
@@ -391,7 +416,10 @@ export class TrafficSystem {
   // Kept for backwards compatibility if needed
   
   createVehicleMesh(type) {
-    if (this.sedanModelLoaded && this.sedanModel) {
+    // Use appropriate model based on vehicle type
+    if (type.type === 'semi' && this.semiModelLoaded && this.semiModel) {
+      return this.createSemiVehicle(type);
+    } else if (this.sedanModelLoaded && this.sedanModel) {
       return this.createSedanVehicle(type);
     } else {
       // Fallback to original geometry-based vehicles
@@ -457,10 +485,12 @@ export class TrafficSystem {
         }
 
         const meshName = child.name.toLowerCase();
+        const matName = child.material && child.material.name ? child.material.name.toLowerCase() : '';
 
-        // Track brake lights
+        // Track brake lights (check both mesh name and material name)
         if (meshName.includes('brake') || meshName.includes('tail') ||
-            (meshName.includes('light') && meshName.includes('rear'))) {
+            (meshName.includes('light') && meshName.includes('rear')) ||
+            matName.includes('rear lights') || matName.includes('brake') || matName.includes('tail')) {
           if (!brakeLight1) {
             brakeLight1 = child;
           } else if (!brakeLight2) {
@@ -487,6 +517,102 @@ export class TrafficSystem {
       wheels: wheels
     };
 
+
+    return vehicle;
+  }
+
+  createSemiVehicle(type) {
+    // Clone the semi model with deep clone
+    const vehicle = this.semiModel.clone(true);
+
+    // Pick random color for this vehicle
+    const colorIndex = Math.floor(Math.random() * this.carColors.length);
+    const colorValue = this.carColors[colorIndex];
+
+    // Check if we have cached materials for this color
+    let colorMaterials = this.semiMaterialCache.get(colorValue);
+    if (!colorMaterials) {
+      // First vehicle with this color - create and cache materials
+      colorMaterials = new Map();
+      const randomColor = new THREE.Color(colorValue);
+
+      // Clone all unique materials from the model once for this color
+      this.semiModel.traverse((child) => {
+        if (child.isMesh && child.material && !colorMaterials.has(child.material)) {
+          const clonedMat = child.material.clone();
+
+          // Apply color to semi body materials
+          const materialName = child.material.name ? child.material.name.toLowerCase() : '';
+          if (materialName.includes('body dark blue') ||
+              materialName.includes('body white') ||
+              materialName.includes('body dark yellow')) {
+            clonedMat.color.copy(randomColor);
+          }
+          // Keep other materials (windows, headlights, rear lights, body black, wheels, tires) as original
+
+          colorMaterials.set(child.material, clonedMat);
+        }
+      });
+
+      this.semiMaterialCache.set(colorValue, colorMaterials);
+    }
+
+    // Track brake lights and wheels for animation
+    let brakeLight1 = null;
+    let brakeLight2 = null;
+    const wheels = [];
+
+    // Apply cached materials to the cloned vehicle
+    vehicle.traverse((child) => {
+      const childName = child.name.toLowerCase();
+
+      // Track wheel groups/objects (not just meshes)
+      if (childName.includes('wheel')) {
+        wheels.push(child);
+      }
+
+      if (child.isMesh && child.material) {
+        // Find the original material this came from
+        const originalMaterial = child.material;
+
+        // Replace with cached colored material
+        if (colorMaterials.has(originalMaterial)) {
+          child.material = colorMaterials.get(originalMaterial);
+        }
+
+        const meshName = child.name.toLowerCase();
+        const matName = child.material && child.material.name ? child.material.name.toLowerCase() : '';
+
+        // Track brake lights (check both mesh name and material name)
+        if (meshName.includes('brake') || meshName.includes('tail') ||
+            (meshName.includes('light') && meshName.includes('rear')) ||
+            matName.includes('rear lights') || matName.includes('brake') || matName.includes('tail')) {
+          if (!brakeLight1) {
+            brakeLight1 = child;
+          } else if (!brakeLight2) {
+            brakeLight2 = child;
+          }
+        }
+
+        child.castShadow = false; // Disable shadows for performance
+      }
+    });
+
+    // Scale to match vehicle type dimensions
+    // Semi model base dimensions approximately: width ~2.5m, height ~4m, length ~16m
+    const scaleX = type.width / 2.5;
+    const scaleY = type.height / 4.0;
+    const scaleZ = type.length / 16.0;
+    vehicle.scale.set(scaleX, scaleY, scaleZ);
+
+    // Store brake light and wheel references for animation (no materials to dispose - they're shared!)
+    vehicle.userData = {
+      type: type.type,
+      colorValue: colorValue,
+      brake1: brakeLight1,
+      brake2: brakeLight2,
+      wheels: wheels
+    };
 
     return vehicle;
   }
@@ -794,10 +920,14 @@ export class TrafficSystem {
       if (vehicle.isBraking) {
         // MeshBasicMaterial doesn't have emissive, use color instead
         vehicle.mesh.userData.brake1.material.color.setHex(0xff0000);
-        vehicle.mesh.userData.brake2.material.color.setHex(0xff0000);
+        if (vehicle.mesh.userData.brake2 && vehicle.mesh.userData.brake2.material) {
+          vehicle.mesh.userData.brake2.material.color.setHex(0xff0000);
+        }
       } else {
         vehicle.mesh.userData.brake1.material.color.setHex(0x660000);
-        vehicle.mesh.userData.brake2.material.color.setHex(0x660000);
+        if (vehicle.mesh.userData.brake2 && vehicle.mesh.userData.brake2.material) {
+          vehicle.mesh.userData.brake2.material.color.setHex(0x660000);
+        }
       }
     }
   }
@@ -1255,6 +1385,18 @@ export class TrafficSystem {
       this.sedanMaterialCache.clear();
     }
 
+    // Dispose semi material cache
+    if (this.semiMaterialCache) {
+      this.semiMaterialCache.forEach(colorMaterials => {
+        colorMaterials.forEach(material => {
+          if (material && material.dispose) {
+            material.dispose();
+          }
+        });
+      });
+      this.semiMaterialCache.clear();
+    }
+
     // Dispose sedan model and its materials
     if (this.sedanModel) {
       this.sedanModel.traverse(child => {
@@ -1270,6 +1412,23 @@ export class TrafficSystem {
         }
       });
       this.sedanModel = null;
+    }
+
+    // Dispose semi model and its materials
+    if (this.semiModel) {
+      this.semiModel.traverse(child => {
+        if (child.isMesh) {
+          if (child.geometry) child.geometry.dispose();
+          if (child.material) {
+            if (Array.isArray(child.material)) {
+              child.material.forEach(mat => mat.dispose());
+            } else {
+              child.material.dispose();
+            }
+          }
+        }
+      });
+      this.semiModel = null;
     }
 
     // Dispose shared geometries (they were created in constructor)
