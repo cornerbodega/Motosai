@@ -55,6 +55,9 @@ export class MaterialManager {
       })
     };
 
+    // Track current time of day for road reflectivity
+    this.currentTimeOfDay = 'day';
+
     // Particle materials
     this.particleMaterials = {
       blood: new THREE.MeshBasicMaterial({
@@ -211,6 +214,29 @@ export class MaterialManager {
   getRoadMaterial(type = 'asphalt') {
     this.stats.reused++;
     return this.roadMaterials[type] || this.roadMaterials.asphalt;
+  }
+
+  /**
+   * Update road reflectivity based on time of day
+   * @param {string} timeOfDay - 'day', 'dawn', 'dusk', or 'night'
+   */
+  updateRoadReflectivity(timeOfDay) {
+    if (this.currentTimeOfDay === timeOfDay) return; // No change needed
+
+    this.currentTimeOfDay = timeOfDay;
+
+    if (this.roadMaterials && this.roadMaterials.asphalt) {
+      if (timeOfDay === 'day') {
+        // Only during pure daytime - more reflective
+        this.roadMaterials.asphalt.roughness = 0.8;
+        this.roadMaterials.asphalt.metalness = 0.1;
+      } else {
+        // Dawn, dusk, night - much less reflective
+        this.roadMaterials.asphalt.roughness = 0.95;
+        this.roadMaterials.asphalt.metalness = 0.02;
+      }
+      this.roadMaterials.asphalt.needsUpdate = true;
+    }
   }
 
   /**

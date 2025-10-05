@@ -104,7 +104,13 @@ export class DevMenu {
     if (config.buttons) {
       config.buttons.forEach(button => {
         const btn = document.createElement('button');
-        btn.textContent = button.label;
+
+        // Support dynamic labels (functions)
+        const updateLabel = () => {
+          btn.textContent = typeof button.label === 'function' ? button.label() : button.label;
+        };
+        updateLabel();
+
         btn.style.cssText = `
           padding: 6px 12px;
           background: rgba(255, 102, 0, 0.2);
@@ -124,6 +130,8 @@ export class DevMenu {
         });
         btn.addEventListener('click', () => {
           button.onClick();
+          // Update label after click in case state changed
+          updateLabel();
         });
         contentDiv.appendChild(btn);
       });

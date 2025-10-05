@@ -149,6 +149,13 @@ export class MotosaiGame {
     this.activeTimers = new Set();
     this.activeChatTimers = new Set();
 
+    // Day/night cycle system (60-second full cycle)
+    this.dayCycleEnabled = false;
+    this.dayCycleDuration = 60.0; // 60 seconds for full day
+    this.dayCycleTime = 0; // Current time in the cycle (0-60)
+    this.dayCycleTimeOfDay = 'day'; // Current time of day
+    this.timesOfDay = ['dawn', 'day', 'dusk', 'night']; // Cycle order
+
     // Pre-allocate reusable objects for updateCamera to prevent memory leaks
     this._cameraUpdateObjects = {
       bikeMatrix: new THREE.Matrix4(),
@@ -463,19 +470,42 @@ export class MotosaiGame {
       buttons: [
         {
           label: '🌅 Dawn',
-          onClick: () => this.setTimeOfDay('dawn')
+          onClick: () => {
+            this.dayCycleEnabled = false; // Disable cycle when manually setting
+            this.setTimeOfDay('dawn');
+          }
         },
         {
           label: '☀️ Day',
-          onClick: () => this.setTimeOfDay('day')
+          onClick: () => {
+            this.dayCycleEnabled = false;
+            this.setTimeOfDay('day');
+          }
         },
         {
           label: '🌇 Dusk',
-          onClick: () => this.setTimeOfDay('dusk')
+          onClick: () => {
+            this.dayCycleEnabled = false;
+            this.setTimeOfDay('dusk');
+          }
         },
         {
           label: '🌙 Night',
-          onClick: () => this.setTimeOfDay('night')
+          onClick: () => {
+            this.dayCycleEnabled = false;
+            this.setTimeOfDay('night');
+          }
+        },
+        {
+          label: () => this.dayCycleEnabled ? '⏸️ Stop Cycle' : '▶️ Start Cycle (60s)',
+          onClick: () => {
+            this.dayCycleEnabled = !this.dayCycleEnabled;
+            if (this.dayCycleEnabled) {
+              console.log('Day/night cycle started (60s per day)');
+            } else {
+              console.log('Day/night cycle stopped');
+            }
+          }
         }
       ]
     });
@@ -635,59 +665,63 @@ export class MotosaiGame {
   }
 
   setTimeOfDay(timeOfDay) {
-    // Ultra-realistic time of day presets
+    // Ultra-realistic time of day presets based on natural atmospheric scattering
     const presets = {
       dawn: {
-        sky: 0xFF8C69,  // Soft peachy orange
-        ambientColor: 0xFFB380,
-        ambientIntensity: 0.3,
-        sunColor: 0xFFAA80,
-        sunIntensity: 1.2,
-        sunPosition: [80, 40, 100],
-        hemiSky: 0xFF9E7A,
-        hemiGround: 0x5C4A3D,
+        sky: 0xFFA07A,  // Light salmon - soft warm glow at horizon
+        ambientColor: 0xFFD4AA,  // Warm peachy ambient
+        ambientIntensity: 0.35,
+        sunColor: 0xFFCC99,  // Golden morning sun
+        sunIntensity: 1.4,
+        sunPosition: [100, 25, 80],  // Low on horizon
+        hemiSky: 0xFFB8A0,  // Warm sky hemisphere
+        hemiGround: 0x6B5D4F,  // Cool earth tones
         hemiIntensity: 0.5,
-        fillColor: 0xFFBB99,
-        fillIntensity: 0.25
+        fillColor: 0xFFD0B0,  // Soft warm fill
+        fillIntensity: 0.3,
+        starfieldVisible: false
       },
       day: {
-        sky: 0x87CEEB,  // Sky blue
-        ambientColor: 0xFFF5E6,
-        ambientIntensity: 0.4,
-        sunColor: 0xFFF5DD,
-        sunIntensity: 2.5,
-        sunPosition: [100, 150, 80],
-        hemiSky: 0x87CEEB,
-        hemiGround: 0x8B7355,
-        hemiIntensity: 0.6,
-        fillColor: 0xE6F0FF,
-        fillIntensity: 0.4
+        sky: 0x87CEEB,  // Classic sky blue
+        ambientColor: 0xFFFFFF,  // Pure white ambient for clarity
+        ambientIntensity: 0.5,
+        sunColor: 0xFFFAF0,  // Bright warm white sun
+        sunIntensity: 2.8,
+        sunPosition: [60, 180, 40],  // High overhead
+        hemiSky: 0xB0D8F0,  // Bright blue sky
+        hemiGround: 0x9C8A7A,  // Natural earth
+        hemiIntensity: 0.7,
+        fillColor: 0xDDEEFF,  // Cool blue fill for depth
+        fillIntensity: 0.45,
+        starfieldVisible: false
       },
       dusk: {
-        sky: 0xFF6B4A,  // Deep orange/red
-        ambientColor: 0xFFAA80,
-        ambientIntensity: 0.25,
-        sunColor: 0xFF8855,
-        sunIntensity: 1.0,
-        sunPosition: [120, 30, 60],
-        hemiSky: 0xFF7A5C,
-        hemiGround: 0x4A3A35,
-        hemiIntensity: 0.4,
-        fillColor: 0xCC6644,
-        fillIntensity: 0.2
+        sky: 0xFF8C5A,  // Rich orange with hint of pink
+        ambientColor: 0xFF9966,  // Warm orange ambient
+        ambientIntensity: 0.3,
+        sunColor: 0xFF7744,  // Deep orange setting sun
+        sunIntensity: 1.2,
+        sunPosition: [120, 20, 50],  // Very low, almost at horizon
+        hemiSky: 0xCC6655,  // Warm reddish sky
+        hemiGround: 0x4A3A30,  // Dark warm earth
+        hemiIntensity: 0.45,
+        fillColor: 0xDD8866,  // Warm peachy fill
+        fillIntensity: 0.25,
+        starfieldVisible: false
       },
       night: {
-        sky: 0x0A1128,  // Very dark blue, almost black
-        ambientColor: 0x4D5A7A,
-        ambientIntensity: 0.15,
-        sunColor: 0x7799CC,  // Moonlight - cool blue
-        sunIntensity: 0.3,
-        sunPosition: [80, 120, -100],
-        hemiSky: 0x1A2545,
-        hemiGround: 0x0D0F1A,
-        hemiIntensity: 0.2,
-        fillColor: 0x334466,
-        fillIntensity: 0.1
+        sky: 0x0C1445,  // Deep midnight blue
+        ambientColor: 0x556688,  // Cool blue-grey ambient
+        ambientIntensity: 0.18,
+        sunColor: 0xAABBDD,  // Cool moonlight
+        sunIntensity: 0.35,
+        sunPosition: [80, 130, -90],  // Moon high in sky
+        hemiSky: 0x1E2A4A,  // Dark blue night sky
+        hemiGround: 0x0A0D15,  // Very dark ground
+        hemiIntensity: 0.25,
+        fillColor: 0x445577,  // Subtle cool fill
+        fillIntensity: 0.12,
+        starfieldVisible: true
       }
     };
 
@@ -697,48 +731,40 @@ export class MotosaiGame {
       return;
     }
 
-    // Update sky sphere
-    if (this.backgrounds) {
-      this.backgrounds.setSkyColor(preset.sky);
+    // Initialize transition state if not exists
+    if (!this.timeOfDayTransition) {
+      this.timeOfDayTransition = {
+        active: false,
+        progress: 0,
+        duration: 3.0, // 3 seconds for beautiful cinematic transition
+        from: null,
+        to: null
+      };
     }
 
-    // Update ambient light
-    if (this.ambientLight) {
-      this.ambientLight.color.setHex(preset.ambientColor);
-      this.ambientLight.intensity = preset.ambientIntensity;
-    }
+    // Start transition
+    this.timeOfDayTransition.active = true;
+    this.timeOfDayTransition.progress = 0;
+    this.timeOfDayTransition.to = preset;
+    this.timeOfDayTransition.toTimeOfDay = timeOfDay; // Store time of day name
 
-    // Update sun/moon light
-    if (this.sunLight) {
-      this.sunLight.color.setHex(preset.sunColor);
-      this.sunLight.intensity = preset.sunIntensity;
-      this.sunLight.position.set(...preset.sunPosition);
-    }
+    // Capture current state as "from"
+    this.timeOfDayTransition.from = {
+      sky: this.skyDome ? this.skyDome.material.color.getHex() : preset.sky,
+      ambientColor: this.ambientLight ? this.ambientLight.color.getHex() : preset.ambientColor,
+      ambientIntensity: this.ambientLight ? this.ambientLight.intensity : preset.ambientIntensity,
+      sunColor: this.sunLight ? this.sunLight.color.getHex() : preset.sunColor,
+      sunIntensity: this.sunLight ? this.sunLight.intensity : preset.sunIntensity,
+      sunPosition: this.sunLight ? [this.sunLight.position.x, this.sunLight.position.y, this.sunLight.position.z] : preset.sunPosition,
+      hemiSky: this.hemiLight ? this.hemiLight.color.getHex() : preset.hemiSky,
+      hemiGround: this.hemiLight ? this.hemiLight.groundColor.getHex() : preset.hemiGround,
+      hemiIntensity: this.hemiLight ? this.hemiLight.intensity : preset.hemiIntensity,
+      fillColor: this.fillLight ? this.fillLight.color.getHex() : preset.fillColor,
+      fillIntensity: this.fillLight ? this.fillLight.intensity : preset.fillIntensity,
+      starfieldVisible: this.backgrounds && this.backgrounds.starfield ? this.backgrounds.starfield.visible : false
+    };
 
-    // Update hemisphere light
-    if (this.hemiLight) {
-      this.hemiLight.color.setHex(preset.hemiSky);
-      this.hemiLight.groundColor.setHex(preset.hemiGround);
-      this.hemiLight.intensity = preset.hemiIntensity;
-    }
-
-    // Update fill light
-    if (this.fillLight) {
-      this.fillLight.color.setHex(preset.fillColor);
-      this.fillLight.intensity = preset.fillIntensity;
-    }
-
-    // Update fog color to match sky
-    if (this.scene && this.scene.fog) {
-      this.scene.fog.color.setHex(preset.sky);
-    }
-
-    // Update renderer clear color to match sky
-    if (this.renderer) {
-      this.renderer.setClearColor(preset.sky);
-    }
-
-    console.log(`Time of day set to: ${timeOfDay}`);
+    console.log(`Time of day transitioning to: ${timeOfDay}`);
   }
 
   createMotorcycle() {
@@ -2202,6 +2228,164 @@ export class MotosaiGame {
     this.ufoController.update(deltaTime, state.position, speed);
   }
 
+  updateDayCycle(deltaTime) {
+    if (!this.dayCycleEnabled) return;
+
+    // Advance time in the cycle
+    this.dayCycleTime += deltaTime;
+
+    // Wrap around after 60 seconds
+    if (this.dayCycleTime >= this.dayCycleDuration) {
+      this.dayCycleTime -= this.dayCycleDuration;
+    }
+
+    // Determine which time of day we should be in
+    // 60 seconds / 4 periods = 15 seconds per period
+    const periodDuration = this.dayCycleDuration / this.timesOfDay.length;
+    const currentPeriodIndex = Math.floor(this.dayCycleTime / periodDuration);
+    const targetTimeOfDay = this.timesOfDay[currentPeriodIndex];
+
+    // Only trigger transition if we're entering a new period
+    if (targetTimeOfDay !== this.dayCycleTimeOfDay) {
+      this.dayCycleTimeOfDay = targetTimeOfDay;
+      this.setTimeOfDay(targetTimeOfDay);
+    }
+  }
+
+  // Helper method to lerp between two hex colors (avoid recreating function each frame)
+  _lerpColor(color1, color2, t) {
+    const r1 = (color1 >> 16) & 0xFF;
+    const g1 = (color1 >> 8) & 0xFF;
+    const b1 = color1 & 0xFF;
+
+    const r2 = (color2 >> 16) & 0xFF;
+    const g2 = (color2 >> 8) & 0xFF;
+    const b2 = color2 & 0xFF;
+
+    const r = Math.round(r1 + (r2 - r1) * t);
+    const g = Math.round(g1 + (g2 - g1) * t);
+    const b = Math.round(b1 + (b2 - b1) * t);
+
+    return (r << 16) | (g << 8) | b;
+  }
+
+  // Helper method to lerp numbers
+  _lerp(a, b, t) {
+    return a + (b - a) * t;
+  }
+
+  // Smooth easing function (ease-in-out)
+  _easeInOutQuad(t) {
+    return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+  }
+
+  updateTimeOfDayTransition(deltaTime) {
+    if (!this.timeOfDayTransition || !this.timeOfDayTransition.active) return;
+
+    const transition = this.timeOfDayTransition;
+    transition.progress += deltaTime / transition.duration;
+
+    if (transition.progress >= 1.0) {
+      // Transition complete
+      transition.progress = 1.0;
+      transition.active = false;
+    }
+
+    const eased = this._easeInOutQuad(transition.progress);
+    const from = transition.from;
+    const to = transition.to;
+
+    // Update sky color
+    if (this.backgrounds) {
+      const skyColor = this._lerpColor(from.sky, to.sky, eased);
+      this.backgrounds.setSkyColor(skyColor);
+
+      // Update fog and renderer clear color
+      if (this.scene && this.scene.fog) {
+        this.scene.fog.color.setHex(skyColor);
+      }
+      if (this.renderer) {
+        this.renderer.setClearColor(skyColor);
+      }
+    }
+
+    // Update ambient light
+    if (this.ambientLight) {
+      const ambientColor = this._lerpColor(from.ambientColor, to.ambientColor, eased);
+      this.ambientLight.color.setHex(ambientColor);
+      this.ambientLight.intensity = this._lerp(from.ambientIntensity, to.ambientIntensity, eased);
+    }
+
+    // Update sun/moon light
+    if (this.sunLight) {
+      const sunColor = this._lerpColor(from.sunColor, to.sunColor, eased);
+      this.sunLight.color.setHex(sunColor);
+      this.sunLight.intensity = this._lerp(from.sunIntensity, to.sunIntensity, eased);
+
+      // Lerp sun position
+      this.sunLight.position.set(
+        this._lerp(from.sunPosition[0], to.sunPosition[0], eased),
+        this._lerp(from.sunPosition[1], to.sunPosition[1], eased),
+        this._lerp(from.sunPosition[2], to.sunPosition[2], eased)
+      );
+    }
+
+    // Update hemisphere light
+    if (this.hemiLight) {
+      const hemiSky = this._lerpColor(from.hemiSky, to.hemiSky, eased);
+      const hemiGround = this._lerpColor(from.hemiGround, to.hemiGround, eased);
+      this.hemiLight.color.setHex(hemiSky);
+      this.hemiLight.groundColor.setHex(hemiGround);
+      this.hemiLight.intensity = this._lerp(from.hemiIntensity, to.hemiIntensity, eased);
+    }
+
+    // Update fill light
+    if (this.fillLight) {
+      const fillColor = this._lerpColor(from.fillColor, to.fillColor, eased);
+      this.fillLight.color.setHex(fillColor);
+      this.fillLight.intensity = this._lerp(from.fillIntensity, to.fillIntensity, eased);
+    }
+
+    // Smooth starfield fade in/out
+    if (this.backgrounds) {
+      // Fade stars in during second half of transition to night
+      // Fade stars out during first half of transition from night
+      if (to.starfieldVisible && !from.starfieldVisible) {
+        // Fading in - start at 50% progress
+        const starAlpha = Math.max(0, (eased - 0.5) * 2);
+        this.backgrounds.setStarfieldVisible(starAlpha > 0);
+        if (this.backgrounds.starfield && this.backgrounds.starfield.material) {
+          this.backgrounds.starfield.material.uniforms.opacity.value = starAlpha;
+        }
+        if (this.backgrounds.milkyWay && this.backgrounds.milkyWay.material) {
+          this.backgrounds.milkyWay.material.opacity = 0.6 * starAlpha;
+        }
+      } else if (!to.starfieldVisible && from.starfieldVisible) {
+        // Fading out - end at 50% progress
+        const starAlpha = Math.max(0, 1 - (eased * 2));
+        this.backgrounds.setStarfieldVisible(starAlpha > 0);
+        if (this.backgrounds.starfield && this.backgrounds.starfield.material) {
+          this.backgrounds.starfield.material.uniforms.opacity.value = starAlpha;
+        }
+        if (this.backgrounds.milkyWay && this.backgrounds.milkyWay.material) {
+          this.backgrounds.milkyWay.material.opacity = 0.6 * starAlpha;
+        }
+      } else {
+        // No transition needed
+        this.backgrounds.setStarfieldVisible(to.starfieldVisible);
+        if (to.starfieldVisible && this.backgrounds.starfield && this.backgrounds.starfield.material) {
+          this.backgrounds.starfield.material.uniforms.opacity.value = 1.0;
+        }
+      }
+
+      // Update road reflectivity based on time of day
+      // Only 'day' is reflective, dawn/dusk/night are not reflective
+      if (this.materialManager && transition.toTimeOfDay) {
+        this.materialManager.updateRoadReflectivity(transition.toTimeOfDay);
+      }
+    }
+  }
+
   updateCamera(deltaTime) {
     const state = this.physics.getState();
 
@@ -3215,6 +3399,12 @@ export class MotosaiGame {
 
         // Update camera (includes FOV updates)
         this.updateCamera(deltaTime);
+
+        // Update day/night cycle (60s per day)
+        this.updateDayCycle(deltaTime);
+
+        // Update time of day transitions
+        this.updateTimeOfDayTransition(deltaTime);
 
         // Update UFO position
         this.updateUFO(deltaTime, state);
