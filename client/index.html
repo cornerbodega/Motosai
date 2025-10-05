@@ -1,282 +1,310 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Motosai - Hello World</title>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Motosai - Highway 101 Motorcycle Simulator</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-        
-        .container {
-            background: white;
-            border-radius: 20px;
-            padding: 40px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            max-width: 600px;
-            width: 90%;
-        }
-        
-        h1 {
-            color: #333;
-            margin-bottom: 30px;
-            text-align: center;
-            font-size: 2.5em;
-        }
-        
-        .status {
-            padding: 15px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-            text-align: center;
-            font-weight: 500;
-        }
-        
-        .status.connected {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-        
-        .status.disconnected {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-        
-        .input-group {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-        
-        input {
-            flex: 1;
-            padding: 12px;
-            border: 2px solid #ddd;
-            border-radius: 8px;
-            font-size: 16px;
-            transition: border-color 0.3s;
-        }
-        
-        input:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-        
-        button {
-            padding: 12px 24px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: transform 0.2s, box-shadow 0.2s;
-        }
-        
-        button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
-        }
-        
-        button:active {
-            transform: translateY(0);
-        }
-        
-        button:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-        }
-        
-        .messages {
-            background: #f8f9fa;
-            border-radius: 10px;
-            padding: 20px;
-            max-height: 400px;
-            overflow-y: auto;
-        }
-        
-        .message {
-            padding: 10px;
-            margin-bottom: 10px;
-            border-radius: 8px;
-            background: white;
-            border-left: 4px solid #667eea;
-        }
-        
-        .message.sent {
-            border-left-color: #764ba2;
-        }
-        
-        .message-time {
-            font-size: 0.8em;
-            color: #666;
-            margin-top: 5px;
-        }
-        
-        .latency {
-            text-align: center;
-            margin-top: 20px;
-            color: #666;
-            font-size: 0.9em;
-        }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
 
-        .bike-selector-container {
-            background: #1a1a2e;
-            border-radius: 15px;
-            padding: 20px;
-            margin: 20px 0;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-        }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        overflow: hidden;
+        background: #000;
+      }
 
-        #bikePreview {
-            display: flex;
-            justify-content: center;
-            margin-bottom: 20px;
+      @keyframes fadeOut {
+        0% {
+          opacity: 1;
         }
+        70% {
+          opacity: 1;
+        }
+        100% {
+          opacity: 0;
+        }
+      }
 
-        .bike-info {
-            text-align: center;
-            color: white;
-            margin-bottom: 15px;
-        }
+      #gameContainer {
+        width: 100vw;
+        height: 100vh;
+        position: relative;
+      }
 
-        #bikeName {
-            font-size: 1.5em;
-            font-weight: bold;
-            margin-bottom: 5px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
+      #loadingScreen {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+        transition: opacity 0.5s;
+      }
 
-        #bikeIndex {
-            color: #888;
-            font-size: 0.9em;
-        }
+      #loadingScreen h1 {
+        color: white;
+        font-size: 48px;
+        margin-bottom: 20px;
+      }
 
-        .bike-controls {
-            display: flex;
-            justify-content: center;
-            gap: 15px;
-            margin-bottom: 20px;
-        }
+      #loadingBar {
+        width: 300px;
+        height: 4px;
+        background: rgba(255, 255, 255, 0.3);
+        border-radius: 2px;
+        overflow: hidden;
+      }
 
-        .bike-nav-btn {
-            padding: 10px 20px;
-            background: rgba(102, 126, 234, 0.2);
-            border: 2px solid #667eea;
-            color: #667eea;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.3s;
-            font-weight: bold;
-        }
+      #loadingProgress {
+        height: 100%;
+        background: white;
+        width: 0%;
+        transition: width 0.3s;
+      }
 
-        .bike-nav-btn:hover {
-            background: rgba(102, 126, 234, 0.4);
-            transform: scale(1.05);
-        }
+      #startScreen {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        display: none;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        z-index: 999;
+      }
 
-        .start-game-btn {
-            width: 100%;
-            padding: 15px;
-            background: linear-gradient(135deg, #ff4444 0%, #cc0000 100%);
-            color: white;
-            border: none;
-            border-radius: 10px;
-            font-size: 1.2em;
-            font-weight: bold;
-            cursor: pointer;
-            transition: all 0.3s;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-        }
+      #startScreen h1 {
+        color: white;
+        font-size: 64px;
+        margin-bottom: 10px;
+        text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.3);
+      }
 
-        .start-game-btn:hover {
-            background: linear-gradient(135deg, #ff6666 0%, #ff0000 100%);
-            transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(255, 68, 68, 0.3);
+      #startScreen h2 {
+        color: white;
+        font-size: 24px;
+        margin-bottom: 40px;
+        opacity: 0.9;
+      }
+
+      .startButton {
+        padding: 15px 40px;
+        font-size: 20px;
+        color: white;
+        background: rgba(255, 255, 255, 0.2);
+        border: 2px solid white;
+        border-radius: 50px;
+        cursor: pointer;
+        transition: all 0.3s;
+        margin: 10px;
+      }
+
+      .startButton:hover {
+        background: rgba(255, 255, 255, 0.3);
+        transform: scale(1.05);
+      }
+
+      #controls {
+        position: absolute;
+        bottom: 20px;
+        left: 20px;
+        color: white;
+        background: rgba(0, 0, 0, 0.7);
+        padding: 15px;
+        border-radius: 10px;
+        font-size: 12px;
+        z-index: 100;
+      }
+
+      #controls h3 {
+        margin-bottom: 10px;
+        color: #ffcc00;
+      }
+
+      #controls div {
+        margin: 5px 0;
+      }
+
+      #controls kbd {
+        background: rgba(255, 255, 255, 0.2);
+        padding: 2px 6px;
+        border-radius: 3px;
+        margin: 0 2px;
+      }
+
+      #pauseOverlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.7);
+        display: none;
+        justify-content: center;
+        align-items: center;
+        z-index: 998;
+      }
+
+      #pauseOverlay h2 {
+        color: white;
+        font-size: 48px;
+      }
+
+      @media (max-width: 768px) {
+        #controls {
+          display: none;
         }
-        
-        .endpoints {
-            margin-top: 20px;
-            padding: 20px;
-            background: #f8f9fa;
-            border-radius: 10px;
-        }
-        
-        .endpoint-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 10px;
-        }
-        
-        .endpoint-response {
-            margin-top: 10px;
-            padding: 10px;
-            background: white;
-            border-radius: 5px;
-            font-family: monospace;
-            font-size: 0.9em;
-        }
+      }
     </style>
-</head>
-<body>
-    <div class="container">
-        <h1>🏍️ Motosai</h1>
-        <div id="status" class="status disconnected">Disconnected</div>
-        
-        <div class="bike-selector-container">
-            <div id="bikePreview"></div>
-            <div class="bike-info">
-                <div id="bikeName">Red Racer</div>
-                <div id="bikeIndex">1 / 8</div>
-            </div>
-            <div class="bike-controls">
-                <button class="bike-nav-btn" id="prevBike">← Previous</button>
-                <button class="bike-nav-btn" id="nextBike">Next →</button>
-            </div>
-            <button class="start-game-btn" id="startGame">Start Game</button>
+  </head>
+  <body>
+    <div id="gameContainer">
+      <div id="loadingScreen">
+        <h1>🏍️ MOTOSAI</h1>
+        <div id="loadingBar">
+          <div id="loadingProgress"></div>
         </div>
-        
-        <div class="input-group">
-            <input type="text" id="nameInput" placeholder="Enter your name" value="User">
-            <button id="sendHello">Send Hello</button>
+      </div>
+
+      <div id="startScreen">
+        <h1>🏍️ MOTOSAI</h1>
+        <h2>Death Valley, USA</h2>
+
+        <div style="margin: 20px 0">
+          <label style="color: white; font-size: 18px; margin-right: 10px"
+            >Rider Gear Color:</label
+          >
+          <select
+            id="riderColor"
+            style="
+              padding: 8px 15px;
+              font-size: 16px;
+              border-radius: 5px;
+              background: rgba(255, 255, 255, 0.9);
+              border: none;
+            "
+          >
+            <option value="0x1a1a1a">Black</option>
+            <option value="0xff0000">Red</option>
+            <option value="0x0066cc">Blue</option>
+            <option value="0xffff00">Hi-Viz Yellow</option>
+            <option value="0xff6600">Orange</option>
+            <option value="0x00ff00">Green</option>
+            <option value="0xffffff">White</option>
+            <option value="0x800080">Purple</option>
+            <option value="0x00ffff">Cyan</option>
+          </select>
         </div>
-        
-        <div class="endpoints">
-            <h3>REST API Test</h3>
-            <div class="endpoint-item">
-                <span>/api/hello</span>
-                <button id="testApi">Test API</button>
-            </div>
-            <div id="apiResponse" class="endpoint-response" style="display: none;"></div>
-        </div>
-        
-        <div class="messages" id="messages">
-            <div class="message">Welcome to Motosai! Click "Send Hello" to test WebSocket connection.</div>
-        </div>
-        
-        <div class="latency" id="latency">Latency: -- ms</div>
+
+        <button class="startButton" onclick="startGame()">START RIDE</button>
+        <!-- Options removed -->
+      </div>
+
+      <div id="pauseOverlay">
+        <h2>PAUSED</h2>
+      </div>
+
+      <div id="controls">
+        <h3>Controls</h3>
+        <div><kbd>W</kbd> / <kbd>↑</kbd> - Throttle</div>
+        <div><kbd>S</kbd> / <kbd>↓</kbd> - Brake</div>
+        <div><kbd>A</kbd> / <kbd>←</kbd> - Lean Left (tap-hold for sharp)</div>
+        <div><kbd>D</kbd> / <kbd>→</kbd> - Lean Right (tap-hold for sharp)</div>
+        <div><kbd>Left Shift</kbd> - Front Brake</div>
+        <div><kbd>Right Shift</kbd> - Rear Brake</div>
+        <div><kbd>Space</kbd> - Camera View</div>
+        <div><kbd>M</kbd> - Mute/Unmute Sound</div>
+        <div><kbd>P</kbd> - Pause</div>
+      </div>
     </div>
-    
-    <script type="module" src="/src/main.js"></script>
-</body>
+
+    <script type="module">
+      import { MotosaiGame } from "/src/game/MotosaiGame.js";
+
+      let game = null;
+      let isLoading = true;
+
+      // Loading simulation
+      function updateLoading() {
+        const progress = document.getElementById("loadingProgress");
+        let width = 0;
+
+        const interval = setInterval(() => {
+          width += Math.random() * 30;
+          if (width >= 100) {
+            width = 100;
+            clearInterval(interval);
+            onLoadingComplete();
+          }
+          progress.style.width = width + "%";
+        }, 200);
+      }
+
+      function onLoadingComplete() {
+        const loadingScreen = document.getElementById("loadingScreen");
+
+        loadingScreen.style.opacity = "0";
+        setTimeout(() => {
+          loadingScreen.style.display = "none";
+          isLoading = false;
+
+          // Start game directly - UFO intro will handle color selection
+          startGame();
+        }, 500);
+      }
+
+      window.startGame = function () {
+        // Dispose of any existing game first
+        if (game && game.dispose) {
+          game.dispose();
+          game = null;
+        }
+
+        // Initialize game with default configuration
+        // Color will be set by UFO intro
+        const container = document.getElementById("gameContainer");
+        const config = {
+          riderColor: 0x1a1a1a, // Default, will be overridden by intro
+          multiplayer: true, // Enable multiplayer
+        };
+        game = new MotosaiGame(container, config);
+        game.start();
+
+        // Setup pause
+        window.addEventListener("keydown", (e) => {
+          if (e.code === "KeyP") {
+            togglePause();
+          }
+        });
+      };
+
+      function togglePause() {
+        if (!game) return;
+
+        const pauseOverlay = document.getElementById("pauseOverlay");
+        game.pause();
+
+        if (game.isPaused) {
+          pauseOverlay.style.display = "flex";
+        } else {
+          pauseOverlay.style.display = "none";
+        }
+      }
+
+      // Start loading
+      updateLoading();
+    </script>
+  </body>
 </html>

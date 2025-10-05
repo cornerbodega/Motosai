@@ -903,6 +903,59 @@ export class MotosaiGame {
     console.log('Headlight added - Intensity:', this.headlight.intensity);
   }
 
+  // Shared function for applying color to motorcycles (used in game and preview)
+  static applyBikeColor(model, bikeConfig, useMaterialManager = true) {
+    const materialManager = useMaterialManager ? getMaterialManager() : null;
+
+    // Support legacy single color or new 3-color theme
+    const tankColor = bikeConfig.color || bikeConfig;
+    const seatColor = bikeConfig.seatColor || tankColor;
+    const tireColor = bikeConfig.tireColor || tankColor;
+
+    model.traverse((child) => {
+      if (child.isMesh && child.material) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+
+        // Get material and mesh names for intelligent coloring
+        const materialName = child.material.name ? child.material.name.toLowerCase() : '';
+        const meshName = child.name ? child.name.toLowerCase() : '';
+
+        let targetColor = null;
+
+        // Determine which color to use based on part
+        if (materialName.includes('metal_red') || meshName.includes('tank')) {
+          targetColor = tankColor; // Tank gets main bike color
+        } else if (materialName.includes('leather') || meshName.includes('seat')) {
+          targetColor = seatColor; // Seat gets seat color
+        } else if (materialName.includes('tire')) {
+          targetColor = tireColor; // Tires get tire color
+        }
+
+        // Apply color if we determined one
+        if (child.material.color && targetColor !== null) {
+          if (materialManager) {
+            const sharedMaterial = materialManager.getMaterial('standard', {
+              color: targetColor,
+              metalness: child.material.metalness || 0.4,
+              roughness: child.material.roughness || 0.3,
+              emissive: targetColor,
+              emissiveIntensity: 0.05, // Subtle glow
+            });
+            child.material = sharedMaterial;
+          } else {
+            // Direct color setting (for preview)
+            child.material.color.setHex(targetColor);
+            if (child.material.emissive) {
+              child.material.emissive.setHex(targetColor);
+              child.material.emissiveIntensity = 0.05;
+            }
+          }
+        }
+      }
+    });
+  }
+
   _setupMotorcycleModel(model, bikeColor) {
     // Scale to appropriate size (motor1.glb needs to be smaller)
     this.motorcycle.scale.setScalar(0.25);
@@ -910,23 +963,10 @@ export class MotosaiGame {
     // Set initial position
     this.motorcycle.position.set(0, 0, 0);
 
-    // Apply the selected bike color to all meshes using shared materials
-    const materialManager = getMaterialManager();
-    this.motorcycle.traverse((child) => {
-      if (child.isMesh && child.material) {
-        child.castShadow = true;
-        child.receiveShadow = true;
-        // Use MaterialManager to get a shared material instead of modifying the original
-        if (child.material.color) {
-          const sharedMaterial = materialManager.getMaterial('standard', {
-            color: bikeColor,
-            metalness: child.material.metalness || 0.5,
-            roughness: child.material.roughness || 0.5,
-          });
-          child.material = sharedMaterial;
-        }
-      }
-    });
+    // Apply the selected bike color using shared function
+    // Pass full selectedBike object if available for 3-color theme
+    const bikeConfig = this.selectedBike || { color: bikeColor };
+    MotosaiGame.applyBikeColor(this.motorcycle, bikeConfig, true);
 
     // Store references for animation (find wheels in the model)
     // Only use named objects - don't fallback to children to avoid rotating wrong parts
@@ -1162,6 +1202,71 @@ export class MotosaiGame {
       this.initHighway();
       this.initBackgrounds();
 
+      // Initialize UFOController with the UFO from intro BEFORE bike selection
+      this.ufoController = new UFOController(this.scene);
+
+      if (this.ufo) {
+        // Use UFO from intro
+        this.ufoController.ufo = this.ufo;
+        console.log('UFOController initialized with intro UFO');
+
+        // Make sure UFO is in the scene
+        if (!this.scene.children.includes(this.ufo)) {
+          this.scene.add(this.ufo);
+          console.log('UFO was not in scene, adding it now');
+        }
+
+        // Apply colorful materials to UFO (match intro)
+        const colors = [
+          { color: 0x00ffff, emissive: 0x00ffff }, // Cyan
+          { color: 0xff00ff, emissive: 0xff00ff }, // Magenta
+          { color: 0xffaa00, emissive: 0xffaa00 }, // Orange
+          { color: 0x00ff88, emissive: 0x00ff88 }, // Green-cyan
+          { color: 0xaa88ff, emissive: 0xaa88ff }, // Purple
+        ];
+
+        let colorIndex = 0;
+        this.ufoController.ufo.traverse((child) => {
+          if (child.isMesh) {
+            const colorData = colors[colorIndex % colors.length];
+            child.material = new THREE.MeshStandardMaterial({
+              color: colorData.color,
+              metalness: 0.9,
+              roughness: 0.1,
+              emissive: colorData.emissive,
+              emissiveIntensity: 0.5
+            });
+            colorIndex++;
+          }
+        });
+
+        // Add the effects
+        this.ufoController.addGlow();
+        this.ufoController.addParticleTrail();
+
+        // Add point light
+        const ufoLight = new THREE.PointLight(0x00ffff, 2, 50);
+        ufoLight.position.set(0, 0, 0);
+        this.ufoController.ufo.add(ufoLight);
+
+        // Scale it properly (smaller)
+        this.ufoController.ufo.scale.setScalar(1);
+
+        // Position immediately at default starting position (match player spawn)
+        // Player spawns at x: -8.5, z: 0, so UFO should be ahead on same lane
+        this.ufoController.ufo.position.set(-8.5, 30, 200);
+        this.ufoController.ufo.visible = true;
+        console.log('UFO positioned at start:', this.ufoController.ufo.position);
+        console.log('UFO in scene?', this.scene.children.includes(this.ufoController.ufo));
+        console.log('UFO visible?', this.ufoController.ufo.visible);
+        console.log('UFO scale:', this.ufoController.ufo.scale);
+      } else {
+        // Fallback: create UFO if intro didn't provide one
+        this.ufoController.createFallbackUFO();
+        this.ufo = this.ufoController.ufo;
+        console.warn('Intro UFO not found, using fallback');
+      }
+
       // Show player selection on top of desert
       this.playerSelection.showSelectionUI();
 
@@ -1175,36 +1280,7 @@ export class MotosaiGame {
         // Hide selection UI
         this.playerSelection.hideSelectionUI();
 
-        // Initialize UFOController with the UFO from intro
-        this.ufoController = new UFOController(this.scene);
-
-        if (this.ufo) {
-          // Use UFO from intro
-          this.ufoController.ufo = this.ufo;
-          console.log('UFOController initialized with intro UFO');
-        } else {
-          // Fallback: create UFO if intro didn't provide one
-          this.ufoController.createFallbackUFO();
-          this.ufo = this.ufoController.ufo;
-          console.warn('Intro UFO not found, using fallback');
-        }
-
-        // Add the effects
-        this.ufoController.addGlow();
-        this.ufoController.addParticleTrail();
-
-        // Add point light
-        const ufoLight = new THREE.PointLight(0x00ffff, 2, 50);
-        ufoLight.position.set(0, 0, 0);
-        this.ufoController.ufo.add(ufoLight);
-
-        // Scale it properly
-        this.ufoController.ufo.scale.setScalar(2);
-
-        // Position immediately at default starting position (player starts at 0,0,0)
-        this.ufoController.ufo.position.set(0, 30, 120);
-        this.ufoController.ufo.visible = true;
-        console.log('UFO positioned at start:', this.ufoController.ufo.position);
+        // UFO is already set up and visible - just continue with game
         console.log('UFO visible?', this.ufoController.ufo.visible);
         console.log('UFO in scene?', this.scene.children.includes(this.ufoController.ufo));
 
@@ -2626,7 +2702,7 @@ export class MotosaiGame {
       this.ufo.position.set(
         this.physics.position.x,
         30,  // Higher up for more floaty feel
-        this.physics.position.z + 120  // Further ahead
+        this.physics.position.z + 200  // Further ahead
       );
       this.ufo.rotation.set(0, 0, 0);
       console.log('UFO positioned at:', this.ufo.position, 'Player at:', this.physics.position);
@@ -3235,6 +3311,7 @@ export class MotosaiGame {
     } else if (!this.gameStarted) {
       // During intro/selection, just render the scene
       // The intro animation and player selection handle their own updates
+      // Don't update UFO yet - it's positioned statically until game starts
     }
 
     // Update heat haze time uniforms

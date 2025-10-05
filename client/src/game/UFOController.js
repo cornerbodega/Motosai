@@ -6,9 +6,9 @@ export class UFOController {
   constructor(scene) {
     this.scene = scene;
     this.ufo = null;
-    this.targetDistance = 120; // meters ahead of player (matches starting position)
-    this.minDistance = 100;
-    this.maxDistance = 140;
+    this.targetDistance = 200; // meters ahead of player (matches starting position)
+    this.minDistance = 180;
+    this.maxDistance = 220;
 
     // Movement
     this.baseSpeed = 0;
@@ -18,6 +18,7 @@ export class UFOController {
     this.wobbleTime = 0; // For additional wobble
     this.dartTime = 0; // For sudden dart movements
     this.nextDartTime = Math.random() * 3 + 2; // Random time until next dart
+    this.dartDirection = 0; // Initialize dart direction to avoid NaN
 
     // Visual effects
     this.lights = [];
@@ -201,6 +202,16 @@ export class UFOController {
       return;
     }
 
+    // Log first update call
+    if (!this.hasLoggedFirstUpdate) {
+      console.log('UFO first update - Before:', {
+        ufoPos: this.ufo.position,
+        playerPos: playerPosition,
+        playerSpeed: playerSpeed
+      });
+      this.hasLoggedFirstUpdate = true;
+    }
+
     // Calculate distance to player (Z axis is forward in Motosai)
     const playerZ = playerPosition.z;
     const currentDistance = this.ufo.position.z - playerZ; // How far ahead UFO is (positive = ahead)
@@ -228,10 +239,13 @@ export class UFOController {
     const slowFactor = 1 - speedFactor; // Inverse for slow-speed behaviors
 
     // At high speeds: tighter, more stable, angled forward
-    // At low speeds: wider spirals, more playful, floaty
+    // At low speeds: smaller spirals to stay visible
     this.spiralAngle += deltaTime * (0.5 + slowFactor * 0.8); // More spiraling
 
-    const baseRadius = 15 + slowFactor * 20; // 15-35m radius (much wider spirals)
+    // Start with tiny radius at very low speeds, increase with speed
+    const minSpeed = 10; // m/s (~22 mph)
+    const speedRatio = Math.min(playerSpeed / minSpeed, 1); // 0 at stop, 1 at minSpeed+
+    const baseRadius = 5 + speedRatio * 10; // 5-15m radius (much tighter at low speed)
     const baseHeight = 8 + slowFactor * 12; // 8-20m height (more vertical motion)
 
     // Wobble only at slower speeds - more gentle and floaty
@@ -263,6 +277,18 @@ export class UFOController {
     // Apply all motion (higher base altitude for floaty feel)
     this.ufo.position.x = playerPosition.x + spiralX;
     this.ufo.position.y = 35 + spiralY;
+
+    // Log first position update
+    if (this.hasLoggedFirstUpdate && !this.hasLoggedFirstPosition) {
+      console.log('UFO first update - After:', {
+        spiralX: spiralX,
+        spiralRadius: spiralRadius,
+        finalX: this.ufo.position.x,
+        finalY: this.ufo.position.y,
+        finalZ: this.ufo.position.z
+      });
+      this.hasLoggedFirstPosition = true;
+    }
 
     // Faster rotation at high speed (aggressive forward motion)
     this.ufo.rotation.y += deltaTime * (0.4 + speedFactor * 0.8);

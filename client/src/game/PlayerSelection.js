@@ -33,7 +33,9 @@ export class PlayerSelection {
         id: "default",
         name: "Street Rider",
         emoji: "🏍️",
-        color: 0xff0000,
+        color: 0xff0000, // Bold red tank
+        seatColor: 0x000000, // Black seat accent
+        tireColor: 0xcc0000, // Deep red tires
         speed: 100,
         acceleration: 1.0,
         handling: 1.0,
@@ -45,79 +47,93 @@ export class PlayerSelection {
         id: "dragon",
         name: "Dragon Fury",
         emoji: "🐉",
-        color: 0x00ff00,
+        color: 0x00cc00, // Rich green tank
+        seatColor: 0x000000, // Black seat accent
+        tireColor: 0x009900, // Deep green tires
         speed: 120,
         acceleration: 1.2,
         handling: 0.9,
-        unlocked: true, // All bikes unlocked - powerup system removed
-        unlockRequirement: { powerup: "dragon", count: 2 }, // Reduced from 5
+        unlocked: true,
+        unlockRequirement: { powerup: "dragon", count: 2 },
         modelPath: "/models/motor1.glb",
       },
       {
         id: "rocket",
         name: "Rocket Blast",
         emoji: "🚀",
-        color: 0x0099ff,
+        color: 0x0088ff, // Vibrant blue tank
+        seatColor: 0x000000, // Black seat accent
+        tireColor: 0x0066cc, // Deep blue tires
         speed: 150,
         acceleration: 1.5,
         handling: 0.8,
-        unlocked: true, // All bikes unlocked - powerup system removed
-        unlockRequirement: { powerup: "rocket", count: 3 }, // Reduced from 10
+        unlocked: true,
+        unlockRequirement: { powerup: "rocket", count: 3 },
         modelPath: "/models/motor1.glb",
       },
       {
         id: "star",
         name: "Star Cruiser",
         emoji: "⭐",
-        color: 0xffff00,
+        color: 0xffd700, // Gold tank
+        seatColor: 0x000000, // Black seat accent
+        tireColor: 0xccaa00, // Dark gold tires
         speed: 110,
         acceleration: 1.1,
         handling: 1.2,
-        unlocked: true, // All bikes unlocked - powerup system removed
-        unlockRequirement: { powerup: "star", count: 2 }, // Reduced from 7
+        unlocked: true,
+        unlockRequirement: { powerup: "star", count: 2 },
         modelPath: "/models/motor1.glb",
       },
       {
         id: "fire",
         name: "Inferno",
         emoji: "🔥",
-        color: 0xff6600,
+        color: 0xff6600, // Blazing orange tank
+        seatColor: 0x000000, // Black seat accent
+        tireColor: 0xcc5200, // Deep orange tires
         speed: 130,
         acceleration: 1.3,
         handling: 1.0,
-        unlocked: true, // All bikes unlocked - powerup system removed
-        unlockRequirement: { powerup: "fire", count: 3 }, // Reduced from 8
+        unlocked: true,
+        unlockRequirement: { powerup: "fire", count: 3 },
         modelPath: "/models/motor1.glb",
       },
       {
         id: "lightning",
         name: "Thunder Strike",
         emoji: "⚡",
-        color: 0x9900ff,
+        color: 0x8800ff, // Rich purple tank
+        seatColor: 0x000000, // Black seat accent
+        tireColor: 0x6600cc, // Deep purple tires
         speed: 140,
         acceleration: 1.4,
         handling: 1.1,
-        unlocked: true, // All bikes unlocked - powerup system removed
-        unlockRequirement: { powerup: "lightning", count: 4 }, // Reduced from 12
+        unlocked: true,
+        unlockRequirement: { powerup: "lightning", count: 4 },
         modelPath: "/models/motor1.glb",
       },
       {
         id: "skull",
         name: "Death Rider",
         emoji: "💀",
-        color: 0x333333,
+        color: 0x111111, // Nearly black tank
+        seatColor: 0x000000, // Pure black seat
+        tireColor: 0x000000, // Pure black tires
         speed: 125,
         acceleration: 1.2,
         handling: 1.3,
-        unlocked: true, // All bikes unlocked - powerup system removed
-        unlockRequirement: { powerup: "skull", count: 5 }, // Reduced from 15
+        unlocked: true,
+        unlockRequirement: { powerup: "skull", count: 5 },
         modelPath: "/models/motor1.glb",
       },
       {
         id: "rainbow",
         name: "Rainbow Dash",
         emoji: "🌈",
-        color: 0xff00ff,
+        color: 0xff1493, // Hot pink tank
+        seatColor: 0x000000, // Black seat accent
+        tireColor: 0xcc0077, // Deep pink tires
         speed: 135,
         acceleration: 1.3,
         handling: 1.4,
@@ -422,22 +438,31 @@ export class PlayerSelection {
       // Apply preserved rotation to the pivot so swapping keeps the spin
       pivot.rotation.y = preservedRotationY;
 
-      // Ensure meshes cast/receive shadows and apply bike color
-      model.traverse((c) => {
-        if (c.isMesh && c.material) {
-          c.castShadow = true;
-          c.receiveShadow = true;
-          if (
-            this.selectedBike &&
-            this.selectedBike.color &&
-            c.material.color
-          ) {
-            try {
-              c.material.color.setHex(this.selectedBike.color);
-            } catch (e) {}
+      // Apply bike color using shared function from MotosaiGame
+      if (this.selectedBike) {
+        // Import MotosaiGame dynamically to avoid circular dependency
+        import('./MotosaiGame.js').then(({ MotosaiGame }) => {
+          MotosaiGame.applyBikeColor(model, this.selectedBike, false);
+        }).catch(e => {
+          console.warn('Could not apply advanced bike coloring:', e);
+          // Fallback to simple coloring
+          model.traverse((c) => {
+            if (c.isMesh && c.material && c.material.color) {
+              try {
+                c.material.color.setHex(this.selectedBike.color);
+              } catch (e) {}
+            }
+          });
+        });
+      } else {
+        // Just set shadows if no bike selected
+        model.traverse((c) => {
+          if (c.isMesh) {
+            c.castShadow = true;
+            c.receiveShadow = true;
           }
-        }
-      });
+        });
+      }
 
       // Add pivot to the main scene
       this.scene.add(pivot);
@@ -485,22 +510,31 @@ export class PlayerSelection {
           // Apply preserved rotation to the pivot so swapping keeps the spin
           pivot.rotation.y = preservedRotationY;
 
-          // Ensure meshes cast/receive shadows and apply bike color
-          model.traverse((c) => {
-            if (c.isMesh && c.material) {
-              c.castShadow = true;
-              c.receiveShadow = true;
-              if (
-                this.selectedBike &&
-                this.selectedBike.color &&
-                c.material.color
-              ) {
-                try {
-                  c.material.color.setHex(this.selectedBike.color);
-                } catch (e) {}
+          // Apply bike color using shared function from MotosaiGame
+          if (this.selectedBike) {
+            // Import MotosaiGame dynamically to avoid circular dependency
+            import('./MotosaiGame.js').then(({ MotosaiGame }) => {
+              MotosaiGame.applyBikeColor(model, this.selectedBike, false);
+            }).catch(e => {
+              console.warn('Could not apply advanced bike coloring:', e);
+              // Fallback to simple coloring
+              model.traverse((c) => {
+                if (c.isMesh && c.material && c.material.color) {
+                  try {
+                    c.material.color.setHex(this.selectedBike.color);
+                  } catch (e) {}
+                }
+              });
+            });
+          } else {
+            // Just set shadows if no bike selected
+            model.traverse((c) => {
+              if (c.isMesh) {
+                c.castShadow = true;
+                c.receiveShadow = true;
               }
-            }
-          });
+            });
+          }
 
           // Add pivot to the main scene
           this.scene.add(pivot);

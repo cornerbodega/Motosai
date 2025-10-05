@@ -17,6 +17,7 @@ export class UFORaceIntro {
     this.atmosphereModel = null;
     this.ufoModel = null;
     this.text3D = null;
+    this.subtitle3D = null;
     this.starField = null;
     this.lights = [];
 
@@ -92,11 +93,11 @@ export class UFORaceIntro {
     });
 
     this.earthModel = new THREE.Mesh(earthGeometry, earthMaterial);
-    this.earthModel.position.set(-1, -10, 0);
+    this.earthModel.position.set(0, -35, -15); // Centered left-right
     this.earthModel.rotation.y = Math.PI / 4;
     this.earthModel.rotation.x = Math.PI / 4;
     this.earthModel.rotation.z = Math.PI / 2;
-    this.earthModel.scale.set(10, 10, 10);
+    this.earthModel.scale.set(25, 25, 25); // Bigger (was 10)
     this.scene.add(this.earthModel);
 
     // Create atmosphere layer - match RhymeWithUs exactly
@@ -110,11 +111,11 @@ export class UFORaceIntro {
     });
 
     this.atmosphereModel = new THREE.Mesh(atmosphereGeometry, atmosphereMaterial);
-    this.atmosphereModel.position.set(-1, -10, 0);
+    this.atmosphereModel.position.set(0, -35, -15); // Match Earth position
     this.atmosphereModel.rotation.y = Math.PI / 4;
     this.atmosphereModel.rotation.x = Math.PI / 4;
     this.atmosphereModel.rotation.z = Math.PI / 2;
-    this.atmosphereModel.scale.set(11, 11, 11);
+    this.atmosphereModel.scale.set(27, 27, 27); // Slightly bigger than Earth (was 11)
     this.scene.add(this.atmosphereModel);
   }
 
@@ -133,9 +134,33 @@ export class UFORaceIntro {
           // Calculate size and scale appropriately
           const size = box.getSize(new THREE.Vector3());
           const maxDim = Math.max(size.x, size.y, size.z);
-          const scale = 4 / maxDim; // Target size of 4 units (bigger)
+          const scale = 1 / maxDim; // Target size of 1 unit (even smaller)
           this.ufoModel.scale.setScalar(scale);
           this.ufoModel.userData.baseScale = scale; // Store for animation
+
+          // Apply colorful metallic materials to UFO
+          const colors = [
+            { color: 0x00ffff, emissive: 0x00ffff }, // Cyan
+            { color: 0xff00ff, emissive: 0xff00ff }, // Magenta
+            { color: 0xffaa00, emissive: 0xffaa00 }, // Orange
+            { color: 0x00ff88, emissive: 0x00ff88 }, // Green-cyan
+            { color: 0xaa88ff, emissive: 0xaa88ff }, // Purple
+          ];
+
+          let colorIndex = 0;
+          this.ufoModel.traverse((child) => {
+            if (child.isMesh) {
+              const colorData = colors[colorIndex % colors.length];
+              child.material = new THREE.MeshStandardMaterial({
+                color: colorData.color,
+                metalness: 0.9,
+                roughness: 0.1,
+                emissive: colorData.emissive,
+                emissiveIntensity: 0.5
+              });
+              colorIndex++;
+            }
+          });
 
           // Position for intro - visible UFO position
           this.ufoModel.position.set(0, -1, 6);
@@ -232,10 +257,11 @@ export class UFORaceIntro {
   async create3DText() {
     return new Promise((resolve) => {
       this.fontLoader.load('/fonts/4.json', (font) => {
-        const textGeometry = new TextGeometry('Chase the UFO', {
+        // Main title text
+        const titleGeometry = new TextGeometry('MOTOSAI', {
           font: font,
-          size: 0.6,
-          height: 0.15,
+          size: 0.7,
+          height: 0.2,
           curveSegments: 12,
           bevelEnabled: true,
           bevelThickness: 0.03,
@@ -243,7 +269,7 @@ export class UFORaceIntro {
           bevelOffset: 0,
           bevelSegments: 5
         });
-        textGeometry.center();
+        titleGeometry.center();
 
         const textMaterial = new THREE.MeshStandardMaterial({
           color: 0x00ffff,
@@ -253,9 +279,36 @@ export class UFORaceIntro {
           emissiveIntensity: 0.4
         });
 
-        this.text3D = new THREE.Mesh(textGeometry, textMaterial);
-        this.text3D.position.set(0, 3, 0);
+        this.text3D = new THREE.Mesh(titleGeometry, textMaterial);
+        this.text3D.position.set(0, 3.5, 0);
         this.scene.add(this.text3D);
+
+        // Subtitle text
+        const subtitleGeometry = new TextGeometry('Level: Death Valley, USA', {
+          font: font,
+          size: 0.3,
+          height: 0.1,
+          curveSegments: 12,
+          bevelEnabled: true,
+          bevelThickness: 0.02,
+          bevelSize: 0.01,
+          bevelOffset: 0,
+          bevelSegments: 5
+        });
+        subtitleGeometry.center();
+
+        const subtitleMaterial = new THREE.MeshStandardMaterial({
+          color: 0xffaa00,
+          metalness: 0.6,
+          roughness: 0.3,
+          emissive: 0xffaa00,
+          emissiveIntensity: 0.3
+        });
+
+        this.subtitle3D = new THREE.Mesh(subtitleGeometry, subtitleMaterial);
+        this.subtitle3D.position.set(0, 2.5, 0);
+        this.scene.add(this.subtitle3D);
+
         resolve();
       }, undefined, (error) => {
         console.warn("Font failed to load:", error);
@@ -352,14 +405,25 @@ export class UFORaceIntro {
         const currentScale = this.ufoStartScale + (targetScale - this.ufoStartScale) * scaleProgress;
         this.ufoModel.scale.setScalar(currentScale);
 
-        // Move toward Earth position (-1, -10, 0)
+        // Move toward Earth position (-1, -10, 0) with spiral motion
         const targetX = -1;
         const targetY = -10;
         const targetZ = 0;
 
-        this.ufoModel.position.x = this.ufoStartPosition.x + (targetX - this.ufoStartPosition.x) * moveProgress;
-        this.ufoModel.position.y = this.ufoStartPosition.y + (targetY - this.ufoStartPosition.y) * moveProgress;
-        this.ufoModel.position.z = this.ufoStartPosition.z + (targetZ - this.ufoStartPosition.z) * moveProgress;
+        // Base linear interpolation
+        const baseX = this.ufoStartPosition.x + (targetX - this.ufoStartPosition.x) * moveProgress;
+        const baseY = this.ufoStartPosition.y + (targetY - this.ufoStartPosition.y) * moveProgress;
+        const baseZ = this.ufoStartPosition.z + (targetZ - this.ufoStartPosition.z) * moveProgress;
+
+        // Add subtle spiral motion - decreasing radius as it descends
+        const spiralRadius = 1.2 * (1 - moveProgress); // Radius shrinks from 1.2 to 0
+        const spiralAngle = moveProgress * Math.PI * 3; // 1.5 rotations
+        const spiralX = Math.cos(spiralAngle) * spiralRadius;
+        const spiralZ = Math.sin(spiralAngle) * spiralRadius;
+
+        this.ufoModel.position.x = baseX + spiralX;
+        this.ufoModel.position.y = baseY;
+        this.ufoModel.position.z = baseZ + spiralZ;
 
         // Spin faster while transitioning
         this.ufoModel.rotation.y += 0.05;
@@ -372,18 +436,28 @@ export class UFORaceIntro {
           }
         }
       } else {
-        // Gentle bobbing motion
-        this.ufoModel.position.y = -1 + Math.sin(elapsed * 0.001) * 0.2;
-        // Slow rotation
-        this.ufoModel.rotation.y += 0.005;
+        // Realistic floating motion - figure-8 pattern
+        const floatTime = elapsed * 0.0008; // Slower, more graceful
+
+        // Vertical bobbing with multiple frequencies for organic feel
+        const bob1 = Math.sin(floatTime * 1.3) * 0.15;
+        const bob2 = Math.sin(floatTime * 2.7) * 0.08;
+        this.ufoModel.position.y = -1 + bob1 + bob2;
+
+        // Horizontal figure-8 drift
+        this.ufoModel.position.x = Math.sin(floatTime) * 0.3;
+        this.ufoModel.position.z = 6 + Math.sin(floatTime * 2) * 0.2;
+
+        // Gentle tilting/wobbling
+        this.ufoModel.rotation.x = -0.2 + Math.sin(floatTime * 1.5) * 0.08;
+        this.ufoModel.rotation.z = Math.sin(floatTime * 0.8) * 0.05;
+
+        // Slow rotation with slight variation
+        this.ufoModel.rotation.y += 0.003 + Math.sin(floatTime * 0.5) * 0.002;
       }
     }
 
-    // Pulse 3D text
-    if (this.text3D) {
-      const pulse = 1 + Math.sin(elapsed * 0.004) * 0.08;
-      this.text3D.scale.set(pulse, pulse, pulse);
-    }
+    // Static text - no pulsing animation
 
     // Animate lights for cool effect
     if (this.lights[2]) { // Blue light
@@ -593,6 +667,17 @@ export class UFORaceIntro {
       }
       this.scene.remove(this.text3D);
       this.text3D = null;
+    }
+
+    // Clean up subtitle
+    if (this.subtitle3D) {
+      if (this.subtitle3D.geometry) this.subtitle3D.geometry.dispose();
+      if (this.subtitle3D.material) {
+        if (this.subtitle3D.material.matcap) this.subtitle3D.material.matcap.dispose();
+        this.subtitle3D.material.dispose();
+      }
+      this.scene.remove(this.subtitle3D);
+      this.subtitle3D = null;
     }
 
     // Clean up star field
