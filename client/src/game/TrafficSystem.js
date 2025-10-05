@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { ROAD_CONSTANTS } from './RoadConstants.js';
 import { TrafficIDM } from './TrafficSystemIDM.js';
 import { getMaterialManager } from '../utils/MaterialManager.js';
@@ -20,8 +21,32 @@ export class TrafficSystem {
 
     // Use centralized material manager
     this.materialManager = getMaterialManager();
-    
-    // Create shared geometry ONCE for all vehicles to prevent memory leaks
+
+    // Sedan model loading
+    this.sedanModel = null;
+    this.sedanModelLoaded = false;
+    this.loadSedanModel();
+
+    // Color palette for cars (will be applied to the sedan body material)
+    this.carColors = [
+      0xff0000, // Red
+      0x0000ff, // Blue
+      0xffffff, // White
+      0xffff00, // Yellow
+      0x00ff00, // Green
+      0xff8800, // Orange
+      0x8888ff, // Light blue
+      0xcccccc, // Silver
+      0x000000, // Black
+      0x660000, // Dark red
+      0x006600, // Dark green
+      0x000066  // Dark blue
+    ];
+
+    // Shared materials cache for sedan vehicles - one set per color
+    this.sedanMaterialCache = new Map();
+
+    // Create shared geometry ONCE for all vehicles to prevent memory leaks (fallback)
     // Using unit cubes to scale per vehicle type
     this.sharedGeometry = {
       body: new THREE.BoxGeometry(1, 1, 1),
@@ -111,11 +136,24 @@ export class TrafficSystem {
   disposeVehicleMesh(mesh) {
     if (!mesh) return;
 
-    // Properly dispose of any cloned materials in children
+    // For new cached sedan vehicles - materials are shared per color, don't dispose them!
+    // They'll be disposed when the entire TrafficSystem is disposed
+
+    // For old sedan vehicles with materialsToDispose (shouldn't exist anymore but handle legacy)
+    if (mesh.userData.materialsToDispose) {
+      mesh.userData.materialsToDispose.forEach(material => {
+        if (material && material.dispose) {
+          material.dispose();
+        }
+      });
+      mesh.userData.materialsToDispose = [];
+    }
+
+    // For fallback geometry vehicles, dispose of any cloned materials
     mesh.traverse(child => {
       if (child.isMesh && child.material) {
         // Check if this material is not from the shared pool
-        const isSharedMaterial = Object.values(this.vehicleMaterials).some(matArray => {
+        const isSharedMaterial = this.vehicleMaterials && Object.values(this.vehicleMaterials).some(matArray => {
           if (Array.isArray(matArray)) {
             return matArray.includes(child.material);
           }
@@ -152,8 +190,40 @@ export class TrafficSystem {
     return Math.min(dynamicDistance, 400);
   }
   
+  loadSedanModel() {
+    const loader = new GLTFLoader();
+    loader.load(
+      '/models/sedan.glb',
+      (gltf) => {
+        this.sedanModel = gltf.scene;
+        this.sedanModelLoaded = true;
+        console.log('Sedan model loaded successfully');
+
+        // Log the model structure for debugging
+        const meshes = [];
+        this.sedanModel.traverse((child) => {
+          if (child.isMesh) {
+            meshes.push({
+              name: child.name,
+              material: child.material ? child.material.name || 'unnamed' : 'none',
+              materialColor: child.material && child.material.color ? child.material.color.getHexString() : 'none'
+            });
+          }
+        });
+        // Uncomment for debugging:
+        // console.log('Sedan meshes:', meshes);
+        // console.log('Mesh names:', meshes.map(m => m.name).join(', '));
+      },
+      undefined,
+      (error) => {
+        console.error('Failed to load sedan model, using fallback geometry:', error);
+        this.sedanModelLoaded = false;
+      }
+    );
+  }
+
   initMaterials() {
-    // Use materials from the MaterialManager pool
+    // Use materials from the MaterialManager pool (fallback only)
     const vehicleColors = [
       0xff0000, // Red
       0x0000ff, // Blue
@@ -321,32 +391,139 @@ export class TrafficSystem {
   // Kept for backwards compatibility if needed
   
   createVehicleMesh(type) {
+    if (this.sedanModelLoaded && this.sedanModel) {
+      return this.createSedanVehicle(type);
+    } else {
+      // Fallback to original geometry-based vehicles
+      return this.createGeometryVehicle(type);
+    }
+  }
+
+  createSedanVehicle(type) {
+    // Clone the sedan model with deep clone
+    const vehicle = this.sedanModel.clone(true);
+
+    // Pick random color for this vehicle
+    const colorIndex = Math.floor(Math.random() * this.carColors.length);
+    const colorValue = this.carColors[colorIndex];
+
+    // Check if we have cached materials for this color
+    let colorMaterials = this.sedanMaterialCache.get(colorValue);
+    if (!colorMaterials) {
+      // First vehicle with this color - create and cache materials
+      colorMaterials = new Map();
+      const randomColor = new THREE.Color(colorValue);
+
+      // Clone all unique materials from the model once for this color
+      this.sedanModel.traverse((child) => {
+        if (child.isMesh && child.material && !colorMaterials.has(child.material)) {
+          const clonedMat = child.material.clone();
+
+          // Apply color to body parts
+          const meshName = child.name.toLowerCase();
+          if (meshName.includes('body') || meshName.includes('hood') ||
+              meshName.includes('door') || meshName.includes('roof') ||
+              meshName.includes('trunk') || meshName.includes('fender') ||
+              meshName.includes('panel') || meshName.includes('bumper') ||
+              meshName.includes('car') || meshName.includes('paint') ||
+              (!meshName.includes('wheel') && !meshName.includes('glass') &&
+               !meshName.includes('window') && !meshName.includes('light') &&
+               !meshName.includes('tire') && !meshName.includes('rim'))) {
+            clonedMat.color.copy(randomColor);
+          }
+
+          colorMaterials.set(child.material, clonedMat);
+        }
+      });
+
+      this.sedanMaterialCache.set(colorValue, colorMaterials);
+    }
+
+    // Track brake lights and wheels for animation
+    let brakeLight1 = null;
+    let brakeLight2 = null;
+    const wheels = [];
+
+    // Apply cached materials to the cloned vehicle
+    vehicle.traverse((child) => {
+      const childName = child.name.toLowerCase();
+
+      // Track wheel groups/objects (not just meshes)
+      if (childName.includes('wheel')) {
+        wheels.push(child);
+      }
+
+      if (child.isMesh && child.material) {
+        // Find the original material this came from
+        const originalMaterial = child.material;
+
+        // Replace with cached colored material
+        if (colorMaterials.has(originalMaterial)) {
+          child.material = colorMaterials.get(originalMaterial);
+        }
+
+        const meshName = child.name.toLowerCase();
+
+        // Track brake lights
+        if (meshName.includes('brake') || meshName.includes('tail') ||
+            (meshName.includes('light') && meshName.includes('rear'))) {
+          if (!brakeLight1) {
+            brakeLight1 = child;
+          } else if (!brakeLight2) {
+            brakeLight2 = child;
+          }
+        }
+
+        child.castShadow = false; // Disable shadows for performance
+      }
+    });
+
+    // Scale to match vehicle type dimensions
+    const scaleX = type.width / 1.8;  // Base width ~1.8m
+    const scaleY = type.height / 1.4;  // Base height ~1.4m
+    const scaleZ = type.length / 4.5;  // Base length ~4.5m
+    vehicle.scale.set(scaleX, scaleY, scaleZ);
+
+    // Store brake light and wheel references for animation (no materials to dispose - they're shared!)
+    vehicle.userData = {
+      type: type.type,
+      colorValue: colorValue, // Store color for reference
+      brake1: brakeLight1,
+      brake2: brakeLight2,
+      wheels: wheels
+    };
+
+
+    return vehicle;
+  }
+
+  createGeometryVehicle(type) {
     const vehicle = new THREE.Group();
-    
+
     // Random color - reuse existing materials instead of creating new ones
     const bodyMat = this.vehicleMaterials.car[
       Math.floor(Math.random() * this.vehicleMaterials.car.length)
     ];
-    
+
     // Main body - REUSE shared geometry and scale to vehicle type
     const body = new THREE.Mesh(this.sharedGeometry.body, bodyMat);
     body.scale.set(type.width, type.height * 0.6, type.length * 0.7);
     body.position.y = type.height * 0.3;
     body.castShadow = false; // Disable shadows for performance
     vehicle.add(body);
-    
+
     // Cabin - REUSE shared geometry and scale to vehicle type
     const cabin = new THREE.Mesh(this.sharedGeometry.cabin, bodyMat);
     cabin.scale.set(type.width * 0.9, type.height * 0.35, type.length * 0.4);
     cabin.position.set(0, type.height * 0.68, type.length * 0.1);
     vehicle.add(cabin);
-    
+
     // Windows - REUSE shared geometry and scale to vehicle type
     const windows = new THREE.Mesh(this.sharedGeometry.window, this.vehicleMaterials.glass);
     windows.scale.set(type.width * 0.85, type.height * 0.35, type.length * 0.38);
     windows.position.set(0, type.height * 0.72, type.length * 0.1);
     vehicle.add(windows);
-    
+
     // Wheels - REUSE shared geometry with scaling
     const wheelPositions = [
       { x: type.width * 0.4, z: type.length * 0.3 },
@@ -354,38 +531,38 @@ export class TrafficSystem {
       { x: type.width * 0.4, z: -type.length * 0.3 },
       { x: -type.width * 0.4, z: -type.length * 0.3 }
     ];
-    
+
     wheelPositions.forEach(pos => {
       const wheel = new THREE.Mesh(this.sharedGeometry.wheel, this.vehicleMaterials.wheel);
       wheel.scale.set(0.2, 0.4, 0.4);
       wheel.position.set(pos.x, 0.2, pos.z);
       vehicle.add(wheel);
     });
-    
+
     // Headlights - REUSE shared geometry with scaling
     const headlight1 = new THREE.Mesh(this.sharedGeometry.light, this.vehicleMaterials.lights);
     headlight1.scale.set(0.2, 0.2, 0.1);
     headlight1.position.set(type.width * 0.3, type.height * 0.3, type.length * 0.5);
     vehicle.add(headlight1);
-    
+
     const headlight2 = new THREE.Mesh(this.sharedGeometry.light, this.vehicleMaterials.lights);
     headlight2.scale.set(0.2, 0.2, 0.1);
     headlight2.position.set(-type.width * 0.3, type.height * 0.3, type.length * 0.5);
     vehicle.add(headlight2);
-    
+
     // Brake lights - REUSE shared geometry with scaling, positioned closer to body
     const brakeLight1 = new THREE.Mesh(this.sharedGeometry.light, this.vehicleMaterials.brake);
     brakeLight1.scale.set(0.2, 0.2, 0.1);
     brakeLight1.position.set(type.width * 0.3, type.height * 0.3, -type.length * 0.35); // Moved from 0.5 to 0.35
     vehicle.add(brakeLight1);
-    
+
     const brakeLight2 = new THREE.Mesh(this.sharedGeometry.light, this.vehicleMaterials.brake);
     brakeLight2.scale.set(0.2, 0.2, 0.1);
     brakeLight2.position.set(-type.width * 0.3, type.height * 0.3, -type.length * 0.35); // Moved from 0.5 to 0.35
     vehicle.add(brakeLight2);
-    
+
     vehicle.userData = { type: type.type, brake1: brakeLight1, brake2: brakeLight2 };
-    
+
     return vehicle;
   }
   
@@ -577,7 +754,21 @@ export class TrafficSystem {
     
     // Update position
     vehicle.position.z += vehicle.velocity.z * deltaTime;
-    
+
+    // Rotate wheels based on speed (for sedan models)
+    if (vehicle.mesh.userData.wheels && vehicle.mesh.userData.wheels.length > 0) {
+      // Calculate wheel rotation based on distance traveled
+      // Assuming average wheel diameter of 0.65m (circumference = 2.04m)
+      const wheelCircumference = 2.04;
+      const distanceTraveled = vehicle.velocity.z * deltaTime;
+      const rotationAngle = (distanceTraveled / wheelCircumference) * Math.PI * 2;
+
+      vehicle.mesh.userData.wheels.forEach(wheel => {
+        // Rotate around X axis for forward rolling motion
+        wheel.rotation.x += rotationAngle;
+      });
+    }
+
     // Check for blood contact and create continuous tire tracks
     if (this.bloodTrackSystem) {
       const bloodContact = this.bloodTrackSystem.checkVehicleBloodContact(vehicle.position, vehicle.width);
@@ -1057,6 +1248,35 @@ export class TrafficSystem {
 
     // Clear vehicles array
     this.vehicles = [];
+
+    // Dispose sedan material cache
+    if (this.sedanMaterialCache) {
+      this.sedanMaterialCache.forEach(colorMaterials => {
+        colorMaterials.forEach(material => {
+          if (material && material.dispose) {
+            material.dispose();
+          }
+        });
+      });
+      this.sedanMaterialCache.clear();
+    }
+
+    // Dispose sedan model and its materials
+    if (this.sedanModel) {
+      this.sedanModel.traverse(child => {
+        if (child.isMesh) {
+          if (child.geometry) child.geometry.dispose();
+          if (child.material) {
+            if (Array.isArray(child.material)) {
+              child.material.forEach(mat => mat.dispose());
+            } else {
+              child.material.dispose();
+            }
+          }
+        }
+      });
+      this.sedanModel = null;
+    }
 
     // Dispose shared geometries (they were created in constructor)
     if (this.sharedGeometry) {
