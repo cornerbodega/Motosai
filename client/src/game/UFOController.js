@@ -137,8 +137,8 @@ export class UFOController {
     // Add particle trail
     this.addParticleTrail();
 
-    // Add point light
-    const ufoLight = new THREE.PointLight(0x00ffff, 2, 50);
+    // Add bright point light around UFO
+    const ufoLight = new THREE.PointLight(0xffffff, 100, 100);
     ufoLight.position.set(0, 0, 0);
     this.ufo.add(ufoLight);
   }
@@ -181,10 +181,10 @@ export class UFOController {
     geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
 
     const material = new THREE.PointsMaterial({
-      color: 0x00ffff,
-      size: 0.5,
+      color: 0xffffff,
+      size: 2.0,
       transparent: true,
-      opacity: 0.6,
+      opacity: 0.9,
       blending: THREE.AdditiveBlending
     });
 

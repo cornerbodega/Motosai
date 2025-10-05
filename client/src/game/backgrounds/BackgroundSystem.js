@@ -219,7 +219,7 @@ export class BackgroundSystem {
     console.log('Creating sun and moon...');
 
     // Create the Sun - bright glowing sphere
-    const sunGeo = new THREE.SphereGeometry(30, 32, 32);
+    const sunGeo = new THREE.SphereGeometry(7.5, 32, 32);
 
     // Sun shader for realistic glow
     const sunMaterial = new THREE.ShaderMaterial({
@@ -260,7 +260,7 @@ export class BackgroundSystem {
     this.sun.frustumCulled = false;
 
     // Add outer glow using a slightly larger sphere with additive blending
-    const sunGlowGeo = new THREE.SphereGeometry(50, 32, 32);
+    const sunGlowGeo = new THREE.SphereGeometry(12.5, 32, 32);
     const sunGlowMaterial = new THREE.ShaderMaterial({
       uniforms: {
         glowColor: { value: new THREE.Color(0xFFDD88) },

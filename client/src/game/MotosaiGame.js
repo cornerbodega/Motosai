@@ -1276,10 +1276,17 @@ export class MotosaiGame {
         this.ufoController.addGlow();
         this.ufoController.addParticleTrail();
 
-        // Add point light
-        const ufoLight = new THREE.PointLight(0x00ffff, 2, 50);
+        // Add bright point light around UFO
+        const ufoLight = new THREE.PointLight(0xffffff, 100, 500);
         ufoLight.position.set(0, 0, 0);
+        ufoLight.name = 'ufoMainLight';
         this.ufoController.ufo.add(ufoLight);
+        console.log('UFO light added:', {
+          intensity: ufoLight.intensity,
+          color: ufoLight.color,
+          distance: ufoLight.distance,
+          ufoChildren: this.ufoController.ufo.children.length
+        });
 
         // Scale it properly (smaller)
         this.ufoController.ufo.scale.setScalar(1);
@@ -2284,9 +2291,9 @@ export class MotosaiGame {
     // Determine which celestial body should be visible and current period
     let currentPeriod, blendFactor;
 
-    // Sun is visible when above horizon (Y > 0)
-    const sunAboveHorizon = sunY > 0;
-    const moonAboveHorizon = moonY > 0;
+    // Sun is visible even slightly below horizon for gradual sunset/sunrise
+    const sunAboveHorizon = sunY > -50; // Keep visible as it descends below horizon
+    const moonAboveHorizon = moonY > -50;
 
     if (t < 30) {
       currentPeriod = 'dawn';
