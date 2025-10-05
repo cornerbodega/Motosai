@@ -29,6 +29,12 @@ export class BackgroundSystem {
     this.scene.add(this.skyDome);
   }
 
+  setSkyColor(color) {
+    if (this.skyDome) {
+      this.skyDome.material.color.setHex(color);
+    }
+  }
+
   updateLocation(absolutePosition, location) {
     // No-op: static blue sky
   }

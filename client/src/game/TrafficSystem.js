@@ -267,14 +267,14 @@ export class TrafficSystem {
       glass: this.materialManager.getVehicleMaterial(0x222244, 'window'),
       wheel: this.materialManager.getVehicleMaterial(0x1a1a1a, 'wheel'),
       lights: this.materialManager.getMaterial('standard', {
-        color: 0xffff00,
-        emissive: 0xffff00,
-        emissiveIntensity: 0.5
+        color: 0xffffee,
+        emissive: 0xffffee,
+        emissiveIntensity: 1.5
       }),
       brake: this.materialManager.getMaterial('standard', {
         color: 0xff0000,
         emissive: 0xff0000,
-        emissiveIntensity: 0.3
+        emissiveIntensity: 0.8
       })
     };
   }
@@ -461,7 +461,7 @@ export class TrafficSystem {
       this.sedanMaterialCache.set(colorValue, colorMaterials);
     }
 
-    // Track brake lights and wheels for animation
+    // Track brake lights, headlights and wheels for animation
     let brakeLight1 = null;
     let brakeLight2 = null;
     const wheels = [];
@@ -491,11 +491,21 @@ export class TrafficSystem {
         if (meshName.includes('brake') || meshName.includes('tail') ||
             (meshName.includes('light') && meshName.includes('rear')) ||
             matName.includes('rear lights') || matName.includes('brake') || matName.includes('tail')) {
+          // Replace with shared brake light material
+          child.material = this.vehicleMaterials.brake;
           if (!brakeLight1) {
             brakeLight1 = child;
           } else if (!brakeLight2) {
             brakeLight2 = child;
           }
+        }
+
+        // Make headlights emissive
+        if (meshName.includes('headlight') || meshName.includes('front light') ||
+            (meshName.includes('light') && meshName.includes('front')) ||
+            matName.includes('headlights') || matName.includes('front lights')) {
+          // Replace with shared headlight material
+          child.material = this.vehicleMaterials.lights;
         }
 
         child.castShadow = false; // Disable shadows for performance
@@ -557,7 +567,7 @@ export class TrafficSystem {
       this.semiMaterialCache.set(colorValue, colorMaterials);
     }
 
-    // Track brake lights and wheels for animation
+    // Track brake lights, headlights and wheels for animation
     let brakeLight1 = null;
     let brakeLight2 = null;
     const wheels = [];
@@ -587,11 +597,21 @@ export class TrafficSystem {
         if (meshName.includes('brake') || meshName.includes('tail') ||
             (meshName.includes('light') && meshName.includes('rear')) ||
             matName.includes('rear lights') || matName.includes('brake') || matName.includes('tail')) {
+          // Replace with shared brake light material
+          child.material = this.vehicleMaterials.brake;
           if (!brakeLight1) {
             brakeLight1 = child;
           } else if (!brakeLight2) {
             brakeLight2 = child;
           }
+        }
+
+        // Make headlights emissive
+        if (meshName.includes('headlight') || meshName.includes('front light') ||
+            (meshName.includes('light') && meshName.includes('front')) ||
+            matName.includes('headlights') || matName.includes('front lights')) {
+          // Replace with shared headlight material
+          child.material = this.vehicleMaterials.lights;
         }
 
         child.castShadow = false; // Disable shadows for performance
@@ -915,18 +935,22 @@ export class TrafficSystem {
     vehicle.mesh.position.copy(vehicle.position);
     vehicle.mesh.position.y = Math.max(vehicle.mesh.position.y, ROAD_CONSTANTS.ROAD_Y); // Prevent underground cars
     
-    // Update brake lights - check if emissive exists first
+    // Update brake lights with emissive glow
     if (vehicle.mesh.userData.brake1 && vehicle.mesh.userData.brake1.material) {
+      const mat1 = vehicle.mesh.userData.brake1.material;
+      const mat2 = vehicle.mesh.userData.brake2?.material;
+
       if (vehicle.isBraking) {
-        // MeshBasicMaterial doesn't have emissive, use color instead
-        vehicle.mesh.userData.brake1.material.color.setHex(0xff0000);
-        if (vehicle.mesh.userData.brake2 && vehicle.mesh.userData.brake2.material) {
-          vehicle.mesh.userData.brake2.material.color.setHex(0xff0000);
+        // Extra bright red emissive when braking
+        mat1.emissiveIntensity = 2.0;
+        if (mat2) {
+          mat2.emissiveIntensity = 2.0;
         }
       } else {
-        vehicle.mesh.userData.brake1.material.color.setHex(0x660000);
-        if (vehicle.mesh.userData.brake2 && vehicle.mesh.userData.brake2.material) {
-          vehicle.mesh.userData.brake2.material.color.setHex(0x660000);
+        // Normal red glow when not braking
+        mat1.emissiveIntensity = 0.8;
+        if (mat2) {
+          mat2.emissiveIntensity = 0.8;
         }
       }
     }

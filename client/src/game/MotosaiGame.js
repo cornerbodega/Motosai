@@ -450,6 +450,29 @@ export class MotosaiGame {
         }
       ]
     });
+
+    // Add time of day controls
+    this.devMenu.addSection({
+      name: 'Time of Day',
+      buttons: [
+        {
+          label: '🌅 Dawn',
+          onClick: () => this.setTimeOfDay('dawn')
+        },
+        {
+          label: '☀️ Day',
+          onClick: () => this.setTimeOfDay('day')
+        },
+        {
+          label: '🌇 Dusk',
+          onClick: () => this.setTimeOfDay('dusk')
+        },
+        {
+          label: '🌙 Night',
+          onClick: () => this.setTimeOfDay('night')
+        }
+      ]
+    });
   }
 
   initScene() {
@@ -557,8 +580,8 @@ export class MotosaiGame {
     console.log("%c📡 Real-time monitoring enabled", "color: #00ff00");
 
     // Softer ambient light with warm tint
-    const ambient = new THREE.AmbientLight(0xfff5e6, 0.4);
-    this.scene.add(ambient);
+    this.ambientLight = new THREE.AmbientLight(0xfff5e6, 0.4);
+    this.scene.add(this.ambientLight);
 
     // Main sun light - softer and warmer
     this.sunLight = new THREE.DirectionalLight(0xfff5dd, 2.5);
@@ -581,13 +604,13 @@ export class MotosaiGame {
     this.scene.add(this.sunLight);
 
     // Hemisphere light for soft sky lighting
-    const hemi = new THREE.HemisphereLight(0x87ceeb, 0x8b7355, 0.6);
-    this.scene.add(hemi);
+    this.hemiLight = new THREE.HemisphereLight(0x87ceeb, 0x8b7355, 0.6);
+    this.scene.add(this.hemiLight);
 
     // Add a subtle fill light to soften harsh shadows
-    const fillLight = new THREE.DirectionalLight(0xe6f0ff, 0.4);
-    fillLight.position.set(-50, 80, -50);
-    this.scene.add(fillLight);
+    this.fillLight = new THREE.DirectionalLight(0xe6f0ff, 0.4);
+    this.fillLight.position.set(-50, 80, -50);
+    this.scene.add(this.fillLight);
   }
 
   initPhysics() {
@@ -603,6 +626,113 @@ export class MotosaiGame {
 
     // Create motorcycle mesh (low poly)
     this.createMotorcycle();
+  }
+
+  setTimeOfDay(timeOfDay) {
+    // Ultra-realistic time of day presets
+    const presets = {
+      dawn: {
+        sky: 0xFF8C69,  // Soft peachy orange
+        ambientColor: 0xFFB380,
+        ambientIntensity: 0.3,
+        sunColor: 0xFFAA80,
+        sunIntensity: 1.2,
+        sunPosition: [80, 40, 100],
+        hemiSky: 0xFF9E7A,
+        hemiGround: 0x5C4A3D,
+        hemiIntensity: 0.5,
+        fillColor: 0xFFBB99,
+        fillIntensity: 0.25
+      },
+      day: {
+        sky: 0x87CEEB,  // Sky blue
+        ambientColor: 0xFFF5E6,
+        ambientIntensity: 0.4,
+        sunColor: 0xFFF5DD,
+        sunIntensity: 2.5,
+        sunPosition: [100, 150, 80],
+        hemiSky: 0x87CEEB,
+        hemiGround: 0x8B7355,
+        hemiIntensity: 0.6,
+        fillColor: 0xE6F0FF,
+        fillIntensity: 0.4
+      },
+      dusk: {
+        sky: 0xFF6B4A,  // Deep orange/red
+        ambientColor: 0xFFAA80,
+        ambientIntensity: 0.25,
+        sunColor: 0xFF8855,
+        sunIntensity: 1.0,
+        sunPosition: [120, 30, 60],
+        hemiSky: 0xFF7A5C,
+        hemiGround: 0x4A3A35,
+        hemiIntensity: 0.4,
+        fillColor: 0xCC6644,
+        fillIntensity: 0.2
+      },
+      night: {
+        sky: 0x0A1128,  // Very dark blue, almost black
+        ambientColor: 0x4D5A7A,
+        ambientIntensity: 0.15,
+        sunColor: 0x7799CC,  // Moonlight - cool blue
+        sunIntensity: 0.3,
+        sunPosition: [80, 120, -100],
+        hemiSky: 0x1A2545,
+        hemiGround: 0x0D0F1A,
+        hemiIntensity: 0.2,
+        fillColor: 0x334466,
+        fillIntensity: 0.1
+      }
+    };
+
+    const preset = presets[timeOfDay];
+    if (!preset) {
+      console.error('Unknown time of day:', timeOfDay);
+      return;
+    }
+
+    // Update sky sphere
+    if (this.backgrounds) {
+      this.backgrounds.setSkyColor(preset.sky);
+    }
+
+    // Update ambient light
+    if (this.ambientLight) {
+      this.ambientLight.color.setHex(preset.ambientColor);
+      this.ambientLight.intensity = preset.ambientIntensity;
+    }
+
+    // Update sun/moon light
+    if (this.sunLight) {
+      this.sunLight.color.setHex(preset.sunColor);
+      this.sunLight.intensity = preset.sunIntensity;
+      this.sunLight.position.set(...preset.sunPosition);
+    }
+
+    // Update hemisphere light
+    if (this.hemiLight) {
+      this.hemiLight.color.setHex(preset.hemiSky);
+      this.hemiLight.groundColor.setHex(preset.hemiGround);
+      this.hemiLight.intensity = preset.hemiIntensity;
+    }
+
+    // Update fill light
+    if (this.fillLight) {
+      this.fillLight.color.setHex(preset.fillColor);
+      this.fillLight.intensity = preset.fillIntensity;
+    }
+
+    // Update fog color to match sky
+    if (this.scene && this.scene.fog) {
+      this.scene.fog.color.setHex(preset.sky);
+    }
+
+    // Update renderer clear color to match sky
+    if (this.renderer) {
+      this.renderer.setClearColor(preset.sky);
+    }
+
+    console.log(`Time of day set to: ${timeOfDay}`);
   }
 
   createMotorcycle() {
@@ -642,6 +772,19 @@ export class MotosaiGame {
 
     // Dispose of old motorcycle if it exists
     if (this.motorcycle) {
+      // Dispose headlight and bulb first
+      if (this.headlight) {
+        this.headlight.dispose();
+        this.headlight = null;
+      }
+
+      // Dispose bulb geometry and material
+      if (this.motorcycle.userData.headlightBulb) {
+        const bulb = this.motorcycle.userData.headlightBulb;
+        if (bulb.geometry) bulb.geometry.dispose();
+        if (bulb.material) bulb.material.dispose();
+      }
+
       this.motorcycle.traverse((child) => {
         if (child.geometry) child.geometry.dispose();
         if (child.material) {
@@ -709,9 +852,49 @@ export class MotosaiGame {
           this.rider = this.motorcycle.userData.rider;
 
           this.scene.add(this.motorcycle);
+
+          // Add headlight to fallback motorcycle
+          this._addHeadlight();
         }
       );
     }
+  }
+
+  _addHeadlight() {
+    if (!this.motorcycle) return;
+
+    // Prevent duplicate headlights
+    if (this.headlight) {
+      console.warn('Headlight already exists, skipping');
+      return;
+    }
+
+    // Add headlight (SpotLight) - conical beam angled down at road
+    this.headlight = new THREE.SpotLight(0xffffff, 10.0, 100, Math.PI / 3.5, 0.4, 1.0);
+    this.headlight.position.set(0, 1.0, 2.0); // Front of bike, elevated
+    this.headlight.target.position.set(0, -0.5, 20); // Point down at road ahead
+    this.headlight.castShadow = false; // Disable shadows for performance
+
+    // Add headlight and its target to motorcycle so they move together
+    this.motorcycle.add(this.headlight);
+    this.motorcycle.add(this.headlight.target);
+
+    // Add a visible bulb at the light position
+    const bulbGeometry = new THREE.SphereGeometry(0.2, 16, 16);
+    const bulbMaterial = new THREE.MeshBasicMaterial({
+      color: 0xffffee,
+      emissive: 0xffffee,
+      emissiveIntensity: 2.0
+    });
+    const bulb = new THREE.Mesh(bulbGeometry, bulbMaterial);
+    bulb.position.set(0, 1.0, 2.0);
+    this.motorcycle.add(bulb);
+
+    // Store reference
+    this.motorcycle.userData.headlight = this.headlight;
+    this.motorcycle.userData.headlightBulb = bulb;
+
+    console.log('Headlight added - Intensity:', this.headlight.intensity);
   }
 
   _setupMotorcycleModel(model, bikeColor) {
@@ -750,6 +933,9 @@ export class MotosaiGame {
     this.motorcycle.userData.originalColor = new THREE.Color(bikeColor);
 
     this.scene.add(this.motorcycle);
+
+    // Add headlight
+    this._addHeadlight();
 
     // Create rider using MotorcycleFactory
     this.rider = MotorcycleFactory.createRider(this.config.riderColor);

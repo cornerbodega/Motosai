@@ -72,6 +72,67 @@ export class DevMenu {
     this.container.style.display = this.isVisible ? 'block' : 'none';
   }
 
+  addSection(config) {
+    // Add a titled section with custom content
+    const sectionDiv = document.createElement('div');
+    sectionDiv.style.cssText = `
+      margin-bottom: 15px;
+      padding: 10px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 4px;
+    `;
+
+    // Title
+    const titleDiv = document.createElement('div');
+    titleDiv.textContent = config.name;
+    titleDiv.style.cssText = `
+      font-weight: bold;
+      color: #ff6600;
+      margin-bottom: 10px;
+    `;
+    sectionDiv.appendChild(titleDiv);
+
+    // Content container
+    const contentDiv = document.createElement('div');
+    contentDiv.style.cssText = `
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    `;
+
+    // Add buttons if provided
+    if (config.buttons) {
+      config.buttons.forEach(button => {
+        const btn = document.createElement('button');
+        btn.textContent = button.label;
+        btn.style.cssText = `
+          padding: 6px 12px;
+          background: rgba(255, 102, 0, 0.2);
+          border: 1px solid #ff6600;
+          border-radius: 4px;
+          color: #fff;
+          cursor: pointer;
+          font-family: monospace;
+          font-size: 11px;
+          transition: background 0.2s;
+        `;
+        btn.addEventListener('mouseenter', () => {
+          btn.style.background = 'rgba(255, 102, 0, 0.4)';
+        });
+        btn.addEventListener('mouseleave', () => {
+          btn.style.background = 'rgba(255, 102, 0, 0.2)';
+        });
+        btn.addEventListener('click', () => {
+          button.onClick();
+        });
+        contentDiv.appendChild(btn);
+      });
+    }
+
+    sectionDiv.appendChild(contentDiv);
+    this.effectsContainer.appendChild(sectionDiv);
+  }
+
   addEffect(config) {
     const effectDiv = document.createElement('div');
     effectDiv.style.cssText = `
