@@ -171,12 +171,14 @@ export class MotosaiGame {
     this.initDevMenu();
     this.initLights();
 
-    // Show intro and player selection first
+    // Load level (highway and backgrounds) before bike selection
+    this.initHighway();
+    this.initBackgrounds();
+
+    // Show intro and player selection with loaded level
     this.showIntroAndSelection(() => {
-      // After selection, initialize game components
+      // After selection, initialize player-specific components
       this.initPhysics();
-      this.initHighway();
-      this.initBackgrounds();
       this.initControls();
       this.initHUD();
       this.initDeathAnimation();
