@@ -149,10 +149,10 @@ export class MotosaiGame {
     this.activeTimers = new Set();
     this.activeChatTimers = new Set();
 
-    // Day/night cycle system (60-second full cycle)
-    this.dayCycleEnabled = false;
-    this.dayCycleDuration = 60.0; // 60 seconds for full day
-    this.dayCycleTime = 0; // Current time in the cycle (0-60)
+    // Day/night cycle system (120-second full cycle)
+    this.dayCycleEnabled = true;
+    this.dayCycleDuration = 120.0; // 120 seconds for full day
+    this.dayCycleTime = 0; // Current time in the cycle (0-120)
     this.dayCycleTimeOfDay = 'day'; // Current time of day
     this.timesOfDay = ['dawn', 'day', 'dusk', 'night']; // Cycle order
 
@@ -673,7 +673,7 @@ export class MotosaiGame {
         ambientIntensity: 0.35,
         sunColor: 0xFFCC99,  // Golden morning sun
         sunIntensity: 1.4,
-        sunPosition: [100, 25, 80],  // Low on horizon
+        sunPosition: [-100, 30, 100],  // East - low on horizon, to the left
         hemiSky: 0xFFB8A0,  // Warm sky hemisphere
         hemiGround: 0x6B5D4F,  // Cool earth tones
         hemiIntensity: 0.5,
@@ -687,7 +687,7 @@ export class MotosaiGame {
         ambientIntensity: 0.5,
         sunColor: 0xFFFAF0,  // Bright warm white sun
         sunIntensity: 2.8,
-        sunPosition: [60, 180, 40],  // High overhead
+        sunPosition: [0, 180, 100],  // High overhead, centered
         hemiSky: 0xB0D8F0,  // Bright blue sky
         hemiGround: 0x9C8A7A,  // Natural earth
         hemiIntensity: 0.7,
@@ -701,7 +701,7 @@ export class MotosaiGame {
         ambientIntensity: 0.3,
         sunColor: 0xFF7744,  // Deep orange setting sun
         sunIntensity: 1.2,
-        sunPosition: [120, 20, 50],  // Very low, almost at horizon
+        sunPosition: [100, 30, 100],  // West - low on horizon, to the right
         hemiSky: 0xCC6655,  // Warm reddish sky
         hemiGround: 0x4A3A30,  // Dark warm earth
         hemiIntensity: 0.45,
@@ -1031,6 +1031,12 @@ export class MotosaiGame {
       console.log("[INIT] Creating BackgroundSystem...");
       this.backgrounds = new BackgroundSystem(this.scene, this.camera);
       console.log("[INIT] BackgroundSystem created successfully");
+
+      // Set initial sun/moon positions (default is day time)
+      if (this.backgrounds.setSunMoonPosition) {
+        this.backgrounds.setSunMoonPosition([60, 180, 40], 'day');
+        console.log("[INIT] Initial sun/moon positions set");
+      }
 
       // Test with initial location (Death Valley) - this should trigger segment 0
       console.log("[INIT] Setting initial location to segment 0...");
@@ -2239,16 +2245,164 @@ export class MotosaiGame {
       this.dayCycleTime -= this.dayCycleDuration;
     }
 
-    // Determine which time of day we should be in
-    // 60 seconds / 4 periods = 15 seconds per period
-    const periodDuration = this.dayCycleDuration / this.timesOfDay.length;
-    const currentPeriodIndex = Math.floor(this.dayCycleTime / periodDuration);
-    const targetTimeOfDay = this.timesOfDay[currentPeriodIndex];
+    // Continuously update sun/moon position and lighting based on cycle time
+    this.updateContinuousCelestialPositions();
+  }
 
-    // Only trigger transition if we're entering a new period
-    if (targetTimeOfDay !== this.dayCycleTimeOfDay) {
-      this.dayCycleTimeOfDay = targetTimeOfDay;
-      this.setTimeOfDay(targetTimeOfDay);
+  updateContinuousCelestialPositions() {
+    // Sun completes a full circular orbit over 60 seconds
+    // Moon is offset by 180 degrees (opposite side)
+
+    const t = this.dayCycleTime;
+    const cycleFraction = t / this.dayCycleDuration; // 0 to 1
+
+    // Sun angle: 0 = east horizon (dawn), 0.25 = zenith (day), 0.5 = west horizon (dusk), 0.75 = nadir (night)
+    const sunAngle = cycleFraction * Math.PI * 2; // 0 to 2π
+
+    // Moon is always opposite the sun (180 degrees offset)
+    const moonAngle = sunAngle + Math.PI;
+
+    // Orbit parameters
+    const orbitRadius = 1400;
+    const horizonHeight = 30;  // Height at horizon
+    const zenithHeight = 180;  // Height at zenith
+
+    // Calculate sun position with more realistic elliptical arc
+    // Camera faces west (negative Z), so:
+    // Z: -100 at east (behind, sunrise), +100 at west (in front, sunset)
+    // Y: low at horizon, high at zenith with slower rise/fall near horizon
+
+    // Circular orbit - sun rises from horizon, peaks at zenith, sets below horizon
+    const sunX = 0; // Keep sun aligned with camera view
+    const sunY = Math.sin(sunAngle) * 150 + 30; // Circular arc: low at horizon, high at zenith
+    const sunZ = -Math.cos(sunAngle) * 100; // -100 at dawn (east/behind), +100 at dusk (west/front)
+
+    const moonX = 0;
+    const moonY = Math.sin(moonAngle) * 150 + 30;
+    const moonZ = -Math.cos(moonAngle) * 100;
+
+    // Determine which celestial body should be visible and current period
+    let currentPeriod, blendFactor;
+
+    // Sun is visible when above horizon (Y > 0)
+    const sunAboveHorizon = sunY > 0;
+    const moonAboveHorizon = moonY > 0;
+
+    if (t < 30) {
+      currentPeriod = 'dawn';
+      blendFactor = t / 30;
+    } else if (t < 60) {
+      currentPeriod = 'day';
+      blendFactor = (t - 30) / 30;
+    } else if (t < 90) {
+      currentPeriod = 'dusk';
+      blendFactor = (t - 60) / 30;
+    } else {
+      currentPeriod = 'night';
+      blendFactor = (t - 90) / 30;
+    }
+
+    // Update directional light to follow the visible celestial body
+    if (this.sunLight) {
+      if (sunAboveHorizon) {
+        this.sunLight.position.set(sunX, sunY, sunZ);
+      } else {
+        // During night, light comes from moon
+        this.sunLight.position.set(moonX, moonY, moonZ);
+      }
+    }
+
+    // Update background system with both sun and moon positions
+    if (this.backgrounds) {
+      this.backgrounds.setSunMoonPosition(
+        [sunX, sunY, sunZ],
+        currentPeriod,
+        { moonX, moonY, moonZ, sunAboveHorizon, moonAboveHorizon }
+      );
+    }
+
+    // Smoothly blend lighting colors based on current period
+    this.updateContinuousLighting(currentPeriod, blendFactor);
+  }
+
+  updateContinuousLighting(period, blendFactor) {
+    // Get preset colors for current and next period
+    const presets = {
+      dawn: {
+        sky: 0xFFA07A,
+        ambientColor: 0xFFD4AA,
+        ambientIntensity: 0.35,
+        sunColor: 0xFFCC99,
+        sunIntensity: 1.4,
+        starfieldVisible: false
+      },
+      day: {
+        sky: 0x87CEEB,
+        ambientColor: 0xFFFFFF,
+        ambientIntensity: 0.5,
+        sunColor: 0xFFFAF0,
+        sunIntensity: 2.8,
+        starfieldVisible: false
+      },
+      dusk: {
+        sky: 0xFF8C5A,
+        ambientColor: 0xFF9966,
+        ambientIntensity: 0.3,
+        sunColor: 0xFF7744,
+        sunIntensity: 1.2,
+        starfieldVisible: false
+      },
+      night: {
+        sky: 0x0C1445,
+        ambientColor: 0x556688,
+        ambientIntensity: 0.18,
+        sunColor: 0xAABBDD,
+        sunIntensity: 0.35,
+        starfieldVisible: true
+      }
+    };
+
+    const periodOrder = ['dawn', 'day', 'dusk', 'night'];
+    const currentIndex = periodOrder.indexOf(period);
+    const nextIndex = (currentIndex + 1) % periodOrder.length;
+
+    const current = presets[period];
+    const next = presets[periodOrder[nextIndex]];
+
+    // Smooth easing for color transitions
+    const easedBlend = this._easeInOutQuad(blendFactor);
+
+    // Blend colors
+    const skyColor = this._lerpColor(current.sky, next.sky, easedBlend);
+    const ambientColor = this._lerpColor(current.ambientColor, next.ambientColor, easedBlend);
+    const sunColor = this._lerpColor(current.sunColor, next.sunColor, easedBlend);
+    const ambientIntensity = this._lerp(current.ambientIntensity, next.ambientIntensity, easedBlend);
+    const sunIntensity = this._lerp(current.sunIntensity, next.sunIntensity, easedBlend);
+
+    // Apply to scene
+    if (this.backgrounds) {
+      this.backgrounds.setSkyColor(skyColor);
+
+      // Starfield visibility
+      const starfieldVisible = period === 'night' || (period === 'dusk' && blendFactor > 0.7);
+      this.backgrounds.setStarfieldVisible(starfieldVisible);
+    }
+
+    if (this.scene && this.scene.fog) {
+      this.scene.fog.color.setHex(skyColor);
+    }
+    if (this.renderer) {
+      this.renderer.setClearColor(skyColor);
+    }
+
+    if (this.ambientLight) {
+      this.ambientLight.color.setHex(ambientColor);
+      this.ambientLight.intensity = ambientIntensity;
+    }
+
+    if (this.sunLight) {
+      this.sunLight.color.setHex(sunColor);
+      this.sunLight.intensity = sunIntensity;
     }
   }
 
@@ -2377,6 +2531,14 @@ export class MotosaiGame {
           this.backgrounds.starfield.material.uniforms.opacity.value = 1.0;
         }
       }
+
+      // Update sun and moon positions during transition
+      const currentSunPos = [
+        this._lerp(from.sunPosition[0], to.sunPosition[0], eased),
+        this._lerp(from.sunPosition[1], to.sunPosition[1], eased),
+        this._lerp(from.sunPosition[2], to.sunPosition[2], eased)
+      ];
+      this.backgrounds.setSunMoonPosition(currentSunPos, transition.toTimeOfDay);
 
       // Update road reflectivity based on time of day
       // Only 'day' is reflective, dawn/dusk/night are not reflective

@@ -9,6 +9,8 @@ export class BackgroundSystem {
     this.skyDome = null;
     this.starfield = null;
     this.milkyWay = null;
+    this.sun = null;
+    this.sunRelativePosition = new THREE.Vector3(0, 1700, 0); // Initialize above
     this.time = 0;
 
     this.init();
@@ -36,6 +38,9 @@ export class BackgroundSystem {
 
     // Create Milky Way galaxy band
     this.createMilkyWay();
+
+    // Create sun and moon
+    this.createSunAndMoon();
   }
 
   createStarfield() {
@@ -210,6 +215,113 @@ export class BackgroundSystem {
     this.scene.add(this.milkyWay);
   }
 
+  createSunAndMoon() {
+    console.log('Creating sun and moon...');
+
+    // Create the Sun - bright glowing sphere
+    const sunGeo = new THREE.SphereGeometry(30, 32, 32);
+
+    // Sun shader for realistic glow
+    const sunMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        glowColor: { value: new THREE.Color(0xFFFAF0) }
+      },
+      vertexShader: `
+        varying vec3 vNormal;
+        varying vec3 vPosition;
+
+        void main() {
+          vNormal = normalize(normalMatrix * normal);
+          vPosition = position;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 glowColor;
+        varying vec3 vNormal;
+        varying vec3 vPosition;
+
+        void main() {
+          // Bright core with soft edge glow
+          float intensity = 1.0;
+          vec3 color = glowColor;
+
+          gl_FragColor = vec4(color, 1.0);
+        }
+      `,
+      transparent: false,
+      depthWrite: false,
+      fog: false
+    });
+
+    this.sun = new THREE.Mesh(sunGeo, sunMaterial);
+    this.sun.name = 'sun';
+    this.sun.renderOrder = -997; // Behind starfield
+    this.sun.frustumCulled = false;
+
+    // Add outer glow using a slightly larger sphere with additive blending
+    const sunGlowGeo = new THREE.SphereGeometry(50, 32, 32);
+    const sunGlowMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        glowColor: { value: new THREE.Color(0xFFDD88) },
+        viewVector: { value: new THREE.Vector3() }
+      },
+      vertexShader: `
+        uniform vec3 viewVector;
+        varying float intensity;
+
+        void main() {
+          vec3 vNormal = normalize(normalMatrix * normal);
+          vec3 vNormel = normalize(normalMatrix * viewVector);
+          intensity = pow(0.7 - dot(vNormal, vNormel), 2.0);
+
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 glowColor;
+        varying float intensity;
+
+        void main() {
+          vec3 glow = glowColor * intensity;
+          gl_FragColor = vec4(glow, 0.8 * intensity);
+        }
+      `,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      fog: false
+    });
+
+    this.sunGlow = new THREE.Mesh(sunGlowGeo, sunGlowMaterial);
+    this.sunGlow.renderOrder = -997;
+    this.sunGlow.frustumCulled = false;
+    this.sun.add(this.sunGlow);
+
+    this.scene.add(this.sun);
+
+    // Initially position sun (will be updated by setSunMoonPosition)
+    this.sun.visible = true;
+
+    console.log('Sun created successfully! Sun visible:', this.sun.visible);
+  }
+
+  // Update sun position based on continuous orbit
+  setSunMoonPosition(sunPosition, timeOfDay, moonData) {
+    if (!this.sun) return;
+
+    // Update sun position directly (already calculated in circular orbit)
+    this.sunRelativePosition = new THREE.Vector3(sunPosition[0], sunPosition[1], sunPosition[2]);
+
+    // Show/hide sun based on whether it's above horizon
+    if (moonData) {
+      this.sun.visible = moonData.sunAboveHorizon;
+    } else {
+      // Fallback: sun visible during day, hidden at night
+      this.sun.visible = timeOfDay !== 'night';
+    }
+  }
+
   setSkyColor(color) {
     if (this.skyDome) {
       this.skyDome.material.color.setHex(color);
@@ -252,6 +364,30 @@ export class BackgroundSystem {
       // Very slow rotation for subtle beauty
       this.milkyWay.rotation.z += deltaTime * 0.02;
     }
+
+    // Keep sun and moon centered on player (fixed in sky like sky dome)
+    if (this.sun && this.sunRelativePosition) {
+      // Position relative to player, fixed direction in sky
+      this.sun.position.copy(playerPosition).add(this.sunRelativePosition);
+
+      // Debug: Log actual positions every 60 frames
+      if (!this._debugFrameCount) this._debugFrameCount = 0;
+      this._debugFrameCount++;
+      if (this._debugFrameCount % 60 === 0) {
+        console.log('Sun world position:', this.sun.position, 'visible:', this.sun.visible);
+        console.log('Player position:', playerPosition);
+        console.log('Sun relative offset:', this.sunRelativePosition);
+      }
+
+      // Update glow view vector
+      if (this.sunGlow) {
+        this.sunGlow.material.uniforms.viewVector.value.subVectors(
+          this.camera.position,
+          this.sun.position
+        );
+      }
+    }
+
   }
 
   dispose() {
@@ -272,6 +408,16 @@ export class BackgroundSystem {
       this.milkyWay.material.map.dispose();
       this.milkyWay.material.dispose();
       this.scene.remove(this.milkyWay);
+    }
+
+    if (this.sun) {
+      this.sun.geometry.dispose();
+      this.sun.material.dispose();
+      if (this.sunGlow) {
+        this.sunGlow.geometry.dispose();
+        this.sunGlow.material.dispose();
+      }
+      this.scene.remove(this.sun);
     }
 
     this.scene = null;
