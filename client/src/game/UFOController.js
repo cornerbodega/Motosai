@@ -151,7 +151,7 @@ export class UFOController {
     }
 
     // Glow halo around UFO
-    const glowGeometry = new THREE.SphereGeometry(3, 16, 16);
+    const glowGeometry = new THREE.SphereGeometry(5, 16, 16);
     const glowMaterial = new THREE.MeshBasicMaterial({
       color: 0x00ffff,
       transparent: true,
