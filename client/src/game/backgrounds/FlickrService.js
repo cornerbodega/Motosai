@@ -142,7 +142,7 @@ export class FlickrService {
 
   getFallbackGradient(lat, lng) {
     // Generate a gradient based on latitude (north = cooler, south = warmer)
-    const latNorm = (lat - 32) / (48 - 32); // Normalize between San Diego and Seattle
+    const latNorm = (lat - 32) / (48 - 32); // Normalize between southern and northern latitudes
     
     return [{
       id: 'gradient_' + Date.now(),

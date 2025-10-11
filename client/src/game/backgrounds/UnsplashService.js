@@ -125,7 +125,7 @@ export class UnsplashService {
   getSearchQuery(lat, lng, location_name) {
     // Map coordinates to location names for better search results
     const locations = {
-      47.6: "seattle coast pacific northwest ocean",
+      47.6: "pacific northwest coast ocean",
       45.5: "oregon coast cannon beach haystack rock",
       41.9: "redwood coast northern california",
       37.8: "golden gate san francisco bay",
@@ -158,7 +158,7 @@ export class UnsplashService {
     // Generate beautiful gradients based on latitude
     // This works without any API key!
 
-    const latNorm = (lat - 32.7) / (47.6 - 32.7); // Normalize between SD and Seattle
+    const latNorm = (lat - 32.7) / (47.6 - 32.7); // Normalize between southern and northern latitudes
 
     // Use lat/lng to generate more variety
     const seed = Math.abs(Math.sin(lat * 100) * Math.cos(lng * 100));

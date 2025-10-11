@@ -1260,6 +1260,11 @@ export class MotosaiGame {
         let colorIndex = 0;
         this.ufoController.ufo.traverse((child) => {
           if (child.isMesh) {
+            // Skip the glow sphere (it has transparent material)
+            if (child.material && child.material.transparent) {
+              return;
+            }
+
             const colorData = colors[colorIndex % colors.length];
             child.material = new THREE.MeshStandardMaterial({
               color: colorData.color,

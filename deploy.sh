@@ -11,7 +11,7 @@ echo "============================"
 # Configuration
 PROJECT_ID="punchies-game"  # Using same project as Punchies
 REGION="us-central1"
-BUCKET_NAME="motosai-app"
+BUCKET_NAME="motosai-game"
 REPOSITORY_NAME="motosai-repo"
 
 echo "Using project: $PROJECT_ID"

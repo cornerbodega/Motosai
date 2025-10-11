@@ -958,34 +958,37 @@ export class TrafficSystem {
   
   updateAI(vehicle, playerPosition, deltaTime = 0.016) {
     vehicle.behavior.lastLaneChange += deltaTime;
-    
+
     // Calculate distance-based aggression (more lane changes as you go farther)
     const distanceTraveled = Math.abs(playerPosition.z);
-    const aggressionFactor = Math.min(3.0, 1.0 + distanceTraveled / 500); // Up to 3x aggression at 1km
-    
+    // 1 mile = 1609 meters, scale aggression up to 5x at 5 miles
+    const aggressionFactor = Math.min(5.0, 1.0 + (distanceTraveled / 1609) * 0.8); // +0.8x per mile, max 5x
+
     // Check if vehicle should pass slower traffic
     if (vehicle.frontVehicle) {
       const distance = vehicle.frontVehicle.position.z - vehicle.position.z;
       const speedDiff = vehicle.baseSpeed - vehicle.frontVehicle.speed;
-      
-      // Natural passing behavior
+
+      // Natural passing behavior - gets more aggressive with distance
       const passingThreshold = 40; // Consider passing at reasonable distance
       const minPassingGap = 12; // Safe following distance
 
-      // Pass if vehicle is moderately slower (3+ m/s difference, ~7 mph)
-      if (speedDiff > 3 && distance < passingThreshold && distance > minPassingGap) {
-        // Try to pass if haven't changed lanes recently
-        const laneChangeDelay = 3.5; // Wait 3.5 seconds between passes
+      // Pass if vehicle is moderately slower - threshold decreases with distance
+      const speedThreshold = Math.max(1.5, 3 - (aggressionFactor - 1) * 0.5); // 3 m/s down to 1.5 m/s
+      if (speedDiff > speedThreshold && distance < passingThreshold && distance > minPassingGap) {
+        // Try to pass if haven't changed lanes recently - gets faster with aggression
+        const laneChangeDelay = Math.max(1.5, 3.5 / aggressionFactor); // 3.5s down to 0.7s
         if (vehicle.behavior.lastLaneChange > laneChangeDelay && vehicle.targetLane === vehicle.lane) {
           // Prefer passing on the left (lane 0 is leftmost)
           let passingLane = vehicle.lane - 1;
-          const requiredGap = 15; // Require safe spacing for passing
-          
+          // Required gap decreases with aggression - more risky passes at distance
+          const requiredGap = Math.max(8, 15 / aggressionFactor); // 15m down to 3m
+
           if (passingLane < 0 || !this.isLaneChangeSafe(vehicle, passingLane, 1, requiredGap)) {
             // Can't pass on left, try right
             passingLane = vehicle.lane + 1;
           }
-          
+
           if (passingLane >= 0 && passingLane <= 2) {
             if (this.attemptLaneChange(vehicle, passingLane, requiredGap)) {
               vehicle.behavior.lastLaneChange = 0;
@@ -1011,9 +1014,10 @@ export class TrafficSystem {
       }
     }
     
-    // Natural random lane changes - less abrupt
-    const laneChangeWait = 12.0 + Math.random() * 8.0; // Wait 12-20 seconds between lane changes
-    const laneChangeProbability = 0.004; // 0.4% chance per frame
+    // Natural random lane changes - gets more aggressive with distance
+    const baseLaneChangeWait = 12.0 + Math.random() * 8.0; // Base: 12-20 seconds
+    const laneChangeWait = baseLaneChangeWait / aggressionFactor; // Decreases with distance
+    const laneChangeProbability = 0.004 * aggressionFactor; // Increases with distance
 
     if (!vehicle.behavior.isPassing &&
         vehicle.targetLane === vehicle.lane &&
@@ -1023,9 +1027,10 @@ export class TrafficSystem {
       vehicle.behavior.lastLaneChange = 0;
     }
 
-    // Smooth sublane changes for natural weaving
-    const subLaneChangeProbability = 0.008; // 0.8% chance per frame
-    const subLaneChangeWait = 4.0 + Math.random() * 4.0; // Wait 4-8 seconds between sublane changes
+    // Smooth sublane changes for natural weaving - gets more aggressive with distance
+    const subLaneChangeProbability = 0.008 * aggressionFactor; // Increases with distance
+    const baseSubLaneWait = 4.0 + Math.random() * 4.0; // Base: 4-8 seconds
+    const subLaneChangeWait = baseSubLaneWait / aggressionFactor; // Decreases with distance
 
     // Track sublane change timing separately
     if (!vehicle.behavior.lastSubLaneChange) {

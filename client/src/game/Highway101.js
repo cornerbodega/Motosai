@@ -38,19 +38,20 @@ export class Highway101 {
 
   initSharedGeometries() {
     // Create shared geometries that will be reused for all segments
+    // Use larger overlaps to prevent gaps even with floating-point precision errors
     this.sharedRoadGeometries = {
-      // Road surfaces
-      road: new THREE.PlaneGeometry(this.totalWidth, this.segmentLength + 0.1),
-      shoulder: new THREE.PlaneGeometry(this.shoulderWidth, this.segmentLength + 0.1),
-      grass: new THREE.PlaneGeometry(50, this.segmentLength + 0.2),
+      // Road surfaces - increased overlap from 0.1 to 1.0
+      road: new THREE.PlaneGeometry(this.totalWidth, this.segmentLength + 1.0),
+      shoulder: new THREE.PlaneGeometry(this.shoulderWidth, this.segmentLength + 1.0),
+      grass: new THREE.PlaneGeometry(50, this.segmentLength + 1.0),
 
       // Lane markings
       dash: new THREE.PlaneGeometry(0.15, 3), // lineWidth x dashLength
-      edgeLine: new THREE.PlaneGeometry(0.3, this.segmentLength), // lineWidth * 2
+      edgeLine: new THREE.PlaneGeometry(0.3, this.segmentLength + 1.0), // lineWidth * 2, with overlap
 
-      // Barriers
-      barrier: new THREE.BoxGeometry(0.5, 1.2, this.segmentLength),
-      strip: new THREE.BoxGeometry(0.1, 0.1, this.segmentLength),
+      // Barriers - add overlap to prevent gaps
+      barrier: new THREE.BoxGeometry(0.5, 1.2, this.segmentLength + 1.0),
+      strip: new THREE.BoxGeometry(0.1, 0.1, this.segmentLength + 1.0),
 
       // Cacti
       cactusBody: new THREE.CylinderGeometry(0.4, 0.5, 4, 8), // Main cactus trunk
@@ -570,23 +571,25 @@ export class Highway101 {
           const alignedZ = Math.round(s.z / this.segmentLength) * this.segmentLength;
           return !requiredPositions.includes(alignedZ);
         });
-        
+
         if (availableSegment) {
-          // Move this segment to fill the gap - ensure exact alignment
-          availableSegment.z = Math.round(requiredZ / this.segmentLength) * this.segmentLength;
-          availableSegment.group.position.z = availableSegment.z;
+          // Move this segment to fill the gap - ensure EXACT alignment to prevent gaps
+          const exactZ = Math.round(requiredZ / this.segmentLength) * this.segmentLength;
+          availableSegment.z = exactZ;
+          availableSegment.group.position.z = exactZ;
           this.regenerateRoadside(availableSegment);
         } else {
           // MEMORY LEAK FIX: Create new segment if we have room
           if (this.segments.length < this.numSegments) {
-            // We have room, create a new segment
-            console.log('Creating needed segment at', requiredZ);
-            this.createSegment(requiredZ);
+            // We have room, create a new segment with exact alignment
+            const exactZ = Math.round(requiredZ / this.segmentLength) * this.segmentLength;
+            console.log('Creating needed segment at', exactZ);
+            this.createSegment(exactZ);
           } else {
             // Try to recycle the furthest segment
             let furthestDist = 0;
             let furthestSegment = null;
-            
+
             this.segments.forEach(s => {
               if (!requiredPositions.includes(s.z)) {
                 const dist = Math.abs(s.z - playerZ);
@@ -596,11 +599,12 @@ export class Highway101 {
                 }
               }
             });
-            
+
             if (furthestSegment) {
-              // Recycle the furthest segment - ensure exact alignment
-              furthestSegment.z = Math.round(requiredZ / this.segmentLength) * this.segmentLength;
-              furthestSegment.group.position.z = furthestSegment.z;
+              // Recycle the furthest segment - ensure EXACT alignment to prevent gaps
+              const exactZ = Math.round(requiredZ / this.segmentLength) * this.segmentLength;
+              furthestSegment.z = exactZ;
+              furthestSegment.group.position.z = exactZ;
               this.regenerateRoadside(furthestSegment);
               // Successfully recycled segment
             } else {

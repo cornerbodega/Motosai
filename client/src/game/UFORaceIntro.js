@@ -16,6 +16,7 @@ export class UFORaceIntro {
     this.earthModel = null;
     this.atmosphereModel = null;
     this.ufoModel = null;
+    this.ufoGlow = null;
     this.text3D = null;
     this.subtitle3D = null;
     this.starField = null;
@@ -169,6 +170,19 @@ export class UFORaceIntro {
 
           console.log("UFO loaded successfully, size:", size, "scale:", scale);
           this.scene.add(this.ufoModel);
+
+          // Add blue sphere glow effect (matching in-game UFO)
+          const glowGeometry = new THREE.SphereGeometry(5, 16, 16);
+          const glowMaterial = new THREE.MeshBasicMaterial({
+            color: 0x00ffff,
+            transparent: true,
+            opacity: 0.2,
+            side: THREE.BackSide
+          });
+          const glowMesh = new THREE.Mesh(glowGeometry, glowMaterial);
+          this.ufoModel.add(glowMesh);
+          this.ufoGlow = glowMesh; // Store for animation
+
           resolve();
         },
         (progress) => {
@@ -454,6 +468,11 @@ export class UFORaceIntro {
 
         // Slow rotation with slight variation
         this.ufoModel.rotation.y += 0.003 + Math.sin(floatTime * 0.5) * 0.002;
+      }
+
+      // Pulse the blue glow (matching in-game UFO)
+      if (this.ufoGlow) {
+        this.ufoGlow.material.opacity = 0.15 + Math.sin(elapsed * 0.002) * 0.1;
       }
     }
 
