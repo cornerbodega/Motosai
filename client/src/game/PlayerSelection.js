@@ -62,8 +62,8 @@ export class PlayerSelection {
   // === FRIES ===
   static FRIES_MODEL_PATH = '/models/fries/fries.glb';
   static FRIES_SCALE = 1;
-  static FRIES_X_POSITION = -22.7;
-  static FRIES_Y_POSITION = 0;
+  static FRIES_X_POSITION = -19.7;
+  static FRIES_Y_POSITION = -0.25;
   static FRIES_Z_POSITION = -3;
 
   // Fries colors based on UV coordinates
@@ -139,6 +139,8 @@ export class PlayerSelection {
     // UFO floating animation
     this.ufoFloatAnimationId = null;
     this.lastFloatTime = 0;
+    this.ufoBeamLine = null;
+    this.ufoBeamStartTime = 0;
 
     this.initializeBikes();
   }
@@ -990,6 +992,8 @@ export class PlayerSelection {
     if (!this.ufoController || !this.previewModel) return;
 
     this.lastFloatTime = performance.now();
+    this.ufoBeamStartTime = performance.now();
+
     const animate = (currentTime) => {
       const deltaTime = (currentTime - this.lastFloatTime) / 1000; // Convert to seconds
       this.lastFloatTime = currentTime;
@@ -998,10 +1002,149 @@ export class PlayerSelection {
       const bikePosition = this.previewModel.position.clone();
       this.ufoController.updateFloatingAboveBike(deltaTime, bikePosition);
 
+      // Show beam after 1 second
+      const elapsedSinceStart = (currentTime - this.ufoBeamStartTime) / 1000;
+      if (elapsedSinceStart >= 1.0 && this.friesModel && this.ufoController.ufo) {
+        if (!this.ufoBeamLine) {
+          // Create the beam line
+          this.createUFOBeam();
+        }
+        // Update beam position
+        this.updateUFOBeam();
+      }
+
       this.ufoFloatAnimationId = requestAnimationFrame(animate);
     };
 
     this.ufoFloatAnimationId = requestAnimationFrame(animate);
+  }
+
+  createUFOBeam() {
+    if (!this.friesModel || !this.ufoController.ufo) return;
+
+    // Get UFO world position
+    const ufoWorldPos = new THREE.Vector3();
+    this.ufoController.ufo.getWorldPosition(ufoWorldPos);
+    const ufoBottomY = ufoWorldPos.y - 1.5;
+
+    // Get fries world position
+    const friesWorldPos = new THREE.Vector3();
+    this.friesModel.getWorldPosition(friesWorldPos);
+
+    // Get the bounding box in world space
+    const friesBBox = new THREE.Box3().setFromObject(this.friesModel);
+
+    // Find the actual top of the visible fries geometry
+    // The visible fries seem to end before the bounding box max
+    // Let's use a point closer to the actual fries tip
+    const friesHeight = friesBBox.max.y - friesBBox.min.y;
+    const friesTopY = friesBBox.min.y + (friesHeight * 0.85); // 85% up from bottom
+
+    // Create line geometry with actual positions
+    const points = [];
+    points.push(new THREE.Vector3(ufoWorldPos.x, ufoBottomY, ufoWorldPos.z));
+    points.push(new THREE.Vector3(friesWorldPos.x, friesTopY, friesWorldPos.z));
+
+    const geometry = new THREE.BufferGeometry().setFromPoints(points);
+
+    // Compute bounding sphere so Three.js knows where the geometry is
+    geometry.computeBoundingSphere();
+
+    const material = new THREE.LineBasicMaterial({
+      color: 0x00ffff,
+      linewidth: 2,
+      transparent: true,
+      opacity: 0.6
+    });
+
+    this.ufoBeamLine = new THREE.Line(geometry, material);
+
+    // Make sure the line's position is at world origin so our world coordinates work
+    this.ufoBeamLine.position.set(0, 0, 0);
+    this.ufoBeamLine.rotation.set(0, 0, 0);
+    this.ufoBeamLine.scale.set(1, 1, 1);
+
+    // Disable frustum culling to make sure the line is always rendered
+    this.ufoBeamLine.frustumCulled = false;
+
+    this.scene.add(this.ufoBeamLine);
+
+    console.log('Beam created with positions:', {
+      start: { x: ufoWorldPos.x, y: ufoBottomY, z: ufoWorldPos.z },
+      end: { x: friesWorldPos.x, y: friesTopY, z: friesWorldPos.z },
+      ufoRaw: ufoWorldPos,
+      friesRaw: friesWorldPos,
+      friesBBox: { min: friesBBox.min, max: friesBBox.max }
+    });
+
+    // DEBUG: Add small spheres at the start and end points to verify positions
+    const debugStartSphere = new THREE.Mesh(
+      new THREE.SphereGeometry(0.2, 8, 8),
+      new THREE.MeshBasicMaterial({ color: 0xff0000 }) // Red
+    );
+    debugStartSphere.position.set(ufoWorldPos.x, ufoBottomY, ufoWorldPos.z);
+    this.scene.add(debugStartSphere);
+    this._debugStartSphere = debugStartSphere;
+
+    const debugEndSphere = new THREE.Mesh(
+      new THREE.SphereGeometry(0.2, 8, 8),
+      new THREE.MeshBasicMaterial({ color: 0x00ff00 }) // Green
+    );
+    debugEndSphere.position.set(friesWorldPos.x, friesTopY, friesWorldPos.z);
+    this.scene.add(debugEndSphere);
+    this._debugEndSphere = debugEndSphere;
+
+    console.log('DEBUG: Added red sphere at UFO bottom, green sphere at fries top');
+  }
+
+  updateUFOBeam() {
+    if (!this.ufoBeamLine || !this.friesModel || !this.ufoController.ufo) {
+      console.warn('Beam update skipped:', {
+        hasBeamLine: !!this.ufoBeamLine,
+        hasFries: !!this.friesModel,
+        hasUFO: !!this.ufoController?.ufo
+      });
+      return;
+    }
+
+    // Get UFO world position (center)
+    const ufoWorldPos = new THREE.Vector3();
+    this.ufoController.ufo.getWorldPosition(ufoWorldPos);
+
+    // Calculate UFO bottom by subtracting approximate height
+    // The UFO is scaled by 2 (from setupUFO), so adjust accordingly
+    const ufoBottomY = ufoWorldPos.y - 1.5; // Bottom of UFO
+
+    // Get fries world position
+    const friesWorldPos = new THREE.Vector3();
+    this.friesModel.getWorldPosition(friesWorldPos);
+
+    // Get fries bounding box to find the top
+    const friesBBox = new THREE.Box3().setFromObject(this.friesModel);
+    const friesHeight = friesBBox.max.y - friesBBox.min.y;
+    const friesTopY = friesBBox.min.y + (friesHeight * 0.85); // 85% up from bottom
+
+    console.log('Beam positions:', {
+      ufo: { x: ufoWorldPos.x, y: ufoBottomY, z: ufoWorldPos.z },
+      fries: { x: friesWorldPos.x, y: friesTopY, z: friesWorldPos.z },
+      friesBBox: { min: friesBBox.min, max: friesBBox.max }
+    });
+
+    // Update line positions
+    const positions = this.ufoBeamLine.geometry.attributes.position.array;
+    // Start point: bottom center of UFO
+    positions[0] = ufoWorldPos.x;
+    positions[1] = ufoBottomY;
+    positions[2] = ufoWorldPos.z;
+    // End point: top center of fries
+    positions[3] = friesWorldPos.x;
+    positions[4] = friesTopY;
+    positions[5] = friesWorldPos.z;
+
+    this.ufoBeamLine.geometry.attributes.position.needsUpdate = true;
+
+    // Recompute bounding sphere so Three.js knows the new geometry bounds
+    this.ufoBeamLine.geometry.computeBoundingSphere();
   }
 
   stopUFOFloating() {
@@ -1011,6 +1154,26 @@ export class PlayerSelection {
     }
     if (this.ufoController) {
       this.ufoController.stopFloating();
+    }
+    // Clean up beam line
+    if (this.ufoBeamLine) {
+      this.scene.remove(this.ufoBeamLine);
+      this.ufoBeamLine.geometry.dispose();
+      this.ufoBeamLine.material.dispose();
+      this.ufoBeamLine = null;
+    }
+    // Clean up debug spheres
+    if (this._debugStartSphere) {
+      this.scene.remove(this._debugStartSphere);
+      this._debugStartSphere.geometry.dispose();
+      this._debugStartSphere.material.dispose();
+      this._debugStartSphere = null;
+    }
+    if (this._debugEndSphere) {
+      this.scene.remove(this._debugEndSphere);
+      this._debugEndSphere.geometry.dispose();
+      this._debugEndSphere.material.dispose();
+      this._debugEndSphere = null;
     }
   }
 
