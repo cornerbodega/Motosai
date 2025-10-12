@@ -40,7 +40,7 @@ export class VehiclePassCounter {
     `;
     counterDiv.innerHTML = `
       <div style="font-size: 18px; color: #ffa500;">VEHICLES PASSED</div>
-      <div id="pass-count" style="font-size: 36px; font-weight: bold;">0</div>
+      <div id="pass-count" style="font-size: 36px; font-weight: bold; color: white;">0</div>
       <div id="combo-display" style="font-size: 20px; color: #ffff00; opacity: 0;">
         COMBO x<span id="combo-count">0</span>
       </div>

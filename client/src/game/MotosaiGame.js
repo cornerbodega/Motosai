@@ -36,6 +36,8 @@ import { DevMenu } from "./DevMenu.js";
 import { BillboardSystem } from "./BillboardSystem.js";
 import { DeviceDetection } from "../utils/DeviceDetection.js";
 import { MobileTouchController } from "../controls/MobileTouchController.js";
+import { VehiclePassCounter } from "./VehiclePassCounter.js";
+import { LeaderboardUI } from "./LeaderboardUI.js";
 // PowerupSystem removed
 
 export class MotosaiGame {
@@ -1154,6 +1156,38 @@ export class MotosaiGame {
 
     // For backward compatibility
     this.traffic = this.trafficSystem;
+
+    // Initialize vehicle pass counter and leaderboard
+    this.vehiclePassCounter = new VehiclePassCounter(this);
+    this.leaderboardUI = new LeaderboardUI(this);
+
+    // Setup stats update interval (every 10 seconds)
+    this.statsUpdateInterval = setInterval(() => {
+      if (this.multiplayer?.socket && this.vehiclePassCounter) {
+        this.multiplayer.socket.emit('stats-update', {
+          stats: this.vehiclePassCounter.getSessionStats()
+        });
+      }
+    }, 10000);
+
+    // Listen for leaderboard events
+    if (this.multiplayer?.socket) {
+      this.multiplayer.socket.on('new-high-score', (data) => {
+        if (this.leaderboardUI) {
+          this.leaderboardUI.onNewHighScore(data);
+        }
+      });
+
+      this.multiplayer.socket.on('player-stats-update', (data) => {
+        if (this.leaderboardUI) {
+          this.leaderboardUI.updateLiveEntry(
+            data.playerId,
+            data.username,
+            data.vehiclesPassed
+          );
+        }
+      });
+    }
   }
 
   initControls() {
@@ -3032,6 +3066,15 @@ export class MotosaiGame {
 
     this.isDead = true;
 
+    // Submit final score to leaderboard
+    if (this.multiplayer?.socket && this.vehiclePassCounter) {
+      const finalStats = this.vehiclePassCounter.getSessionStats();
+      this.multiplayer.socket.emit('submit-score', {
+        stats: finalStats
+      });
+      console.log('Submitting final score:', finalStats);
+    }
+
     // Trigger UFO escape animation
     if (this.ufoController) {
       this.ufoController.playEscapeAnimation(() => {
@@ -3158,6 +3201,11 @@ export class MotosaiGame {
 
     // Reset physics completely FIRST - back to start
     this.physics.reset();
+
+    // Reset vehicle pass counter for new session
+    if (this.vehiclePassCounter) {
+      this.vehiclePassCounter.reset();
+    }
 
     // Reset terrain system for respawn
     if (this.terrain && typeof this.terrain.reset === "function") {
@@ -3607,6 +3655,15 @@ export class MotosaiGame {
           this.traffic.update(deltaTime, state.position, state.velocity);
         }
 
+        // Update vehicle pass counter
+        if (this.vehiclePassCounter && this.traffic && !this.isDead) {
+          this.vehiclePassCounter.update(
+            state.position,
+            this.traffic,
+            state.speed
+          );
+        }
+
         // Update minimap with traffic vehicles
         if (this.minimap && this.traffic) {
           this.minimap.updateVehicles(this.traffic.vehicles);
@@ -3975,6 +4032,12 @@ export class MotosaiGame {
     this.activeChatTimers.forEach((timer) => clearTimeout(timer));
     this.activeChatTimers.clear();
 
+    // Clear stats update interval
+    if (this.statsUpdateInterval) {
+      clearInterval(this.statsUpdateInterval);
+      this.statsUpdateInterval = null;
+    }
+
     // Clear other timer references
     this.multiplayerHUDUpdateTimer = null;
     this.bgUpdateCounter = 0;
@@ -4037,6 +4100,16 @@ export class MotosaiGame {
     if (this.billboardSystem) {
       this.billboardSystem.dispose();
       this.billboardSystem = null;
+    }
+
+    // Dispose vehicle pass counter and leaderboard UI
+    if (this.vehiclePassCounter) {
+      this.vehiclePassCounter.dispose();
+      this.vehiclePassCounter = null;
+    }
+    if (this.leaderboardUI) {
+      this.leaderboardUI.dispose();
+      this.leaderboardUI = null;
     }
 
     if (this.backgrounds) {

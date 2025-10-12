@@ -109,9 +109,14 @@ export class MultiplayerManager {
     // Active players list
     this.socket.on('active-players', (players) => {
       console.log(`📋 Received ${players.length} active players`);
+      console.log('My player ID:', this.playerId);
+      console.log('Active players received:', players);
       players.forEach(player => {
         if (player.playerId !== this.playerId) {
+          console.log(`Adding other player: ${player.username} (${player.playerId})`);
           this.addOtherPlayer(player.playerId, player.username);
+        } else {
+          console.log(`Skipping myself: ${player.username} (${player.playerId})`);
         }
       });
     });
@@ -587,23 +592,35 @@ export class MultiplayerManager {
   }
 
   getPlayerList() {
-    const players = [{
-      id: this.playerId,
-      username: this.username,
-      state: null // Local player state is handled separately
-    }];
+    const players = [];
 
-    this.otherPlayers.forEach((data, id) => {
+    // Only add yourself once
+    if (this.playerId && this.username) {
       players.push({
-        id,
-        username: data.username,
-        state: {
-          position: data.position,
-          speed: data.speed,
-          rotation: data.rotation
-        }
+        id: this.playerId,
+        username: this.username,
+        state: null // Local player state is handled separately
       });
+    }
+
+    // Add other players (should already exclude yourself from server)
+    this.otherPlayers.forEach((data, id) => {
+      // Double-check we're not adding ourselves
+      if (id !== this.playerId) {
+        players.push({
+          id,
+          username: data.username,
+          state: {
+            position: data.position,
+            speed: data.speed,
+            rotation: data.rotation
+          }
+        });
+      } else {
+        console.warn(`⚠️ Found self (${id}) in otherPlayers map - this should not happen!`);
+      }
     });
+
     return players;
   }
 }

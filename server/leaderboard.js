@@ -37,6 +37,10 @@ class LeaderboardManager {
   // Submit final score to Supabase
   async submitScore(playerId, username, stats) {
     try {
+      // Get player's previous best before submitting new score
+      const previousBest = await this.getPlayerBest(playerId);
+      const previousBestScore = previousBest?.vehicles_passed || 0;
+
       const entry = {
         player_id: playerId,
         username: username || `Player_${playerId.substring(0, 6)}`,
@@ -63,13 +67,18 @@ class LeaderboardManager {
       // Get player's rank
       const rank = await this.getPlayerRank(playerId, stats.vehiclesPassed);
 
+      // Determine if this is a new personal best
+      const isNewBest = stats.vehiclesPassed > previousBestScore;
+
       // Clear session data
       this.sessionStats.delete(playerId);
 
       return {
         success: true,
         data: data[0],
-        rank
+        rank,
+        isNewBest,
+        previousBest: previousBestScore
       };
     } catch (error) {
       console.error('Error in submitScore:', error);
@@ -97,7 +106,7 @@ class LeaderboardManager {
     }
   }
 
-  // Get top scores (cached)
+  // Get top scores (cached) - Only best score per player
   async getTopScores(limit = 10) {
     try {
       // Check cache
@@ -105,15 +114,41 @@ class LeaderboardManager {
         return this.leaderboardCache.slice(0, limit);
       }
 
-      const { data, error } = await supabase
-        .from('mo_leaderboard')
-        .select('*')
-        .order('vehicles_passed', { ascending: false })
-        .limit(50); // Cache top 50
+      // Use a raw SQL query to get each player's best score
+      const { data, error } = await supabase.rpc('get_top_players', {
+        score_limit: 50
+      });
 
       if (error) {
-        console.error('Error fetching leaderboard:', error);
-        return [];
+        // Fallback: fetch all and deduplicate in memory
+        console.warn('RPC not available, using fallback deduplication');
+        const { data: allData, error: fetchError } = await supabase
+          .from('mo_leaderboard')
+          .select('*')
+          .order('vehicles_passed', { ascending: false })
+          .limit(200);
+
+        if (fetchError) {
+          console.error('Error fetching leaderboard:', fetchError);
+          return [];
+        }
+
+        // Deduplicate: keep only best score per player
+        const playerBestMap = new Map();
+        (allData || []).forEach(entry => {
+          const existing = playerBestMap.get(entry.player_id);
+          if (!existing || entry.vehicles_passed > existing.vehicles_passed) {
+            playerBestMap.set(entry.player_id, entry);
+          }
+        });
+
+        const uniqueData = Array.from(playerBestMap.values())
+          .sort((a, b) => b.vehicles_passed - a.vehicles_passed)
+          .slice(0, 50);
+
+        this.leaderboardCache = uniqueData;
+        this.cacheExpiry = Date.now() + this.cacheTimeout;
+        return this.leaderboardCache.slice(0, limit);
       }
 
       // Update cache
@@ -127,25 +162,37 @@ class LeaderboardManager {
     }
   }
 
-  // Get daily top scores
+  // Get daily top scores - Only best score per player today
   async getDailyTopScores(limit = 10) {
     try {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
+      // Fetch all daily scores
       const { data, error } = await supabase
         .from('mo_leaderboard')
         .select('*')
         .gte('created_at', today.toISOString())
         .order('vehicles_passed', { ascending: false })
-        .limit(limit);
+        .limit(200);
 
       if (error) {
         console.error('Error fetching daily leaderboard:', error);
         return [];
       }
 
-      return data || [];
+      // Deduplicate: keep only best score per player for today
+      const playerBestMap = new Map();
+      (data || []).forEach(entry => {
+        const existing = playerBestMap.get(entry.player_id);
+        if (!existing || entry.vehicles_passed > existing.vehicles_passed) {
+          playerBestMap.set(entry.player_id, entry);
+        }
+      });
+
+      return Array.from(playerBestMap.values())
+        .sort((a, b) => b.vehicles_passed - a.vehicles_passed)
+        .slice(0, limit);
     } catch (error) {
       console.error('Error in getDailyTopScores:', error);
       return [];

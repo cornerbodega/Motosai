@@ -613,13 +613,14 @@ io.on('connection', (socket) => {
 
       socket.emit('score-submitted', result);
 
-      // Broadcast new high score if it's in top 10
-      if (result.rank && result.rank <= 10) {
+      // Only broadcast if it's a NEW personal best AND in top 10
+      if (result.isNewBest && result.rank && result.rank <= 10) {
         io.emit('new-high-score', {
           username: player.username,
           rank: result.rank,
           vehiclesPassed: data.stats.vehiclesPassed
         });
+        console.log(`🏆 NEW HIGH SCORE! ${player.username} is now #${result.rank} with ${data.stats.vehiclesPassed} vehicles`);
       }
     } catch (error) {
       console.error('Error submitting score:', error);
