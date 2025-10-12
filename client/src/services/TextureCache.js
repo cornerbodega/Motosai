@@ -59,8 +59,10 @@ export class TextureCache {
           // Optimize texture for memory efficiency
           texture.minFilter = THREE.LinearFilter; // No mipmaps
           texture.magFilter = THREE.LinearFilter;
+          texture.magFilter = THREE.LinearFilter;
           texture.generateMipmaps = false;
-          texture.format = THREE.RGBFormat; // RGB is smaller than RGBA
+          texture.anisotropy = 1; // Disable anisotropic filtering for billboards
+          // Don't force RGB format - let THREE.js detect it automatically
           texture.needsUpdate = true;
 
           // Estimate texture size (width * height * 3 bytes for RGB)

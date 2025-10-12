@@ -41,16 +41,11 @@ export class VehiclePassCounter {
     counterDiv.innerHTML = `
       <div style="font-size: 18px; color: #ffa500;">VEHICLES PASSED</div>
       <div id="pass-count" style="font-size: 36px; font-weight: bold; color: white;">0</div>
-      <div id="combo-display" style="font-size: 20px; color: #ffff00; opacity: 0;">
-        COMBO x<span id="combo-count">0</span>
-      </div>
     `;
     document.body.appendChild(counterDiv);
 
     // Store references
     this.counterElement = document.getElementById('pass-count');
-    this.comboElement = document.getElementById('combo-display');
-    this.comboCountElement = document.getElementById('combo-count');
   }
 
   update(playerPosition, trafficSystem, playerSpeed) {
@@ -177,29 +172,11 @@ export class VehiclePassCounter {
         this.counterElement.style.transform = 'scale(1)';
       }, 200);
     }
-
-    // Update combo display
-    if (this.comboElement && this.combo > 1) {
-      this.comboElement.style.opacity = '1';
-      this.comboCountElement.textContent = this.combo;
-
-      // Color based on combo level
-      if (this.combo >= 10) {
-        this.comboElement.style.color = '#ff00ff'; // Purple for mega combo
-      } else if (this.combo >= 5) {
-        this.comboElement.style.color = '#ffff00'; // Yellow for high combo
-      } else {
-        this.comboElement.style.color = '#00ff00'; // Green for low combo
-      }
-    }
   }
 
   resetCombo() {
     this.combo = 0;
     this.sessionStats.comboMultiplier = 1;
-    if (this.comboElement) {
-      this.comboElement.style.opacity = '0';
-    }
   }
 
   getSessionStats() {

@@ -1211,6 +1211,11 @@ export class MotosaiGame {
 
       this.keys[e.code] = true;
 
+      // Debug: Log throttle key presses
+      if (e.code === "KeyW" || e.code === "ArrowUp") {
+        console.log('🎮 Throttle key pressed:', e.code, 'keys:', this.keys);
+      }
+
       // Gear shifting
       if (e.code === "KeyQ") {
         this.physics.setControls({ gearDown: true });

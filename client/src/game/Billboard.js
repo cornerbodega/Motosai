@@ -83,9 +83,9 @@ export class Billboard {
     console.log(`Loading billboard: ${this.name}`);
 
     try {
-      // TODO: Enable texture loading when default.png is ready
-      // const url = this.textureUrl || this.fallbackUrl;
-      // this.texture = await this.textureCache.acquire(url);
+      // Load texture from cache
+      const url = this.textureUrl || this.fallbackUrl;
+      this.texture = await this.textureCache.acquire(url);
 
       // Use shared geometry if provided, otherwise create new
       if (sharedGeometries) {
@@ -99,16 +99,22 @@ export class Billboard {
         this.isSharedGeometry = false;
       }
 
-      // Create material - solid white for now
-      // TODO: Add texture map when textures are ready
+      // Create material with texture
       this.material = new THREE.MeshStandardMaterial({
-        color: 0xffffff,  // Solid white
-        // map: this.texture,  // TODO: Uncomment when textures ready
+        map: this.texture,
+        color: 0xffffff,  // White base color (multiplied with texture)
         side: THREE.DoubleSide,
         transparent: false,
         metalness: 0.1,
-        roughness: 0.8
+        roughness: 0.8,
+        depthWrite: true,
+        depthTest: true
       });
+
+      // Ensure texture updates when loaded
+      if (this.texture) {
+        this.texture.needsUpdate = true;
+      }
 
       // Create mesh
       this.mesh = new THREE.Mesh(this.geometry, this.material);
