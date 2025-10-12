@@ -13,6 +13,10 @@ export class MotorcycleFactory {
     const motorcycle = new THREE.Group();
     const materialManager = getMaterialManager();
 
+    // Create steering assembly group (for front wheel, forks, and handlebars)
+    const steeringAssembly = new THREE.Group();
+    steeringAssembly.position.set(0, 0, 0.7); // Position at front of bike
+
     // Body (simplified sportbike shape - reduced complexity)
     const bodyGeo = new THREE.BoxGeometry(0.3, 0.4, 1.4, 1, 1, 2);
     const bodyMat = materialManager.getMaterial('standard', {
@@ -54,10 +58,10 @@ export class MotorcycleFactory {
     
     const frontWheel = new THREE.Mesh(wheelGeo, wheelMat);
     frontWheel.rotation.z = Math.PI / 2;
-    frontWheel.position.set(0, 0.3, 0.7);
+    frontWheel.position.set(0, 0.3, 0); // Position relative to steering assembly
     frontWheel.castShadow = true;
     frontWheel.receiveShadow = true;
-    motorcycle.add(frontWheel);
+    steeringAssembly.add(frontWheel); // Add to steering assembly instead of motorcycle
     
     const rearWheel = new THREE.Mesh(wheelGeo, wheelMat);
     rearWheel.rotation.z = Math.PI / 2;
@@ -74,14 +78,14 @@ export class MotorcycleFactory {
       roughness: 0.4
     });
     const fork1 = new THREE.Mesh(forkGeo, forkMat);
-    fork1.position.set(0.08, 0.3, 0.7);
+    fork1.position.set(0.08, 0.3, 0); // Position relative to steering assembly
     fork1.rotation.z = 0.1;
-    motorcycle.add(fork1);
-    
+    steeringAssembly.add(fork1); // Add to steering assembly
+
     const fork2 = new THREE.Mesh(forkGeo, forkMat);
-    fork2.position.set(-0.08, 0.3, 0.7);
+    fork2.position.set(-0.08, 0.3, 0); // Position relative to steering assembly
     fork2.rotation.z = -0.1;
-    motorcycle.add(fork2);
+    steeringAssembly.add(fork2); // Add to steering assembly
     
     // Handlebars - rubber grips
     const barGeo = new THREE.BoxGeometry(0.5, 0.02, 0.02);
@@ -91,8 +95,11 @@ export class MotorcycleFactory {
       metalness: 0
     });
     const bars = new THREE.Mesh(barGeo, barMat);
-    bars.position.set(0, 0.7, 0.6);
-    motorcycle.add(bars);
+    bars.position.set(0, 0.7, -0.1); // Position relative to steering assembly
+    steeringAssembly.add(bars); // Add to steering assembly
+
+    // Add the complete steering assembly to the motorcycle
+    motorcycle.add(steeringAssembly);
     
     // Add rider if requested
     if (includeRider) {
@@ -112,6 +119,7 @@ export class MotorcycleFactory {
     }
     
     // Store references for animation
+    motorcycle.userData.steeringAssembly = steeringAssembly; // Reference to steering assembly for turning animation
     motorcycle.userData.frontWheel = frontWheel;
     motorcycle.userData.rearWheel = rearWheel;
     motorcycle.userData.body = body;

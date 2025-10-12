@@ -957,6 +957,7 @@ export class MotosaiGame {
             includeRider: true,
           });
 
+          this.steeringAssembly = this.motorcycle.userData.steeringAssembly;
           this.frontWheel = this.motorcycle.userData.frontWheel;
           this.rearWheel = this.motorcycle.userData.rearWheel;
           this.rider = this.motorcycle.userData.rider;
@@ -3698,6 +3699,12 @@ export class MotosaiGame {
           this.motorcycle.rotateY(state.rotation.yaw);
           this.motorcycle.rotateZ(state.rotation.roll);
           this.motorcycle.rotateX(state.rotation.pitch);
+
+          // Update steering assembly rotation (handlebars and front wheel turn together)
+          if (this.steeringAssembly && state.steerAngle !== undefined) {
+            // Apply steering rotation around Y-axis
+            this.steeringAssembly.rotation.y = state.steerAngle;
+          }
 
           // Update wheels rotation - reduced multiplier at high speeds
           const wheelSpeedMultiplier = Math.min(

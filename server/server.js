@@ -8,6 +8,7 @@ import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { leaderboardManager } from './leaderboard.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -168,6 +169,86 @@ app.post('/api/session/join', async (req, res) => {
   } catch (error) {
     console.error('Error joining session:', error.message || error);
     res.status(500).json({ error: error.message || 'Failed to join session' });
+  }
+});
+
+// Leaderboard API endpoints
+app.post('/api/leaderboard/update', async (req, res) => {
+  const { playerId, username, stats } = req.body;
+
+  try {
+    const sessionStats = leaderboardManager.updateSessionStats(playerId, {
+      username,
+      ...stats
+    });
+
+    res.json({
+      success: true,
+      stats: sessionStats
+    });
+  } catch (error) {
+    console.error('Error updating stats:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/leaderboard/submit', async (req, res) => {
+  const { playerId, username, stats } = req.body;
+
+  try {
+    const result = await leaderboardManager.submitScore(playerId, username, stats);
+    res.json(result);
+  } catch (error) {
+    console.error('Error submitting score:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/leaderboard/top', async (req, res) => {
+  const limit = parseInt(req.query.limit) || 10;
+
+  try {
+    const topScores = await leaderboardManager.getTopScores(limit);
+    res.json({
+      success: true,
+      leaderboard: topScores
+    });
+  } catch (error) {
+    console.error('Error fetching leaderboard:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/leaderboard/daily', async (req, res) => {
+  const limit = parseInt(req.query.limit) || 10;
+
+  try {
+    const dailyScores = await leaderboardManager.getDailyTopScores(limit);
+    res.json({
+      success: true,
+      leaderboard: dailyScores
+    });
+  } catch (error) {
+    console.error('Error fetching daily leaderboard:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/leaderboard/player/:playerId', async (req, res) => {
+  const { playerId } = req.params;
+
+  try {
+    const playerBest = await leaderboardManager.getPlayerBest(playerId);
+    const currentSession = leaderboardManager.getCurrentSession(playerId);
+
+    res.json({
+      success: true,
+      bestScore: playerBest,
+      currentSession: currentSession
+    });
+  } catch (error) {
+    console.error('Error fetching player stats:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
@@ -491,6 +572,59 @@ io.on('connection', (socket) => {
         socket.emit('memory-snapshot-saved', { filename, timestamp });
       }
     });
+  });
+
+  // Handle stats updates
+  socket.on('stats-update', (data) => {
+    const playerId = playerSockets.get(socket.id);
+    if (!playerId) return;
+
+    const player = activePlayers.get(playerId);
+    if (!player) return;
+
+    // Update session stats
+    leaderboardManager.updateSessionStats(playerId, {
+      username: player.username,
+      ...data.stats
+    });
+
+    // Optional: broadcast to other players for live leaderboard
+    socket.to(`session-${player.sessionId}`).emit('player-stats-update', {
+      playerId,
+      username: player.username,
+      vehiclesPassed: data.stats.vehiclesPassed
+    });
+  });
+
+  // Handle score submission (end of session)
+  socket.on('submit-score', async (data) => {
+    const playerId = playerSockets.get(socket.id);
+    if (!playerId) return;
+
+    const player = activePlayers.get(playerId);
+    if (!player) return;
+
+    try {
+      const result = await leaderboardManager.submitScore(
+        playerId,
+        player.username,
+        data.stats
+      );
+
+      socket.emit('score-submitted', result);
+
+      // Broadcast new high score if it's in top 10
+      if (result.rank && result.rank <= 10) {
+        io.emit('new-high-score', {
+          username: player.username,
+          rank: result.rank,
+          vehiclesPassed: data.stats.vehiclesPassed
+        });
+      }
+    } catch (error) {
+      console.error('Error submitting score:', error);
+      socket.emit('score-submit-error', { error: error.message });
+    }
   });
 
   // Handle memory profiler alerts
