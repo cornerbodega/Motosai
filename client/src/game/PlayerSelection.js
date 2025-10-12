@@ -142,6 +142,12 @@ export class PlayerSelection {
     this.ufoBeamLine = null;
     this.ufoBeamStartTime = 0;
 
+    // Fries animation
+    this.friesFloatingUp = false;
+    this.friesStartPosition = new THREE.Vector3();
+    this.friesAnimationStartTime = 0;
+    this.ufoFlewAway = false;
+
     this.initializeBikes();
   }
 
@@ -467,12 +473,12 @@ export class PlayerSelection {
             // Once UFO reaches the bike, start floating animation
             this.startUFOFloating();
 
-            // Continue with game after a brief delay to show floating
+            // Continue with game after animation completes
             setTimeout(() => {
               this.stopUFOFloating();
               this.hideSelectionUI();
               this.onSelectionComplete(this.selectedBike);
-            }, 4000); // 4 second delay to show floating
+            }, 3000); // 3 second delay for all animations
           });
         } else {
           // No UFO or no preview model - just proceed normally
@@ -1002,21 +1008,119 @@ export class PlayerSelection {
       const bikePosition = this.previewModel.position.clone();
       this.ufoController.updateFloatingAboveBike(deltaTime, bikePosition);
 
-      // Show beam after 1 second
+      // Show beam after 0.5 seconds
       const elapsedSinceStart = (currentTime - this.ufoBeamStartTime) / 1000;
-      if (elapsedSinceStart >= 1.0 && this.friesModel && this.ufoController.ufo) {
+      if (elapsedSinceStart >= 0.5 && this.friesModel && this.ufoController.ufo) {
         if (!this.ufoBeamLine) {
           // Create the beam line
           this.createUFOBeam();
+          // Store initial fries world position
+          this.friesModel.getWorldPosition(this.friesStartPosition);
         }
         // Update beam position
         this.updateUFOBeam();
+
+        // Start fries animation after 0.7 seconds total (0.2 seconds after beam appears)
+        if (elapsedSinceStart >= 0.7 && !this.friesFloatingUp) {
+          this.friesFloatingUp = true;
+          this.friesAnimationStartTime = currentTime;
+        }
+
+        // Animate fries floating up
+        if (this.friesFloatingUp) {
+          this.updateFriesAnimation(currentTime);
+        }
       }
 
       this.ufoFloatAnimationId = requestAnimationFrame(animate);
     };
 
     this.ufoFloatAnimationId = requestAnimationFrame(animate);
+  }
+
+  updateFriesAnimation(currentTime) {
+    if (!this.friesModel || !this.ufoController.ufo) return;
+
+    const elapsed = (currentTime - this.friesAnimationStartTime) / 1000;
+    const duration = 1.0; // 1 second to float up to UFO
+
+    if (elapsed >= duration) {
+      // Animation complete - hide fries and make UFO fly away
+      if (!this.ufoFlewAway) {
+        this.friesModel.visible = false;
+        this.ufoFlewAway = true;
+
+        // Stop floating and fly to starting position
+        this.ufoController.stopFloating();
+        console.log('UFO flying to game start position');
+
+        // Fly UFO to where it will be at game start (ahead of the bike)
+        const startTime = Date.now();
+        const flyDuration = 2000; // 2 seconds to fly to start
+        const startPos = this.ufoController.ufo.position.clone();
+
+        // Target is where UFO will be at game start
+        const targetPos = { x: 0, y: 30, z: 200 }; // Same as game start position
+
+        const animate = () => {
+          const elapsed = Date.now() - startTime;
+          const progress = Math.min(elapsed / flyDuration, 1);
+
+          // Smooth easing
+          const eased = progress < 0.5
+            ? 2 * progress * progress
+            : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+
+          // Move UFO to starting position
+          this.ufoController.ufo.position.x = startPos.x + (targetPos.x - startPos.x) * eased;
+          this.ufoController.ufo.position.y = startPos.y + (targetPos.y - startPos.y) * eased;
+          this.ufoController.ufo.position.z = startPos.z + (targetPos.z - startPos.z) * eased;
+
+          // Keep rotating
+          this.ufoController.ufo.rotation.y += 0.05;
+
+          if (progress < 1) {
+            requestAnimationFrame(animate);
+          } else {
+            console.log('UFO reached game start position');
+          }
+        };
+
+        animate();
+      }
+      return;
+    }
+
+    // Calculate progress (0 to 1)
+    const progress = elapsed / duration;
+
+    // Ease-in cubic for smooth acceleration
+    const eased = progress * progress * progress;
+
+    // Get UFO world position (destination)
+    const ufoWorldPos = new THREE.Vector3();
+    this.ufoController.ufo.getWorldPosition(ufoWorldPos);
+    const ufoBottomY = ufoWorldPos.y - 1.5;
+
+    // Create end point (same calculation as the beam endpoint)
+    const endPoint = new THREE.Vector3(ufoWorldPos.x, ufoBottomY, ufoWorldPos.z);
+
+    // Interpolate position along the path from start to UFO
+    const newPosition = new THREE.Vector3().lerpVectors(this.friesStartPosition, endPoint, eased);
+
+    // Update fries position
+    this.friesModel.position.copy(newPosition);
+
+    // Also fade out as it approaches the UFO
+    if (progress > 0.7) {
+      const fadeProgress = (progress - 0.7) / 0.3; // Last 30% of animation
+      this.friesModel.traverse((child) => {
+        if (child.isMesh && child.material) {
+          child.material.opacity = 1 - fadeProgress;
+          child.material.transparent = true;
+        }
+      });
+    }
   }
 
   createUFOBeam() {
@@ -1035,85 +1139,79 @@ export class PlayerSelection {
     const friesBBox = new THREE.Box3().setFromObject(this.friesModel);
 
     // Find the actual top of the visible fries geometry
-    // The visible fries seem to end before the bounding box max
-    // Let's use a point closer to the actual fries tip
     const friesHeight = friesBBox.max.y - friesBBox.min.y;
     const friesTopY = friesBBox.min.y + (friesHeight * 0.85); // 85% up from bottom
 
-    // Create line geometry with actual positions
-    const points = [];
-    points.push(new THREE.Vector3(ufoWorldPos.x, ufoBottomY, ufoWorldPos.z));
-    points.push(new THREE.Vector3(friesWorldPos.x, friesTopY, friesWorldPos.z));
+    // Create start and end points
+    const startPoint = new THREE.Vector3(ufoWorldPos.x, ufoBottomY, ufoWorldPos.z);
+    const endPoint = new THREE.Vector3(friesWorldPos.x, friesTopY, friesWorldPos.z);
 
-    const geometry = new THREE.BufferGeometry().setFromPoints(points);
+    // Calculate distance between points
+    const distance = startPoint.distanceTo(endPoint);
 
-    // Compute bounding sphere so Three.js knows where the geometry is
-    geometry.computeBoundingSphere();
+    // Calculate midpoint
+    const midPoint = new THREE.Vector3().addVectors(startPoint, endPoint).multiplyScalar(0.5);
 
-    const material = new THREE.LineBasicMaterial({
+    // Create cone geometry for tractor beam
+    const topRadius = 0.3;  // Narrow at UFO
+    const bottomRadius = 1.2; // Wide at fries
+    const radialSegments = 16;
+
+    const coneGeometry = new THREE.CylinderGeometry(
+      topRadius,
+      bottomRadius,
+      distance,
+      radialSegments,
+      1,
+      true // open ended
+    );
+
+    // Create semi-transparent glowing material
+    const beamMaterial = new THREE.MeshBasicMaterial({
       color: 0x00ffff,
-      linewidth: 2,
       transparent: true,
-      opacity: 0.6
+      opacity: 0.3,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending
     });
 
-    this.ufoBeamLine = new THREE.Line(geometry, material);
+    this.ufoBeamLine = new THREE.Mesh(coneGeometry, beamMaterial);
 
-    // Make sure the line's position is at world origin so our world coordinates work
-    this.ufoBeamLine.position.set(0, 0, 0);
-    this.ufoBeamLine.rotation.set(0, 0, 0);
-    this.ufoBeamLine.scale.set(1, 1, 1);
+    // Position the beam at midpoint
+    this.ufoBeamLine.position.copy(midPoint);
 
-    // Disable frustum culling to make sure the line is always rendered
+    // Rotate the cone to point from UFO to fries
+    // Create a direction vector from start to end
+    const direction = new THREE.Vector3().subVectors(endPoint, startPoint).normalize();
+
+    // The cylinder's default orientation is along Y axis (0, 1, 0)
+    const upVector = new THREE.Vector3(0, 1, 0);
+
+    // Create a quaternion to rotate from up to direction
+    const quaternion = new THREE.Quaternion().setFromUnitVectors(upVector, direction);
+    this.ufoBeamLine.setRotationFromQuaternion(quaternion);
+
+    // Disable frustum culling
     this.ufoBeamLine.frustumCulled = false;
 
     this.scene.add(this.ufoBeamLine);
 
-    console.log('Beam created with positions:', {
-      start: { x: ufoWorldPos.x, y: ufoBottomY, z: ufoWorldPos.z },
-      end: { x: friesWorldPos.x, y: friesTopY, z: friesWorldPos.z },
-      ufoRaw: ufoWorldPos,
-      friesRaw: friesWorldPos,
-      friesBBox: { min: friesBBox.min, max: friesBBox.max }
+    console.log('Tractor beam created:', {
+      ufoBottom: startPoint,
+      friesTop: endPoint,
+      distance: distance
     });
-
-    // DEBUG: Add small spheres at the start and end points to verify positions
-    const debugStartSphere = new THREE.Mesh(
-      new THREE.SphereGeometry(0.2, 8, 8),
-      new THREE.MeshBasicMaterial({ color: 0xff0000 }) // Red
-    );
-    debugStartSphere.position.set(ufoWorldPos.x, ufoBottomY, ufoWorldPos.z);
-    this.scene.add(debugStartSphere);
-    this._debugStartSphere = debugStartSphere;
-
-    const debugEndSphere = new THREE.Mesh(
-      new THREE.SphereGeometry(0.2, 8, 8),
-      new THREE.MeshBasicMaterial({ color: 0x00ff00 }) // Green
-    );
-    debugEndSphere.position.set(friesWorldPos.x, friesTopY, friesWorldPos.z);
-    this.scene.add(debugEndSphere);
-    this._debugEndSphere = debugEndSphere;
-
-    console.log('DEBUG: Added red sphere at UFO bottom, green sphere at fries top');
   }
 
   updateUFOBeam() {
     if (!this.ufoBeamLine || !this.friesModel || !this.ufoController.ufo) {
-      console.warn('Beam update skipped:', {
-        hasBeamLine: !!this.ufoBeamLine,
-        hasFries: !!this.friesModel,
-        hasUFO: !!this.ufoController?.ufo
-      });
       return;
     }
 
-    // Get UFO world position (center)
+    // Get UFO world position
     const ufoWorldPos = new THREE.Vector3();
     this.ufoController.ufo.getWorldPosition(ufoWorldPos);
-
-    // Calculate UFO bottom by subtracting approximate height
-    // The UFO is scaled by 2 (from setupUFO), so adjust accordingly
-    const ufoBottomY = ufoWorldPos.y - 1.5; // Bottom of UFO
+    const ufoBottomY = ufoWorldPos.y - 1.5;
 
     // Get fries world position
     const friesWorldPos = new THREE.Vector3();
@@ -1122,29 +1220,42 @@ export class PlayerSelection {
     // Get fries bounding box to find the top
     const friesBBox = new THREE.Box3().setFromObject(this.friesModel);
     const friesHeight = friesBBox.max.y - friesBBox.min.y;
-    const friesTopY = friesBBox.min.y + (friesHeight * 0.85); // 85% up from bottom
+    const friesTopY = friesBBox.min.y + (friesHeight * 0.85);
 
-    console.log('Beam positions:', {
-      ufo: { x: ufoWorldPos.x, y: ufoBottomY, z: ufoWorldPos.z },
-      fries: { x: friesWorldPos.x, y: friesTopY, z: friesWorldPos.z },
-      friesBBox: { min: friesBBox.min, max: friesBBox.max }
-    });
+    // Create start and end points
+    const startPoint = new THREE.Vector3(ufoWorldPos.x, ufoBottomY, ufoWorldPos.z);
+    const endPoint = new THREE.Vector3(friesWorldPos.x, friesTopY, friesWorldPos.z);
 
-    // Update line positions
-    const positions = this.ufoBeamLine.geometry.attributes.position.array;
-    // Start point: bottom center of UFO
-    positions[0] = ufoWorldPos.x;
-    positions[1] = ufoBottomY;
-    positions[2] = ufoWorldPos.z;
-    // End point: top center of fries
-    positions[3] = friesWorldPos.x;
-    positions[4] = friesTopY;
-    positions[5] = friesWorldPos.z;
+    // Calculate distance between points
+    const distance = startPoint.distanceTo(endPoint);
 
-    this.ufoBeamLine.geometry.attributes.position.needsUpdate = true;
+    // Calculate midpoint
+    const midPoint = new THREE.Vector3().addVectors(startPoint, endPoint).multiplyScalar(0.5);
 
-    // Recompute bounding sphere so Three.js knows the new geometry bounds
-    this.ufoBeamLine.geometry.computeBoundingSphere();
+    // Update beam position
+    this.ufoBeamLine.position.copy(midPoint);
+
+    // Rotate the cone to point from UFO to fries
+    const direction = new THREE.Vector3().subVectors(endPoint, startPoint).normalize();
+    const upVector = new THREE.Vector3(0, 1, 0);
+    const quaternion = new THREE.Quaternion().setFromUnitVectors(upVector, direction);
+    this.ufoBeamLine.setRotationFromQuaternion(quaternion);
+
+    // Recreate geometry if distance changed significantly
+    const currentHeight = this.ufoBeamLine.geometry.parameters.height;
+    if (Math.abs(currentHeight - distance) > 0.1) {
+      this.ufoBeamLine.geometry.dispose();
+      const topRadius = 0.3;
+      const bottomRadius = 1.2;
+      this.ufoBeamLine.geometry = new THREE.CylinderGeometry(
+        topRadius,
+        bottomRadius,
+        distance,
+        16,
+        1,
+        true
+      );
+    }
   }
 
   stopUFOFloating() {
@@ -1155,26 +1266,17 @@ export class PlayerSelection {
     if (this.ufoController) {
       this.ufoController.stopFloating();
     }
-    // Clean up beam line
+    // Clean up tractor beam
     if (this.ufoBeamLine) {
       this.scene.remove(this.ufoBeamLine);
       this.ufoBeamLine.geometry.dispose();
       this.ufoBeamLine.material.dispose();
       this.ufoBeamLine = null;
     }
-    // Clean up debug spheres
-    if (this._debugStartSphere) {
-      this.scene.remove(this._debugStartSphere);
-      this._debugStartSphere.geometry.dispose();
-      this._debugStartSphere.material.dispose();
-      this._debugStartSphere = null;
-    }
-    if (this._debugEndSphere) {
-      this.scene.remove(this._debugEndSphere);
-      this._debugEndSphere.geometry.dispose();
-      this._debugEndSphere.material.dispose();
-      this._debugEndSphere = null;
-    }
+    // Reset fries animation state
+    this.friesFloatingUp = false;
+    this.friesAnimationStartTime = 0;
+    this.ufoFlewAway = false;
   }
 
   hideUIOnly() {
@@ -1244,5 +1346,134 @@ export class PlayerSelection {
 
     // Cleanup scene objects
     this.cleanupSceneObjects();
+  }
+
+  cleanup() {
+    console.log('PlayerSelection: Starting cleanup');
+
+    // Stop all animations
+    this.stopUFOFloating();
+    if (this.previewAnimationId) {
+      cancelAnimationFrame(this.previewAnimationId);
+      this.previewAnimationId = null;
+    }
+
+    // Remove event listeners
+    if (this._selectionKeyHandler) {
+      window.removeEventListener("keydown", this._selectionKeyHandler);
+      this._selectionKeyHandler = null;
+    }
+
+    // Remove UI elements from DOM
+    if (this.selectionUI && this.selectionUI.parentElement) {
+      this.selectionUI.parentElement.removeChild(this.selectionUI);
+      this.selectionUI = null;
+    }
+
+    // Helper function to dispose Three.js objects properly
+    const disposeObject = (obj) => {
+      if (!obj) return;
+
+      obj.traverse((child) => {
+        // Dispose geometry
+        if (child.geometry) {
+          child.geometry.dispose();
+        }
+
+        // Dispose materials
+        if (child.material) {
+          if (Array.isArray(child.material)) {
+            child.material.forEach((material) => {
+              this.disposeMaterial(material);
+            });
+          } else {
+            this.disposeMaterial(child.material);
+          }
+        }
+      });
+
+      // Remove from scene
+      if (this.scene && obj.parent) {
+        obj.parent.remove(obj);
+      }
+    };
+
+    // Clean up preview model (don't dispose if it's a clone of preloaded model)
+    if (this.previewModel) {
+      this.scene.remove(this.previewModel);
+      // Only dispose if it was a fallback model (not cloned from preload)
+      const isPreloadedClone = window.__PRELOADED_BIKE_MODELS__ &&
+                               window.__PRELOADED_BIKE_MODELS__["motor1"];
+      if (!isPreloadedClone) {
+        disposeObject(this.previewModel);
+      }
+      this.previewModel = null;
+    }
+
+    // Clean up gas station
+    if (this.gasStationModel) {
+      disposeObject(this.gasStationModel);
+      this.gasStationModel = null;
+    }
+
+    // Clean up pavement
+    if (this.pavementMesh) {
+      if (this.pavementMesh.geometry) this.pavementMesh.geometry.dispose();
+      if (this.pavementMesh.material) this.disposeMaterial(this.pavementMesh.material);
+      this.scene.remove(this.pavementMesh);
+      this.pavementMesh = null;
+    }
+
+    // Clean up fries model
+    if (this.friesModel) {
+      disposeObject(this.friesModel);
+      this.friesModel = null;
+    }
+
+    // Clean up tractor beam
+    if (this.ufoBeamLine) {
+      if (this.ufoBeamLine.geometry) this.ufoBeamLine.geometry.dispose();
+      if (this.ufoBeamLine.material) this.disposeMaterial(this.ufoBeamLine.material);
+      this.scene.remove(this.ufoBeamLine);
+      this.ufoBeamLine = null;
+    }
+
+    // Clear bike models map (these are references, actual disposal happens elsewhere)
+    this.bikeModels.clear();
+
+    // Reset state
+    this.selectedBike = null;
+    this._previewLoadId = 0;
+    this.friesFloatingUp = false;
+    this.friesAnimationStartTime = 0;
+    this.ufoFlewAway = false;
+    this.friesStartPosition = new THREE.Vector3();
+    this.ufoBeamStartTime = 0;
+    this.lastFloatTime = 0;
+
+    // Restore camera if needed
+    this.restoreCamera();
+
+    console.log('PlayerSelection: Cleanup complete');
+  }
+
+  disposeMaterial(material) {
+    // Dispose all textures used by the material
+    if (material.map) material.map.dispose();
+    if (material.lightMap) material.lightMap.dispose();
+    if (material.bumpMap) material.bumpMap.dispose();
+    if (material.normalMap) material.normalMap.dispose();
+    if (material.specularMap) material.specularMap.dispose();
+    if (material.envMap) material.envMap.dispose();
+    if (material.alphaMap) material.alphaMap.dispose();
+    if (material.aoMap) material.aoMap.dispose();
+    if (material.displacementMap) material.displacementMap.dispose();
+    if (material.emissiveMap) material.emissiveMap.dispose();
+    if (material.gradientMap) material.gradientMap.dispose();
+    if (material.metalnessMap) material.metalnessMap.dispose();
+    if (material.roughnessMap) material.roughnessMap.dispose();
+
+    // Dispose the material itself
+    material.dispose();
   }
 }

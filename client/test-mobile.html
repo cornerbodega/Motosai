@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Mobile Controls Test - Motosai</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            overflow: hidden;
+            height: 100vh;
+        }
+        #container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+        #info {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 10px;
+            font-size: 14px;
+            max-width: 300px;
+            z-index: 2000;
+        }
+        #info h2 {
+            margin-bottom: 10px;
+            color: #ffcc00;
+        }
+        #info div {
+            margin: 5px 0;
+        }
+        .value {
+            color: #00ff00;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="info">
+            <h2>Mobile Controls Test</h2>
+            <div>Device: <span class="value" id="device">-</span></div>
+            <div>Mobile: <span class="value" id="isMobile">-</span></div>
+            <div>Touch: <span class="value" id="hasTouch">-</span></div>
+            <div>Performance: <span class="value" id="perfTier">-</span></div>
+            <hr style="margin: 10px 0; border-color: rgba(255,255,255,0.3);">
+            <div>Lean: <span class="value" id="lean">0.00</span></div>
+            <div>Throttle: <span class="value" id="throttle">0.00</span></div>
+            <div>Brake: <span class="value" id="brake">0.00</span></div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { DeviceDetection } from '/src/utils/DeviceDetection.js';
+        import { MobileTouchController } from '/src/controls/MobileTouchController.js';
+
+        // Get device info
+        const deviceInfo = DeviceDetection.getDeviceInfo();
+        const perfTier = DeviceDetection.getPerformanceTier();
+
+        document.getElementById('device').textContent =
+            deviceInfo.isIOS ? 'iOS' : deviceInfo.isAndroid ? 'Android' : 'Desktop';
+        document.getElementById('isMobile').textContent = deviceInfo.isMobile ? 'YES' : 'NO';
+        document.getElementById('hasTouch').textContent = deviceInfo.hasTouch ? 'YES' : 'NO';
+        document.getElementById('perfTier').textContent = perfTier.toUpperCase();
+
+        // Initialize mobile controller
+        const container = document.getElementById('container');
+        const mobileController = new MobileTouchController(container, {
+            enabled: true,
+            hapticFeedback: true,
+            controlLayout: 'joystick',
+            onInputChange: (inputs) => {
+                document.getElementById('lean').textContent = inputs.lean.toFixed(2);
+                document.getElementById('throttle').textContent = inputs.throttle.toFixed(2);
+                document.getElementById('brake').textContent = inputs.brake.toFixed(2);
+            }
+        });
+
+        console.log('✅ Mobile controls test initialized');
+        console.log('Device Info:', deviceInfo);
+        console.log('Performance Tier:', perfTier);
+
+        // Prevent zoom and scroll
+        DeviceDetection.preventZoom();
+        DeviceDetection.preventScroll();
+    </script>
+</body>
+</html>

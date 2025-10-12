@@ -420,8 +420,7 @@ export class Highway101 {
     // Create segments if we need more
     if (this.segments.length < this.numSegments) {
       const segmentsToCreate = Math.min(this.numSegments - this.segments.length, 3);
-      console.log(`Need ${segmentsToCreate} more segments for coverage at speed ${playerSpeed}`);
-      
+
       // Create segments at needed positions
       for (let i = 0; i < segmentsToCreate; i++) {
         const newZ = playerZ + (aheadDistance - i * this.segmentLength);
@@ -537,7 +536,6 @@ export class Highway101 {
     
     // MEMORY LEAK FIX: Emergency cleanup if too many segments
     if (this.segments.length > this.MAX_SEGMENTS) {
-      console.warn(`Too many segments (${this.segments.length}), performing emergency cleanup`);
       this.emergencyCleanup(playerZ);
       // Don't return - still try to maintain coverage
     }
@@ -583,7 +581,6 @@ export class Highway101 {
           if (this.segments.length < this.numSegments) {
             // We have room, create a new segment with exact alignment
             const exactZ = Math.round(requiredZ / this.segmentLength) * this.segmentLength;
-            console.log('Creating needed segment at', exactZ);
             this.createSegment(exactZ);
           } else {
             // Try to recycle the furthest segment
@@ -756,10 +753,6 @@ export class Highway101 {
     removed.forEach(segment => {
       this.disposeSegment(segment);
     });
-    
-    if (removed.length > 0) {
-      console.log(`Cleaned up ${removed.length} distant segments`);
-    }
   }
   
   reset() {
@@ -804,7 +797,6 @@ export class Highway101 {
     });
     
     this.segments = toKeep;
-    console.log(`Emergency cleanup: removed ${toRemove.length} segments`);
   }
   
   disposeSegment(segment) {

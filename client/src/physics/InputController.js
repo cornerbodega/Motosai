@@ -2,7 +2,7 @@
 // Prevents jerky movements and spin-outs from quick inputs
 
 export class InputController {
-  constructor() {
+  constructor(options = {}) {
     // Current raw inputs
     this.rawInputs = {
       throttle: 0,
@@ -11,7 +11,7 @@ export class InputController {
       lean: 0,
       steer: 0
     };
-    
+
     // Smoothed outputs
     this.smoothedInputs = {
       throttle: 0,
@@ -20,43 +20,47 @@ export class InputController {
       lean: 0,
       steer: 0
     };
-    
+
     // Previous inputs for rate limiting
     this.previousInputs = {
       lean: 0,
       steer: 0
     };
-    
+
+    // Input source tracking
+    this.inputSource = 'keyboard'; // 'keyboard', 'mobile', 'gamepad'
+    this.isMobileInput = options.isMobile || false;
+
     // Smoothing parameters
     this.smoothing = {
       throttle: 0.15,     // Moderate smoothing
       brake: 0.2,         // Quick brake response
-      lean: 0.08,         // Heavy smoothing for stability
+      lean: this.isMobileInput ? 0.12 : 0.08,  // Less smoothing for mobile (more responsive)
       steer: 0.06,        // Very heavy smoothing
       speedFactor: 1.0    // Adjusted by speed
     };
-    
+
     // Rate limits (max change per second)
     this.rateLimits = {
-      lean: 1.2,          // radians per second
+      lean: this.isMobileInput ? 1.8 : 1.2,    // Faster for mobile
       steer: 1.5,         // radians per second
       leanReturn: 2.0,    // faster return to center
       steerReturn: 2.5   // faster return to center
     };
-    
+
     // Dead zones
     this.deadZones = {
-      lean: 0.05,
+      lean: this.isMobileInput ? 0.02 : 0.05,  // Smaller dead zone for mobile
       steer: 0.05,
       throttle: 0.02
     };
-    
+
     // Input history for filtering
     this.inputHistory = {
       lean: [],
       steer: []
     };
-    this.historySize = 5;
+    this.historySize = this.isMobileInput ? 3 : 5; // Shorter history for mobile (less latency)
   }
   
   update(deltaTime, speed) {
@@ -250,7 +254,57 @@ export class InputController {
     return {
       raw: { ...this.rawInputs },
       smoothed: { ...this.smoothedInputs },
-      smoothingFactor: this.smoothing.speedFactor
+      smoothingFactor: this.smoothing.speedFactor,
+      inputSource: this.inputSource
     };
+  }
+
+  // Set input source (keyboard, mobile, gamepad)
+  setInputSource(source) {
+    this.inputSource = source;
+
+    // Adjust parameters based on input source
+    if (source === 'mobile') {
+      this.isMobileInput = true;
+      this.smoothing.lean = 0.12;
+      this.rateLimits.lean = 1.8;
+      this.deadZones.lean = 0.02;
+      this.historySize = 3;
+    } else {
+      this.isMobileInput = false;
+      this.smoothing.lean = 0.08;
+      this.rateLimits.lean = 1.2;
+      this.deadZones.lean = 0.05;
+      this.historySize = 5;
+    }
+  }
+
+  // Update inputs from mobile controller
+  updateFromMobile(mobileInputs) {
+    this.setInputSource('mobile');
+
+    // Map mobile inputs to raw inputs
+    if (mobileInputs.lean !== undefined) {
+      this.rawInputs.lean = mobileInputs.lean;
+      this.rawInputs.steer = mobileInputs.lean; // Use lean for steering too
+    }
+
+    if (mobileInputs.throttle !== undefined) {
+      this.rawInputs.throttle = mobileInputs.throttle;
+    }
+
+    if (mobileInputs.brake !== undefined) {
+      // Mobile brake input is combined, split it for front/rear
+      const brakeInput = mobileInputs.brake;
+      this.rawInputs.frontBrake = mobileInputs.frontBrake || brakeInput * 0.6;
+      this.rawInputs.rearBrake = mobileInputs.rearBrake || brakeInput * 0.8;
+    } else {
+      if (mobileInputs.frontBrake !== undefined) {
+        this.rawInputs.frontBrake = mobileInputs.frontBrake;
+      }
+      if (mobileInputs.rearBrake !== undefined) {
+        this.rawInputs.rearBrake = mobileInputs.rearBrake;
+      }
+    }
   }
 }

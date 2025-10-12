@@ -34,6 +34,8 @@ import { HeatHazeShader } from "./shaders/HeatHazeShader.js";
 import { HeatHazeShaderV2 } from "./shaders/HeatHazeShaderV2.js";
 import { DevMenu } from "./DevMenu.js";
 import { BillboardSystem } from "./BillboardSystem.js";
+import { DeviceDetection } from "../utils/DeviceDetection.js";
+import { MobileTouchController } from "../controls/MobileTouchController.js";
 // PowerupSystem removed
 
 export class MotosaiGame {
@@ -77,6 +79,18 @@ export class MotosaiGame {
       }
     }, 5000); // Every 5 seconds
 
+    // Detect mobile device
+    this.deviceInfo = DeviceDetection.getDeviceInfo();
+    this.isMobile = this.deviceInfo.isMobile;
+    this.performanceTier = DeviceDetection.getPerformanceTier();
+
+    console.log('🎮 Device Detection:', {
+      isMobile: this.isMobile,
+      isTablet: this.deviceInfo.isTablet,
+      performanceTier: this.performanceTier,
+      hasTouch: this.deviceInfo.hasTouch
+    });
+
     // Configuration options
     this.config = {
       riderColor: config.riderColor || 0x2a2a2a, // Default dark grey
@@ -89,6 +103,9 @@ export class MotosaiGame {
     this.score = 0;
     this.distance = 0; // miles traveled
     this.showDevHUD = false; // Toggle for dev HUD visibility (default hidden)
+
+    // Mobile controls
+    this.mobileController = null;
 
     // UFO that follows player
     this.ufo = null;
@@ -195,6 +212,54 @@ export class MotosaiGame {
     this.showIntroAndSelection(() => {
       // After selection, initialize player-specific components
       this.initPhysics();
+
+      // Debug: Check if UFO exists
+      console.log('AT GAME START:', {
+        ufoController: !!this.ufoController,
+        ufo: !!this.ufo,
+        ufoControllerUfo: this.ufoController ? !!this.ufoController.ufo : 'no controller'
+      });
+
+      // Position UFO same as respawn does
+      if (this.ufoController && this.ufo) {
+        // Make sure ufoController and game both reference the same UFO
+        if (this.ufoController.ufo !== this.ufo) {
+          this.ufoController.ufo = this.ufo;
+        }
+
+        // Reset UFO state
+        this.ufoController.escapeAnimationRunning = false;
+        this.ufoController.isEscaping = false;
+
+        // Position UFO like respawn does - ahead of player
+        this.ufo.position.set(0, 30, 200);
+        this.ufo.rotation.set(0, 0, 0);
+        this.ufo.visible = true;
+
+        // Make sure UFO is in the scene (might have been removed during fly-away)
+        if (!this.scene.children.includes(this.ufo)) {
+          this.scene.add(this.ufo);
+          console.log('Re-added UFO to scene after fly-away');
+        }
+
+        // Make sure all UFO materials are visible - match respawn code exactly
+        this.ufo.traverse((child) => {
+          if (child.isMesh) {
+            child.visible = true;
+          }
+          if (child.material) {
+            const isGlow = child.material.side === THREE.BackSide;
+            child.material.opacity = isGlow ? 0.2 : 1.0;
+            child.material.transparent = true;  // respawn sets all to true
+            child.material.needsUpdate = true;
+          }
+        });
+
+        console.log('UFO positioned at start:', this.ufo.position, 'visible:', this.ufo.visible, 'in scene:', this.scene.children.includes(this.ufo));
+      } else {
+        console.error('NO UFO TO POSITION!');
+      }
+
       this.initControls();
       this.initHUD();
       this.initDeathAnimation();
@@ -621,37 +686,42 @@ export class MotosaiGame {
     console.log("%c📡 Real-time monitoring enabled", "color: #00ff00");
 
     // Softer ambient light with warm tint
-    this.ambientLight = new THREE.AmbientLight(0xfff5e6, 0.4);
+    this.ambientLight = new THREE.AmbientLight(0xfff5e6, 0.35);
     this.scene.add(this.ambientLight);
 
     // Main sun light - softer and warmer
-    this.sunLight = new THREE.DirectionalLight(0xfff5dd, 2.5);
+    this.sunLight = new THREE.DirectionalLight(0xfff5dd, 2.2);
     this.sunLight.position.set(100, 150, 80);
     this.sunLight.castShadow = true;
 
-    // Softer shadow settings
+    // Enhanced shadow settings for better quality
     this.sunLight.shadow.camera.left = -60;
     this.sunLight.shadow.camera.right = 60;
     this.sunLight.shadow.camera.top = 60;
     this.sunLight.shadow.camera.bottom = -60;
-    this.sunLight.shadow.camera.near = 1; // Increased from 0.1 to reduce shadow acne
+    this.sunLight.shadow.camera.near = 1;
     this.sunLight.shadow.camera.far = 300;
     this.sunLight.shadow.mapSize.width = this.currentConfig.shadowMapSize;
     this.sunLight.shadow.mapSize.height = this.currentConfig.shadowMapSize;
-    this.sunLight.shadow.radius = 2; // Reduced soft shadow edges
-    this.sunLight.shadow.blurSamples = 10; // Fewer blur samples for performance
-    this.sunLight.shadow.bias = 0.001; // Positive bias to prevent shadow acne
-    this.sunLight.shadow.normalBias = 0.05; // Increased normal bias to prevent self-shadowing artifacts
+    this.sunLight.shadow.radius = 3; // Softer shadow edges
+    this.sunLight.shadow.blurSamples = 12; // More samples for smoother shadows
+    this.sunLight.shadow.bias = 0.0008; // Fine-tuned bias
+    this.sunLight.shadow.normalBias = 0.04;
     this.scene.add(this.sunLight);
 
     // Hemisphere light for soft sky lighting
-    this.hemiLight = new THREE.HemisphereLight(0x87ceeb, 0x8b7355, 0.6);
+    this.hemiLight = new THREE.HemisphereLight(0x87ceeb, 0x8b7355, 0.55);
     this.scene.add(this.hemiLight);
 
-    // Add a subtle fill light to soften harsh shadows
-    this.fillLight = new THREE.DirectionalLight(0xe6f0ff, 0.4);
+    // Subtle fill light to soften harsh shadows
+    this.fillLight = new THREE.DirectionalLight(0xe6f0ff, 0.35);
     this.fillLight.position.set(-50, 80, -50);
     this.scene.add(this.fillLight);
+
+    // Add subtle rim light for edge definition
+    this.rimLight = new THREE.DirectionalLight(0xffd9cc, 0.25);
+    this.rimLight.position.set(-80, 100, -80);
+    this.scene.add(this.rimLight);
   }
 
   initPhysics() {
@@ -662,8 +732,11 @@ export class MotosaiGame {
     // Keep old physics for comparison if needed
     this.useV2Physics = false;
 
-    // Initialize input controller for smooth control (not needed for simple physics)
-    // this.inputController = new InputController();
+    // Initialize input controller with mobile support
+    // Note: Simple physics doesn't use InputController, only complex physics does
+    this.inputController = new InputController({ isMobile: this.isMobile });
+
+    console.log('🎮 Physics initialized (Simple), Input controller ready for mobile:', this.isMobile);
 
     // Create motorcycle mesh (low poly)
     this.createMotorcycle();
@@ -1135,53 +1208,82 @@ export class MotosaiGame {
   }
 
   initTouchControls() {
-    let touchStartX = 0;
-    let touchStartY = 0;
+    // Initialize mobile touch controls if on mobile device
+    if (this.isMobile) {
+      console.log('📱 Initializing mobile touch controls');
 
-    // Store bound handlers for cleanup
-    this.boundHandleTouchStart = (e) => {
-      touchStartX = e.touches[0].clientX;
-      touchStartY = e.touches[0].clientY;
-    };
-
-    this.boundHandleTouchMove = (e) => {
-      const touchX = e.touches[0].clientX;
-      const touchY = e.touches[0].clientY;
-
-      const deltaX = (touchX - touchStartX) / this.width;
-      const deltaY = (touchY - touchStartY) / this.height;
-
-      // Lean control
-      this.physics.setControls({ lean: deltaX * 2 });
-
-      // Throttle/brake
-      if (deltaY < -0.1) {
-        this.physics.setControls({ throttle: -deltaY });
-      } else if (deltaY > 0.1) {
-        this.physics.setControls({ frontBrake: deltaY });
-      }
-    };
-
-    this.boundHandleTouchEnd = () => {
-      this.physics.setControls({
-        lean: 0,
-        throttle: 0,
-        frontBrake: 0,
+      // Initialize mobile controller with joystick layout
+      this.mobileController = new MobileTouchController(this.container, {
+        enabled: true,
+        hapticFeedback: true,
+        controlLayout: 'joystick', // or 'zones'
+        sensitivity: {
+          lean: 1.0,
+          throttle: 1.0,
+          brake: 1.0
+        },
+        onInputChange: (inputs) => {
+          // Update InputController with mobile inputs
+          if (this.inputController) {
+            this.inputController.updateFromMobile(inputs);
+          }
+        }
       });
-    };
 
-    this.renderer.domElement.addEventListener(
-      "touchstart",
-      this.boundHandleTouchStart
-    );
-    this.renderer.domElement.addEventListener(
-      "touchmove",
-      this.boundHandleTouchMove
-    );
-    this.renderer.domElement.addEventListener(
-      "touchend",
-      this.boundHandleTouchEnd
-    );
+      // Prevent default touch behaviors
+      DeviceDetection.preventZoom();
+      DeviceDetection.preventScroll();
+
+      console.log('✅ Mobile controls initialized');
+    } else {
+      // Desktop fallback - basic touch support for testing
+      let touchStartX = 0;
+      let touchStartY = 0;
+
+      this.boundHandleTouchStart = (e) => {
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+      };
+
+      this.boundHandleTouchMove = (e) => {
+        const touchX = e.touches[0].clientX;
+        const touchY = e.touches[0].clientY;
+
+        const deltaX = (touchX - touchStartX) / this.width;
+        const deltaY = (touchY - touchStartY) / this.height;
+
+        // Lean control
+        this.physics.setControls({ lean: deltaX * 2 });
+
+        // Throttle/brake
+        if (deltaY < -0.1) {
+          this.physics.setControls({ throttle: -deltaY });
+        } else if (deltaY > 0.1) {
+          this.physics.setControls({ frontBrake: deltaY });
+        }
+      };
+
+      this.boundHandleTouchEnd = () => {
+        this.physics.setControls({
+          lean: 0,
+          throttle: 0,
+          frontBrake: 0,
+        });
+      };
+
+      this.renderer.domElement.addEventListener(
+        "touchstart",
+        this.boundHandleTouchStart
+      );
+      this.renderer.domElement.addEventListener(
+        "touchmove",
+        this.boundHandleTouchMove
+      );
+      this.renderer.domElement.addEventListener(
+        "touchend",
+        this.boundHandleTouchEnd
+      );
+    }
   }
 
   initDeathAnimation() {
@@ -1319,13 +1421,14 @@ export class MotosaiGame {
         // Scale it properly (smaller)
         this.ufoController.ufo.scale.setScalar(1);
 
-        // Position immediately at default starting position (match player spawn)
+        // Position immediately at starting position - close enough to see clearly at race start
         // Player spawns at x: -8.5, z: 0, so UFO should be ahead on same lane
-        this.ufoController.ufo.position.set(-8.5, 30, 200);
-        this.ufoController.ufo.visible = true;
+        // Start UFO much closer (50 units ahead) so it's clearly visible at the start
+        const playerSpawnZ = 0;
+        const startDistance = 50; // Much closer than targetDistance (200) for visibility at start
+        this.ufoController.ufo.position.set(0, 35, playerSpawnZ + startDistance);
         console.log('UFO positioned at start:', this.ufoController.ufo.position);
         console.log('UFO in scene?', this.scene.children.includes(this.ufoController.ufo));
-        console.log('UFO visible?', this.ufoController.ufo.visible);
         console.log('UFO scale:', this.ufoController.ufo.scale);
       } else {
         // Fallback: create UFO if intro didn't provide one
@@ -1347,8 +1450,7 @@ export class MotosaiGame {
         // Hide selection UI
         this.playerSelection.hideSelectionUI();
 
-        // UFO is already set up and visible - just continue with game
-        console.log('UFO visible?', this.ufoController.ufo.visible);
+        // UFO is already set up - just continue with game
         console.log('UFO in scene?', this.scene.children.includes(this.ufoController.ufo));
 
         // Continue with game initialization
@@ -2257,7 +2359,10 @@ export class MotosaiGame {
   }
 
   updateUFO(deltaTime, state) {
-    if (!this.ufoController || !this.ufo) return;
+    if (!this.ufoController || !this.ufo) {
+      console.log('UFO update skipped:', { ufoController: !!this.ufoController, ufo: !!this.ufo });
+      return;
+    }
 
     // Use UFOController's update method
     // state.velocity is {x, y, z}, calculate magnitude manually
@@ -2536,6 +2641,13 @@ export class MotosaiGame {
       const fillColor = this._lerpColor(from.fillColor, to.fillColor, eased);
       this.fillLight.color.setHex(fillColor);
       this.fillLight.intensity = this._lerp(from.fillIntensity, to.fillIntensity, eased);
+    }
+
+    // Update rim light
+    if (this.rimLight) {
+      const rimColor = this._lerpColor(from.rimColor || from.fillColor, to.rimColor || to.fillColor, eased);
+      this.rimLight.color.setHex(rimColor);
+      this.rimLight.intensity = this._lerp(from.rimIntensity || 0.5, to.rimIntensity || 0.5, eased);
     }
 
     // Smooth starfield fade in/out
@@ -2969,6 +3081,66 @@ export class MotosaiGame {
     // Stop the bike completely
     this.physics.velocity = { x: 0, y: 0, z: 0 };
     this.physics.speed = 0;
+  }
+
+  positionUFOForRaceStart() {
+    // EXACT COPY from respawnPlayer() lines 3108-3181
+    if (this.ufoController && this.ufo) {
+      console.log('UFO exists, resetting...');
+
+      // Make sure ufoController and game both reference the same UFO
+      if (this.ufoController.ufo !== this.ufo) {
+        console.warn('UFO reference mismatch! Syncing...');
+        this.ufoController.ufo = this.ufo;
+      }
+
+      // Cancel any running escape animation and reset escape state
+      this.ufoController.escapeAnimationRunning = false;
+      this.ufoController.isEscaping = false;
+      console.log('Cancelled escape animation and reset escape state');
+
+      // Reset material opacity in case escape animation faded it
+      let materialsReset = 0;
+      this.ufo.traverse((child) => {
+        if (child.material) {
+          // Check if this is a glow material by checking its properties
+          const isGlow = child.material.side === THREE.BackSide;
+          const oldOpacity = child.material.opacity;
+          child.material.opacity = isGlow ? 0.2 : 1.0;
+          child.material.transparent = true;
+          child.material.needsUpdate = true;
+          materialsReset++;
+          if (oldOpacity < 0.1) {
+            console.log('Reset material from', oldOpacity, 'to', child.material.opacity, 'isGlow:', isGlow);
+          }
+        }
+      });
+
+      // Also reset particle system opacity
+      if (this.ufoController.particleSystem) {
+        this.ufoController.particleSystem.material.opacity = 0.6;
+        this.ufoController.particleSystem.material.needsUpdate = true;
+      }
+
+      console.log('UFO materials reset:', materialsReset, 'will be positioned next');
+    } else {
+      console.error('UFO or UFOController is null during respawn!', {
+        ufoController: !!this.ufoController,
+        ufo: !!this.ufo,
+        ufoInScene: this.ufo ? this.scene.children.includes(this.ufo) : false
+      });
+    }
+
+    // NOW position UFO relative to player's reset position
+    if (this.ufo) {
+      this.ufo.position.set(
+        this.physics.position.x,
+        30,  // Higher up for more floaty feel
+        this.physics.position.z + 200  // Further ahead
+      );
+      this.ufo.rotation.set(0, 0, 0);
+      console.log('UFO positioned at:', this.ufo.position, 'Player at:', this.physics.position);
+    }
   }
 
   respawnPlayer() {
@@ -3812,6 +3984,12 @@ export class MotosaiGame {
       typeof this.inputController.dispose === "function"
     ) {
       this.inputController.dispose();
+    }
+
+    // Dispose of mobile controller
+    if (this.mobileController) {
+      this.mobileController.destroy();
+      this.mobileController = null;
     }
 
     // Dispose of multiplayer

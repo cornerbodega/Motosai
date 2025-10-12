@@ -42,6 +42,14 @@ export class UFOController {
         "/models/ufo.glb",
         (gltf) => {
           this.ufo = gltf.scene;
+          // Force all materials to be opaque immediately after loading
+          this.ufo.traverse((child) => {
+            if (child.isMesh && child.material) {
+              child.material.transparent = false;
+              child.material.opacity = 1.0;
+              child.material.needsUpdate = true;
+            }
+          });
           this.setupUFO();
           resolve();
         },
@@ -62,6 +70,14 @@ export class UFOController {
         "/models/ufo/Low_poly_UFO.obj",
         (obj) => {
           this.ufo = obj;
+          // Force all materials to be opaque immediately after loading
+          this.ufo.traverse((child) => {
+            if (child.isMesh && child.material) {
+              child.material.transparent = false;
+              child.material.opacity = 1.0;
+              child.material.needsUpdate = true;
+            }
+          });
           this.setupUFO();
           resolve();
         },
@@ -81,11 +97,13 @@ export class UFOController {
     // Dome
     const domeGeometry = new THREE.SphereGeometry(1, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2);
     const domeMaterial = new THREE.MeshStandardMaterial({
-      color: 0x888888,
+      color: 0x555555,
       metalness: 0.8,
       roughness: 0.2,
-      emissive: 0x00ffff,
-      emissiveIntensity: 0.3
+      emissive: 0x00ddff,
+      emissiveIntensity: 0.8,
+      transparent: false,
+      opacity: 1.0
     });
     const dome = new THREE.Mesh(domeGeometry, domeMaterial);
     dome.position.y = 0.4;
@@ -94,11 +112,13 @@ export class UFOController {
     // Disc
     const discGeometry = new THREE.CylinderGeometry(2, 2.5, 0.6, 32);
     const discMaterial = new THREE.MeshStandardMaterial({
-      color: 0xcccccc,
+      color: 0x999999,
       metalness: 0.9,
       roughness: 0.1,
-      emissive: 0x0088ff,
-      emissiveIntensity: 0.2
+      emissive: 0x0066cc,
+      emissiveIntensity: 0.8,
+      transparent: false,
+      opacity: 1.0
     });
     const disc = new THREE.Mesh(discGeometry, discMaterial);
     group.add(disc);
@@ -141,8 +161,8 @@ export class UFOController {
     // Add particle trail
     this.addParticleTrail();
 
-    // Add bright point light around UFO
-    const ufoLight = new THREE.PointLight(0xffffff, 100, 100);
+    // Add bright cyan point light around UFO
+    const ufoLight = new THREE.PointLight(0x00ffff, 200, 800);
     ufoLight.position.set(0, 0, 0);
     this.ufo.add(ufoLight);
   }
@@ -155,12 +175,13 @@ export class UFOController {
     }
 
     // Glow halo around UFO
-    const glowGeometry = new THREE.SphereGeometry(5, 16, 16);
+    const glowGeometry = new THREE.SphereGeometry(6, 16, 16);
     const glowMaterial = new THREE.MeshBasicMaterial({
-      color: 0x00ffff,
+      color: 0x00ddff,
       transparent: true,
-      opacity: 0.1,
-      side: THREE.BackSide
+      opacity: 0.2,
+      side: THREE.BackSide,
+      blending: THREE.AdditiveBlending
     });
     this.glowMesh = new THREE.Mesh(glowGeometry, glowMaterial);
     this.ufo.add(this.glowMesh);
@@ -201,8 +222,8 @@ export class UFOController {
       console.warn('UFOController.update called but ufo is null');
       return;
     }
-    if (this.isEscaping || this.isFlyingToBike) {
-      // Don't update position while escaping or flying to bike
+    if (this.isEscaping || this.isFlyingToBike || this.isFlyingAway || this.isPlayingIntro) {
+      // Don't update position during animations
       return;
     }
     if (this.isFloatingAboveBike) {
@@ -309,7 +330,7 @@ export class UFOController {
 
     // Pulse glow
     if (this.glowMesh) {
-      this.glowMesh.material.opacity = 0.1 + Math.sin(this.bobTime * 2) * 0.05;
+      this.glowMesh.material.opacity = 0.2 + Math.sin(this.bobTime * 2) * 0.08;
     }
 
     // Animate lights
@@ -520,7 +541,7 @@ export class UFOController {
 
     // Pulse glow
     if (this.glowMesh) {
-      this.glowMesh.material.opacity = 0.1 + Math.sin(this.floatTime * 2) * 0.05;
+      this.glowMesh.material.opacity = 0.2 + Math.sin(this.floatTime * 2) * 0.08;
     }
 
     // Update particle trail
@@ -532,27 +553,204 @@ export class UFOController {
     this.floatTime = 0;
   }
 
+  playIntroFlyIn(playerPosition, onComplete) {
+    if (!this.ufo) {
+      if (onComplete) onComplete();
+      return;
+    }
+
+    console.log('UFO playIntroFlyIn starting from position:', this.ufo.position);
+
+    // Set intro flag
+    this.isPlayingIntro = true;
+
+    // Position UFO MUCH closer so it's clearly visible - right above and slightly behind player
+    // Camera is at (0, 2, -4) looking forward
+    // Start UFO at player position, high up so it's very visible
+    this.ufo.position.set(0, 15, playerPosition.z + 10); // 10 units ahead, low enough to see clearly
+
+    // Make sure solid materials are fully opaque, keep glow transparent
+    this.ufo.traverse((child) => {
+      if (child.isMesh && child.material) {
+        // Glow has BackSide rendering
+        const isGlow = child.material.side === THREE.BackSide;
+        if (!isGlow) {
+          child.material.opacity = 1.0;
+          child.material.transparent = false;
+          child.material.needsUpdate = true;
+        }
+      }
+    });
+
+    const startPos = this.ufo.position.clone();
+    const startTime = Date.now();
+    const introDuration = 3000; // 3 seconds for more dramatic intro
+
+    // Target position ahead of player (positive Z is forward)
+    const targetX = playerPosition.x;
+    const targetY = 35; // Default flying height
+    const targetZ = playerPosition.z + this.targetDistance; // 200 units ahead
+
+    console.log('UFO intro animation:', {
+      startPos: startPos,
+      targetPos: { x: targetX, y: targetY, z: targetZ }
+    });
+
+    const animate = () => {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(elapsed / introDuration, 1);
+
+      // Ease-out cubic for smooth deceleration
+      const eased = 1 - Math.pow(1 - progress, 3);
+
+      // Fly from behind to ahead
+      this.ufo.position.x = startPos.x + (targetX - startPos.x) * eased;
+      this.ufo.position.y = startPos.y + (targetY - startPos.y) * eased;
+      this.ufo.position.z = startPos.z + (targetZ - startPos.z) * eased;
+
+      // Fast spinning during intro
+      this.ufo.rotation.y += 0.15;
+
+      // Forward tilt
+      this.ufo.rotation.x = -0.3;
+
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      } else {
+        this.isPlayingIntro = false;
+        console.log('UFO intro complete at position:', this.ufo.position);
+        if (onComplete) onComplete();
+      }
+    };
+
+    animate();
+  }
+
+  playFlyAwayAnimation(onComplete) {
+    if (!this.ufo) {
+      if (onComplete) onComplete();
+      return;
+    }
+
+    // Set flying away flag
+    this.isFlyingAway = true;
+    const startPos = this.ufo.position.clone();
+    const startTime = Date.now();
+    const flyDuration = 2000; // 2 seconds to fly away
+
+    // Calculate target position: up and away
+    const targetY = startPos.y + 80; // Fly up 80 units
+    const targetZ = startPos.z - 150; // Fly away 150 units
+
+    const animate = () => {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(elapsed / flyDuration, 1);
+
+      // Ease-in cubic for acceleration
+      const eased = progress * progress * progress;
+
+      // Move up and away
+      this.ufo.position.y = startPos.y + (targetY - startPos.y) * eased;
+      this.ufo.position.z = startPos.z + (targetZ - startPos.z) * eased;
+
+      // Spin faster while flying away
+      this.ufo.rotation.y += 0.08;
+
+      // Don't fade out - keep UFO visible
+
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      } else {
+        this.isFlyingAway = false;
+        console.log('UFO fly away complete');
+        if (onComplete) onComplete();
+      }
+    };
+
+    animate();
+  }
+
   cleanup() {
+    console.log('UFOController: Starting cleanup');
+
+    // Cancel any running animations
+    this.escapeAnimationRunning = false;
+    this.flyToBikeAnimationRunning = false;
+    this.isEscaping = false;
+    this.isFlyingToBike = false;
+    this.isFloatingAboveBike = false;
+
+    // Clean up UFO model and all its children
     if (this.ufo) {
       this.ufo.traverse((child) => {
-        if (child.geometry) child.geometry.dispose();
+        if (child.geometry) {
+          child.geometry.dispose();
+        }
         if (child.material) {
-          if (child.material.map) child.material.map.dispose();
-          child.material.dispose();
+          this.disposeMaterial(child.material);
+        }
+        // Remove point lights attached to UFO
+        if (child.isLight) {
+          child.dispose();
         }
       });
       this.scene.remove(this.ufo);
       this.ufo = null;
     }
 
+    // Clean up particle system
     if (this.particleSystem) {
-      this.particleSystem.geometry.dispose();
-      this.particleSystem.material.dispose();
+      if (this.particleSystem.geometry) this.particleSystem.geometry.dispose();
+      if (this.particleSystem.material) this.particleSystem.material.dispose();
       this.scene.remove(this.particleSystem);
       this.particleSystem = null;
     }
 
+    // Clean up glow mesh (if it's a separate object)
+    if (this.glowMesh && this.glowMesh.parent) {
+      if (this.glowMesh.geometry) this.glowMesh.geometry.dispose();
+      if (this.glowMesh.material) this.disposeMaterial(this.glowMesh.material);
+      if (this.glowMesh.parent) this.glowMesh.parent.remove(this.glowMesh);
+      this.glowMesh = null;
+    }
+
+    // Clear light references
     this.lights = [];
-    this.glowMesh = null;
+
+    // Reset state
+    this.baseSpeed = 0;
+    this.weaveTime = 0;
+    this.bobTime = 0;
+    this.spiralAngle = 0;
+    this.wobbleTime = 0;
+    this.dartTime = 0;
+    this.floatTime = 0;
+
+    console.log('UFOController: Cleanup complete');
+  }
+
+  disposeMaterial(material) {
+    if (Array.isArray(material)) {
+      material.forEach(mat => this.disposeMaterial(mat));
+      return;
+    }
+
+    // Dispose all textures
+    if (material.map) material.map.dispose();
+    if (material.lightMap) material.lightMap.dispose();
+    if (material.bumpMap) material.bumpMap.dispose();
+    if (material.normalMap) material.normalMap.dispose();
+    if (material.specularMap) material.specularMap.dispose();
+    if (material.envMap) material.envMap.dispose();
+    if (material.alphaMap) material.alphaMap.dispose();
+    if (material.aoMap) material.aoMap.dispose();
+    if (material.displacementMap) material.displacementMap.dispose();
+    if (material.emissiveMap) material.emissiveMap.dispose();
+    if (material.gradientMap) material.gradientMap.dispose();
+    if (material.metalnessMap) material.metalnessMap.dispose();
+    if (material.roughnessMap) material.roughnessMap.dispose();
+
+    // Dispose the material itself
+    material.dispose();
   }
 }
