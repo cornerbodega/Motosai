@@ -33,6 +33,7 @@ import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { HeatHazeShader } from "./shaders/HeatHazeShader.js";
 import { HeatHazeShaderV2 } from "./shaders/HeatHazeShaderV2.js";
 import { DevMenu } from "./DevMenu.js";
+import { BillboardSystem } from "./BillboardSystem.js";
 // PowerupSystem removed
 
 export class MotosaiGame {
@@ -94,6 +95,9 @@ export class MotosaiGame {
     this.ufoController = null;
     this.ufoState = 'following'; // 'following', 'flyingAway', 'returning'
     this.ufoFlyAwayProgress = 0;
+
+    // Billboard system
+    this.billboardSystem = null;
 
     // Race state
     this.raceMode = false;
@@ -1026,6 +1030,17 @@ export class MotosaiGame {
     this.terrain.generate();
   }
 
+  initBillboards() {
+    console.log('[INIT] Creating BillboardSystem...');
+    this.billboardSystem = new BillboardSystem(this.scene);
+
+    // Create test billboards for development
+    // TODO: Replace with Supabase data loading
+    this.billboardSystem.createTestBillboards(10, 500);
+
+    console.log('[INIT] BillboardSystem created');
+  }
+
   initBackgrounds() {
     try {
       console.log("[INIT] Creating BackgroundSystem...");
@@ -1233,6 +1248,9 @@ export class MotosaiGame {
       // Load desert/highway scene for bike selection
       this.initHighway();
       this.initBackgrounds();
+
+      // Initialize Billboard System
+      this.initBillboards();
 
       // Initialize UFOController with the UFO from intro BEFORE bike selection
       this.ufoController = new UFOController(this.scene);
@@ -3583,6 +3601,11 @@ export class MotosaiGame {
         // Update UFO position
         this.updateUFO(deltaTime, state);
 
+        // Update billboard system (distance-based loading/unloading)
+        if (this.billboardSystem) {
+          this.billboardSystem.update(deltaTime, state.position);
+        }
+
         // Update HUD
         this.updateHUD();
 
@@ -3816,6 +3839,13 @@ export class MotosaiGame {
       this.ufoController = null;
       this.ufo = null;
     }
+
+    // Dispose billboard system
+    if (this.billboardSystem) {
+      this.billboardSystem.dispose();
+      this.billboardSystem = null;
+    }
+
     if (this.backgrounds) {
       this.backgrounds.dispose();
     }
