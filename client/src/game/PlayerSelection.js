@@ -1,6 +1,8 @@
 // PlayerSelection module - preview and bike chooser
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
+import { MTLLoader } from "three/examples/jsm/loaders/MTLLoader.js";
 import { MotorcycleFactory } from "./MotorcycleFactory.js";
 
 export class PlayerSelection {
@@ -28,15 +30,52 @@ export class PlayerSelection {
 
   // === PREVIEW POSITIONING ===
   static PREVIEW_SCALE = 0.6;
-  static PREVIEW_X_POSITION = -13.5;
+  static PREVIEW_X_POSITION = -28.5;
   static PREVIEW_Z_POSITION = -3;
   static PREVIEW_FALLBACK_Y_POSITION = 0.5;
+  static PREVIEW_ROTATION_Y = (3 * Math.PI) / 4; // 135 degrees
+
+  // === GAS STATION ===
+  static GAS_STATION_MODEL_PATH = '/models/gas-station/gas-station.glb';
+  static GAS_STATION_SCALE = 1;
+  static GAS_STATION_X_POSITION = -28.5;
+  static GAS_STATION_Y_POSITION = 0;
+  static GAS_STATION_Z_POSITION = -3;
+
+  // Gas Station Colors
+  static GAS_STATION_ROOF_COLOR = 0x8B0000; // Dark red
+  static GAS_STATION_WALLS_COLOR = 0xD3D3D3; // Light gray
+  static GAS_STATION_PUMPS_COLOR = 0xFF4444; // Bright red
+  static GAS_STATION_METAL_COLOR = 0x4A4A4A; // Dark gray
+  static GAS_STATION_WINDOWS_COLOR = 0x87CEEB; // Sky blue
+  static GAS_STATION_TRIM_COLOR = 0x8B4513; // Brown
+  static GAS_STATION_DEFAULT_COLOR = 0xCCCCCC; // Default gray
+
+  // === PAVEMENT ===
+  static PAVEMENT_WIDTH = 80;
+  static PAVEMENT_HEIGHT = 80;
+  static PAVEMENT_COLOR = 0x404040;
+  static PAVEMENT_X_POSITION = -28.5;
+  static PAVEMENT_Y_POSITION = 0.01;
+  static PAVEMENT_Z_POSITION = -3;
+
+  // === FRIES ===
+  static FRIES_MODEL_PATH = '/models/fries/fries.glb';
+  static FRIES_SCALE = 1;
+  static FRIES_X_POSITION = -22.7;
+  static FRIES_Y_POSITION = 0;
+  static FRIES_Z_POSITION = -3;
+
+  // Fries colors based on UV coordinates
+  static FRIES_TOP_COLOR = 0xFFD700; // Golden yellow for top (crispy)
+  static FRIES_MIDDLE_COLOR = 0xFFA500; // Orange for middle
+  static FRIES_BOTTOM_COLOR = 0xD2691E; // Brown for bottom
 
   // === CAMERA POSITIONING ===
-  static CAMERA_X_POSITION = -9;
+  static CAMERA_X_POSITION = -19;
   static CAMERA_Y_POSITION = 1.0;
   static CAMERA_Z_POSITION = -3;
-  static CAMERA_LOOK_AT_X = -13.5;
+  static CAMERA_LOOK_AT_X = -23.5;
   static CAMERA_LOOK_AT_Y = 0.5;
   static CAMERA_LOOK_AT_Z = -3;
 
@@ -89,6 +128,12 @@ export class PlayerSelection {
     this.previewAnimationId = null;
     // token to track latest async preview load to avoid race conditions
     this._previewLoadId = 0;
+    // Gas station model for selection screen
+    this.gasStationModel = null;
+    // Pavement mesh for selection screen
+    this.pavementMesh = null;
+    // Fries model for selection screen
+    this.friesModel = null;
 
     this.initializeBikes();
   }
@@ -475,10 +520,9 @@ export class PlayerSelection {
     };
 
     // Preserve current rotation so swapping models doesn't reset the spin
-    const DEFAULT_ROTATION = 0;
     const preservedRotationY = this.previewModel
       ? this.previewModel.rotation.y
-      : DEFAULT_ROTATION;
+      : PlayerSelection.PREVIEW_ROTATION_Y;
 
     // Remove existing preview model from main scene
     // DON'T dispose geometries/materials as they're shared with preloaded model
@@ -648,6 +692,7 @@ export class PlayerSelection {
               PlayerSelection.PREVIEW_FALLBACK_Y_POSITION,
               PlayerSelection.PREVIEW_Z_POSITION
             );
+            fallback.rotation.y = PlayerSelection.PREVIEW_ROTATION_Y;
             this.previewModel = fallback;
             this.scene.add(fallback);
           } catch (e) {
@@ -658,6 +703,186 @@ export class PlayerSelection {
     }
   }
 
+
+  createPavement() {
+    // Create pavement plane
+    const geometry = new THREE.PlaneGeometry(
+      PlayerSelection.PAVEMENT_WIDTH,
+      PlayerSelection.PAVEMENT_HEIGHT
+    );
+    const material = new THREE.MeshStandardMaterial({
+      color: PlayerSelection.PAVEMENT_COLOR,
+      roughness: 0.8,
+      metalness: 0.2
+    });
+
+    const pavement = new THREE.Mesh(geometry, material);
+    pavement.rotation.x = -Math.PI / 2; // Rotate to be horizontal
+    pavement.position.set(
+      PlayerSelection.PAVEMENT_X_POSITION,
+      PlayerSelection.PAVEMENT_Y_POSITION,
+      PlayerSelection.PAVEMENT_Z_POSITION
+    );
+    pavement.receiveShadow = true;
+
+    this.pavementMesh = pavement;
+    this.scene.add(pavement);
+  }
+
+  loadGasStation() {
+    // Load gas station model
+    const loader = new GLTFLoader();
+    loader.load(
+      PlayerSelection.GAS_STATION_MODEL_PATH,
+      (gltf) => {
+        const model = gltf.scene || gltf.scenes[0];
+        if (!model) return;
+
+        // Scale and position the gas station
+        model.scale.setScalar(PlayerSelection.GAS_STATION_SCALE);
+        model.position.set(
+          PlayerSelection.GAS_STATION_X_POSITION,
+          PlayerSelection.GAS_STATION_Y_POSITION,
+          PlayerSelection.GAS_STATION_Z_POSITION
+        );
+
+        // Since it's a merged mesh, create vertex colors based on UV coordinates
+        model.traverse((child) => {
+          if (child.isMesh) {
+            child.castShadow = true;
+            child.receiveShadow = true;
+
+            const geometry = child.geometry;
+
+            // Create vertex colors array if it doesn't exist
+            if (!geometry.attributes.color) {
+              const colors = [];
+              const positionAttribute = geometry.attributes.position;
+              const uvAttribute = geometry.attributes.uv;
+
+              const colorPalette = [
+                new THREE.Color(PlayerSelection.GAS_STATION_ROOF_COLOR),
+                new THREE.Color(PlayerSelection.GAS_STATION_WALLS_COLOR),
+                new THREE.Color(PlayerSelection.GAS_STATION_PUMPS_COLOR),
+                new THREE.Color(PlayerSelection.GAS_STATION_METAL_COLOR),
+                new THREE.Color(PlayerSelection.GAS_STATION_WINDOWS_COLOR),
+                new THREE.Color(PlayerSelection.GAS_STATION_TRIM_COLOR)
+              ];
+
+              for (let i = 0; i < positionAttribute.count; i++) {
+                // Use UV coordinates to determine color regions
+                let colorIndex = 0;
+                if (uvAttribute) {
+                  const u = uvAttribute.getX(i);
+                  const v = uvAttribute.getY(i);
+                  // Divide UV space into regions
+                  colorIndex = Math.floor((u + v) * 3) % colorPalette.length;
+                } else {
+                  // Fallback: use Y position
+                  const y = positionAttribute.getY(i);
+                  colorIndex = Math.floor((y + 5) / 2) % colorPalette.length;
+                }
+
+                const color = colorPalette[colorIndex];
+                colors.push(color.r, color.g, color.b);
+              }
+
+              geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+            }
+
+            // Create material that uses vertex colors
+            child.material = new THREE.MeshStandardMaterial({
+              vertexColors: true,
+              roughness: 0.6,
+              metalness: 0.3
+            });
+          }
+        });
+
+        this.gasStationModel = model;
+        this.scene.add(model);
+      },
+      undefined,
+      (err) => {
+        console.error("Failed to load gas station model:", err);
+      }
+    );
+  }
+
+  loadFries() {
+    // Load fries model using GLTFLoader
+    const loader = new GLTFLoader();
+    loader.load(
+      PlayerSelection.FRIES_MODEL_PATH,
+      (gltf) => {
+        const model = gltf.scene || gltf.scenes[0];
+        if (!model) return;
+
+        // Scale and position the fries
+        model.scale.setScalar(PlayerSelection.FRIES_SCALE);
+        model.position.set(
+          PlayerSelection.FRIES_X_POSITION,
+          PlayerSelection.FRIES_Y_POSITION,
+          PlayerSelection.FRIES_Z_POSITION
+        );
+
+        // Apply colors based on UV coordinates (gradient from top to bottom)
+        model.traverse((child) => {
+          if (child.isMesh) {
+            child.castShadow = true;
+            child.receiveShadow = true;
+
+            const geometry = child.geometry;
+
+            // Create vertex colors based on UV coordinates
+            if (geometry.attributes.uv) {
+              const colors = [];
+              const uvAttribute = geometry.attributes.uv;
+
+              const topColor = new THREE.Color(PlayerSelection.FRIES_TOP_COLOR);
+              const middleColor = new THREE.Color(PlayerSelection.FRIES_MIDDLE_COLOR);
+              const bottomColor = new THREE.Color(PlayerSelection.FRIES_BOTTOM_COLOR);
+
+              for (let i = 0; i < uvAttribute.count; i++) {
+                const v = uvAttribute.getY(i); // V coordinate (0 = bottom, 1 = top)
+
+                let color;
+                if (v > 0.66) {
+                  // Top third - golden yellow
+                  color = topColor;
+                } else if (v > 0.33) {
+                  // Middle third - orange
+                  color = middleColor;
+                } else {
+                  // Bottom third - brown
+                  color = bottomColor;
+                }
+
+                colors.push(color.r, color.g, color.b);
+              }
+
+              geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+            }
+
+            // Create material that uses vertex colors
+            child.material = new THREE.MeshStandardMaterial({
+              vertexColors: true,
+              roughness: 0.7,
+              metalness: 0.1
+            });
+          }
+        });
+
+        this.friesModel = model;
+        this.scene.add(model);
+        console.log('Fries model loaded with UV-based colors');
+      },
+      undefined,
+      (err) => {
+        console.error("Failed to load fries GLB model:", err);
+      }
+    );
+  }
 
   showSelectionUI() {
     // Store original camera position and rotation
@@ -678,6 +903,11 @@ export class PlayerSelection {
       PlayerSelection.CAMERA_LOOK_AT_Z
     );
     this.camera.updateProjectionMatrix();
+
+    // Create pavement and load gas station and fries
+    this.createPavement();
+    this.loadGasStation();
+    this.loadFries();
 
     // attach keyboard listeners for arrow navigation when showing
     const onKey = (ev) => {
@@ -727,6 +957,26 @@ export class PlayerSelection {
     if (this.previewModel && this.scene) {
       this.scene.remove(this.previewModel);
       this.previewModel = null;
+    }
+
+    // Remove gas station model
+    if (this.gasStationModel && this.scene) {
+      this.scene.remove(this.gasStationModel);
+      this.gasStationModel = null;
+    }
+
+    // Remove pavement
+    if (this.pavementMesh && this.scene) {
+      this.scene.remove(this.pavementMesh);
+      this.pavementMesh.geometry.dispose();
+      this.pavementMesh.material.dispose();
+      this.pavementMesh = null;
+    }
+
+    // Remove fries model
+    if (this.friesModel && this.scene) {
+      this.scene.remove(this.friesModel);
+      this.friesModel = null;
     }
   }
 }
