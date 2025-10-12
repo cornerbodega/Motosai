@@ -93,6 +93,13 @@ export class MotosaiGame {
       hasTouch: this.deviceInfo.hasTouch
     });
 
+    // Show device mode on screen for debugging
+    if (this.isMobile) {
+      console.log('%c📱 MOBILE MODE - Touch controls will be shown', 'background: #00ff00; color: black; font-size: 20px; padding: 10px;');
+    } else {
+      console.log('%c🖥️ DESKTOP MODE - Use keyboard controls (WASD)', 'background: #0088ff; color: white; font-size: 20px; padding: 10px;');
+    }
+
     // Configuration options
     this.config = {
       riderColor: config.riderColor || 0x2a2a2a, // Default dark grey
@@ -2315,7 +2322,10 @@ export class MotosaiGame {
 
   updateControls(deltaTime) {
     // Simple direct controls for our new physics
-    if (!this.physics) return; // Safety check
+    if (!this.physics) {
+      console.warn('⚠️ updateControls called but physics not initialized');
+      return;
+    }
 
     const controls = {
       throttle: 0,
@@ -2323,24 +2333,54 @@ export class MotosaiGame {
       steer: 0,
     };
 
-    // Throttle
-    if (this.keys["KeyW"] || this.keys["ArrowUp"]) {
-      controls.throttle = 1;
-    }
+    // Check if we should use mobile input from InputController
+    if (this.isMobile && this.inputController) {
+      // Update the input controller to process raw inputs into smoothed outputs
+      const state = this.physics.getState?.() || { speed: 0 };
+      const speed = state.speed / 2.237; // Convert MPH to m/s
+      this.inputController.update(deltaTime, speed);
 
-    // Brakes (removed Space since it's now camera toggle)
-    if (this.keys["KeyS"] || this.keys["ArrowDown"]) {
-      controls.brake = 1;
-    } else if (this.keys["ShiftLeft"] || this.keys["ShiftRight"]) {
-      // Shift keys for front brake
-      controls.brake = 1;
-    }
+      // Get smoothed inputs (it's a property, not a method)
+      const smoothedInputs = this.inputController.smoothedInputs;
 
-    // Steering (left/right)
-    if (this.keys["KeyA"] || this.keys["ArrowLeft"]) {
-      controls.steer = -1; // Left
-    } else if (this.keys["KeyD"] || this.keys["ArrowRight"]) {
-      controls.steer = 1; // Right
+      controls.throttle = smoothedInputs.throttle || 0;
+      controls.brake = smoothedInputs.frontBrake || 0;
+      controls.steer = smoothedInputs.steer || smoothedInputs.lean || 0;
+
+      // Debug log mobile inputs (always show when any input is active)
+      if (controls.throttle > 0 || controls.brake > 0 || Math.abs(controls.steer) > 0.01) {
+        console.log('📱 Mobile controls:', {
+          throttle: controls.throttle.toFixed(3),
+          brake: controls.brake.toFixed(3),
+          steer: controls.steer.toFixed(3),
+          rawInputs: this.inputController.rawInputs
+        });
+      }
+    } else {
+      // Desktop keyboard controls
+      // Throttle
+      if (this.keys["KeyW"] || this.keys["ArrowUp"]) {
+        controls.throttle = 1;
+        // Debug log (only occasionally to avoid spam)
+        if (Math.random() < 0.02) {
+          console.log('🚀 Throttle applied:', controls.throttle, 'Current speed:', this.physics.getState?.()?.speed || 'N/A');
+        }
+      }
+
+      // Brakes (removed Space since it's now camera toggle)
+      if (this.keys["KeyS"] || this.keys["ArrowDown"]) {
+        controls.brake = 1;
+      } else if (this.keys["ShiftLeft"] || this.keys["ShiftRight"]) {
+        // Shift keys for front brake
+        controls.brake = 1;
+      }
+
+      // Steering (left/right)
+      if (this.keys["KeyA"] || this.keys["ArrowLeft"]) {
+        controls.steer = -1; // Left
+      } else if (this.keys["KeyD"] || this.keys["ArrowRight"]) {
+        controls.steer = 1; // Right
+      }
     }
 
     // Apply controls to physics
@@ -3078,6 +3118,13 @@ export class MotosaiGame {
         stats: finalStats
       });
       console.log('Submitting final score:', finalStats);
+
+      // Refresh leaderboard after a short delay to show updated rankings
+      setTimeout(() => {
+        if (this.leaderboardUI) {
+          this.leaderboardUI.fetchLeaderboard();
+        }
+      }, 1000);
     }
 
     // Trigger UFO escape animation

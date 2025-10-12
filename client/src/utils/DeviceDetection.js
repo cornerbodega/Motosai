@@ -3,32 +3,55 @@
 
 export class DeviceDetection {
   static isMobile() {
+    // Check for URL parameter to force mobile mode for testing
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('forceMobile') === 'true') {
+      console.log('🧪 FORCE MOBILE MODE - Testing mobile controls on desktop');
+      return true;
+    }
+
     // Check for mobile user agents first (most reliable)
     const userAgent = navigator.userAgent || navigator.vendor || window.opera;
 
-    // Check for mobile patterns in user agent
+    // Check for mobile patterns in user agent - be very strict
     const mobilePattern = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i;
     const isMobileUA = mobilePattern.test(userAgent.toLowerCase());
 
-    // If user agent says mobile, return true
-    if (isMobileUA) return true;
+    // Check if device has a mouse/trackpad (fine pointer)
+    const hasFinePointer = window.matchMedia('(pointer: fine)').matches;
 
-    // Check for touch support
-    const hasTouch = (
-      'ontouchstart' in window ||
-      navigator.maxTouchPoints > 0 ||
-      navigator.msMaxTouchPoints > 0
-    );
+    // Check for coarse pointer (finger/stylus) as primary input
+    const hasCoarsePointer = window.matchMedia('(pointer: coarse)').matches;
 
-    // Only consider touch + small screen if no mouse is detected
+    // Screen size check
     const isSmallScreen = window.innerWidth <= 768;
-    const hasMouse = window.matchMedia('(pointer: fine)').matches;
 
-    // If has fine pointer (mouse), it's a desktop even with touch
-    if (hasMouse) return false;
+    // Debug logging
+    console.log('🔍 DeviceDetection.isMobile() DEBUG:', {
+      isMobileUA,
+      hasFinePointer,
+      hasCoarsePointer,
+      isSmallScreen,
+      screenWidth: window.innerWidth
+    });
 
-    // Touch device with small screen and no fine pointer = mobile
-    return (hasTouch && isSmallScreen);
+    // If user agent says mobile, return true
+    if (isMobileUA) {
+      console.log('✅ Detected as MOBILE via user agent');
+      return true;
+    }
+
+    // If has fine pointer (mouse/trackpad), it's a desktop - period
+    // This catches touchscreen laptops, Macs with Touch Bar, etc.
+    if (hasFinePointer) {
+      console.log('✅ Detected as DESKTOP via fine pointer (mouse/trackpad)');
+      return false;
+    }
+
+    // Only if primary pointer is coarse (touch) AND small screen = mobile
+    const result = (hasCoarsePointer && isSmallScreen);
+    console.log(`✅ Final result: ${result ? 'MOBILE' : 'DESKTOP'} (coarse pointer + small screen check)`);
+    return result;
   }
 
   static isTablet() {

@@ -32,18 +32,18 @@ export class LeaderboardUI {
       position: fixed;
       right: 20px;
       top: 140px;
-      width: 280px;
+      width: 200px;
       background: linear-gradient(135deg, rgba(0, 0, 0, 0.9) 0%, rgba(20, 20, 40, 0.9) 100%);
       border: 2px solid rgba(100, 200, 255, 0.3);
-      border-radius: 15px;
-      padding: 15px;
+      border-radius: 10px;
+      padding: 10px;
       font-family: 'Orbitron', monospace;
       color: white;
       z-index: 999;
       box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
       backdrop-filter: blur(10px);
       transition: all 0.3s ease;
-      max-height: 500px;
+      max-height: 350px;
       overflow: hidden;
     `;
 
@@ -53,25 +53,25 @@ export class LeaderboardUI {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 15px;
+      margin-bottom: 8px;
       border-bottom: 2px solid rgba(100, 200, 255, 0.3);
-      padding-bottom: 10px;
+      padding-bottom: 6px;
     `;
 
     // Title with icon
     const title = document.createElement('div');
     title.style.cssText = `
-      font-size: 18px;
+      font-size: 14px;
       font-weight: bold;
       color: #ffa500;
       text-shadow: 0 0 10px rgba(255, 165, 0, 0.5);
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 5px;
     `;
     title.innerHTML = `
-      <span style="font-size: 24px;">🏆</span>
-      <span id="leaderboard-title">LEADERBOARD</span>
+      <span style="font-size: 16px;">🏆</span>
+      <span id="leaderboard-title">TOP 10</span>
     `;
 
     // Controls
@@ -133,7 +133,7 @@ export class LeaderboardUI {
     const listContainer = document.createElement('div');
     listContainer.id = 'leaderboard-list-container';
     listContainer.style.cssText = `
-      max-height: 350px;
+      max-height: 250px;
       overflow-y: auto;
       overflow-x: hidden;
       padding-right: 5px;
@@ -167,11 +167,11 @@ export class LeaderboardUI {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 8px;
-        margin-bottom: 5px;
+        padding: 5px;
+        margin-bottom: 3px;
         background: rgba(255, 255, 255, 0.05);
-        border-radius: 8px;
-        border-left: 3px solid transparent;
+        border-radius: 5px;
+        border-left: 2px solid transparent;
         transition: all 0.3s ease;
       }
 
@@ -201,8 +201,8 @@ export class LeaderboardUI {
       }
 
       .rank-medal {
-        font-size: 18px;
-        margin-right: 5px;
+        font-size: 14px;
+        margin-right: 3px;
       }
     `;
     document.head.appendChild(scrollbarStyle);
@@ -319,9 +319,38 @@ export class LeaderboardUI {
     // Clear current list
     this.listElement.innerHTML = '';
 
+    // Find current player's index
+    const playerId = this.game.multiplayerManager?.playerId;
+
+    // If no player ID yet, try getting it from best score data
+    let playerIndex = -1;
+    if (playerId) {
+      playerIndex = data.findIndex(e => e.player_id === playerId);
+    } else if (this.playerBest && this.playerBest.player_id) {
+      playerIndex = data.findIndex(e => e.player_id === this.playerBest.player_id);
+    }
+
+    // Determine which 3 entries to show
+    let entriesToShow = [];
+
+    if (playerIndex === -1) {
+      // Player not in leaderboard - show top 3
+      entriesToShow = data.slice(0, 3);
+    } else {
+      // Show: above (rank-1), me (rank), below (rank+1)
+      // If player is rank 5, show ranks 4, 5, 6
+      const above = playerIndex > 0 ? data[playerIndex - 1] : null;
+      const me = data[playerIndex];
+      const below = playerIndex < data.length - 1 ? data[playerIndex + 1] : null;
+
+      if (above) entriesToShow.push(above);
+      entriesToShow.push(me);
+      if (below) entriesToShow.push(below);
+    }
+
     // Add entries
-    data.forEach((entry, index) => {
-      const rank = index + 1;
+    entriesToShow.forEach((entry) => {
+      const rank = data.indexOf(entry) + 1;
       const entryDiv = document.createElement('div');
       entryDiv.className = 'leaderboard-entry';
 
@@ -331,7 +360,7 @@ export class LeaderboardUI {
       else if (rank === 3) entryDiv.classList.add('bronze');
 
       // Check if this is the current player
-      if (this.game.multiplayerManager?.playerId === entry.player_id) {
+      if (playerId === entry.player_id) {
         entryDiv.classList.add('current-player');
       }
 
@@ -340,8 +369,8 @@ export class LeaderboardUI {
       rankSection.style.cssText = `
         display: flex;
         align-items: center;
-        gap: 5px;
-        min-width: 50px;
+        gap: 3px;
+        min-width: 35px;
       `;
 
       // Medal for top 3
@@ -352,14 +381,14 @@ export class LeaderboardUI {
 
       rankSection.innerHTML = `
         ${medal ? `<span class="rank-medal">${medal}</span>` : ''}
-        <span style="color: rgba(255, 255, 255, 0.6); font-size: 12px;">#${rank}</span>
+        <span style="color: rgba(255, 255, 255, 0.6); font-size: 10px;">#${rank}</span>
       `;
 
       // Player name
       const nameSection = document.createElement('div');
       nameSection.style.cssText = `
         flex: 1;
-        font-size: 13px;
+        font-size: 11px;
         color: white;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -370,7 +399,7 @@ export class LeaderboardUI {
       // Score
       const scoreSection = document.createElement('div');
       scoreSection.style.cssText = `
-        font-size: 14px;
+        font-size: 12px;
         font-weight: bold;
         color: white;
       `;
@@ -407,7 +436,7 @@ export class LeaderboardUI {
   toggleLeaderboardType() {
     this.showDaily = !this.showDaily;
     this.toggleButton.textContent = this.showDaily ? 'ALL-TIME' : 'DAILY';
-    this.titleElement.textContent = this.showDaily ? 'DAILY LEADERS' : 'LEADERBOARD';
+    this.titleElement.textContent = this.showDaily ? 'DAILY' : 'TOP 10';
     this.updateDisplay();
   }
 
