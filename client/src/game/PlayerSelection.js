@@ -4,6 +4,73 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MotorcycleFactory } from "./MotorcycleFactory.js";
 
 export class PlayerSelection {
+  // === BIKE MODEL DIMENSIONS ===
+  static BIKE_BODY_WIDTH = 2;
+  static BIKE_BODY_HEIGHT = 0.8;
+  static BIKE_BODY_DEPTH = 0.6;
+  static BIKE_BODY_Y_POSITION = 0.5;
+
+  static WHEEL_RADIUS = 0.4;
+  static WHEEL_WIDTH = 0.3;
+  static WHEEL_SEGMENTS = 32;
+  static WHEEL_COLOR = 0x222222;
+  static FRONT_WHEEL_X_POSITION = 0.8;
+  static REAR_WHEEL_X_POSITION = -0.8;
+  static WHEEL_ROTATION = Math.PI / 2;
+
+  static HANDLEBAR_RADIUS = 0.02;
+  static HANDLEBAR_LENGTH = 1;
+  static HANDLEBAR_SEGMENTS = 8;
+  static HANDLEBAR_COLOR = 0x333333;
+  static HANDLEBAR_X_POSITION = 0.6;
+  static HANDLEBAR_Y_POSITION = 0.9;
+  static HANDLEBAR_Z_POSITION = 0;
+
+  // === PREVIEW POSITIONING ===
+  static PREVIEW_SCALE = 0.6;
+  static PREVIEW_X_POSITION = -13.5;
+  static PREVIEW_Z_POSITION = -3;
+  static PREVIEW_FALLBACK_Y_POSITION = 0.5;
+
+  // === CAMERA POSITIONING ===
+  static CAMERA_X_POSITION = -9;
+  static CAMERA_Y_POSITION = 1.0;
+  static CAMERA_Z_POSITION = -3;
+  static CAMERA_LOOK_AT_X = -13.5;
+  static CAMERA_LOOK_AT_Y = 0.5;
+  static CAMERA_LOOK_AT_Z = -3;
+
+  // === UI STYLING ===
+  static UI_BOTTOM_OFFSET = '40px';
+  static UI_BORDER_RADIUS = '16px';
+  static UI_PADDING = '24px 32px';
+  static UI_Z_INDEX = 1000;
+  static UI_GAP = '24px';
+  static UI_BACKGROUND_GRADIENT = 'linear-gradient(180deg, rgba(12,18,28,0.95), rgba(24,36,56,0.92))';
+  static UI_BORDER_COLOR = 'rgba(255,255,255,0.12)';
+
+  static ARROW_BUTTON_SIZE = '48px';
+  static ARROW_BUTTON_BORDER_RADIUS = '12px';
+  static ARROW_BUTTON_BG = 'rgba(255,255,255,0.1)';
+  static ARROW_BUTTON_BG_HOVER = 'rgba(255,255,255,0.2)';
+  static ARROW_BUTTON_BORDER = '1px solid rgba(255,255,255,0.2)';
+  static ARROW_BUTTON_FONT_SIZE = '24px';
+
+  static INFO_PANEL_MIN_WIDTH = '300px';
+  static INFO_NAME_FONT_SIZE = '24px';
+  static INFO_NAME_MARGIN_BOTTOM = '8px';
+  static INFO_STATS_FONT_SIZE = '14px';
+  static INFO_STATS_COLOR = '#bbb';
+  static INFO_STATS_MARGIN_BOTTOM = '16px';
+
+  static START_BUTTON_PADDING = '12px 32px';
+  static START_BUTTON_FONT_SIZE = '16px';
+  static START_BUTTON_BG = '#4CAF50';
+  static START_BUTTON_BG_HOVER = '#45a049';
+  static START_BUTTON_BORDER_RADIUS = '10px';
+
+  static BUTTON_OPACITY_DISABLED = '1';
+
   constructor(scene, camera, audioManager = null) {
     this.scene = scene;
     this.camera = camera;
@@ -185,34 +252,52 @@ export class PlayerSelection {
     const group = new THREE.Group();
 
     // Main body
-    const bodyGeometry = new THREE.BoxGeometry(2, 0.8, 0.6);
+    const bodyGeometry = new THREE.BoxGeometry(
+      PlayerSelection.BIKE_BODY_WIDTH,
+      PlayerSelection.BIKE_BODY_HEIGHT,
+      PlayerSelection.BIKE_BODY_DEPTH
+    );
     const bodyMaterial = new THREE.MeshPhongMaterial({
       color: bikeConfig.color,
     });
     const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
-    body.position.y = 0.5;
+    body.position.y = PlayerSelection.BIKE_BODY_Y_POSITION;
     group.add(body);
 
     // Wheels
-    const wheelGeometry = new THREE.CylinderGeometry(0.4, 0.4, 0.3, 32);
-    const wheelMaterial = new THREE.MeshPhongMaterial({ color: 0x222222 });
+    const wheelGeometry = new THREE.CylinderGeometry(
+      PlayerSelection.WHEEL_RADIUS,
+      PlayerSelection.WHEEL_RADIUS,
+      PlayerSelection.WHEEL_WIDTH,
+      PlayerSelection.WHEEL_SEGMENTS
+    );
+    const wheelMaterial = new THREE.MeshPhongMaterial({ color: PlayerSelection.WHEEL_COLOR });
 
     const frontWheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
-    frontWheel.rotation.z = Math.PI / 2;
-    frontWheel.position.set(0.8, 0, 0);
+    frontWheel.rotation.z = PlayerSelection.WHEEL_ROTATION;
+    frontWheel.position.set(PlayerSelection.FRONT_WHEEL_X_POSITION, 0, 0);
     group.add(frontWheel);
 
     const rearWheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
-    rearWheel.rotation.z = Math.PI / 2;
-    rearWheel.position.set(-0.8, 0, 0);
+    rearWheel.rotation.z = PlayerSelection.WHEEL_ROTATION;
+    rearWheel.position.set(PlayerSelection.REAR_WHEEL_X_POSITION, 0, 0);
     group.add(rearWheel);
 
     // Handlebars
-    const handlebarGeometry = new THREE.CylinderGeometry(0.02, 0.02, 1, 8);
-    const handlebarMaterial = new THREE.MeshPhongMaterial({ color: 0x333333 });
+    const handlebarGeometry = new THREE.CylinderGeometry(
+      PlayerSelection.HANDLEBAR_RADIUS,
+      PlayerSelection.HANDLEBAR_RADIUS,
+      PlayerSelection.HANDLEBAR_LENGTH,
+      PlayerSelection.HANDLEBAR_SEGMENTS
+    );
+    const handlebarMaterial = new THREE.MeshPhongMaterial({ color: PlayerSelection.HANDLEBAR_COLOR });
     const handlebar = new THREE.Mesh(handlebarGeometry, handlebarMaterial);
-    handlebar.rotation.z = Math.PI / 2;
-    handlebar.position.set(0.6, 0.9, 0);
+    handlebar.rotation.z = PlayerSelection.WHEEL_ROTATION;
+    handlebar.position.set(
+      PlayerSelection.HANDLEBAR_X_POSITION,
+      PlayerSelection.HANDLEBAR_Y_POSITION,
+      PlayerSelection.HANDLEBAR_Z_POSITION
+    );
     group.add(handlebar);
 
     // emoji and placeholder red-bike removed; prefer GLB model for previews
@@ -225,18 +310,18 @@ export class PlayerSelection {
     uiContainer.id = "bike-selection-ui";
     uiContainer.style.cssText = `
             position: fixed;
-            bottom: 40px;
+            bottom: ${PlayerSelection.UI_BOTTOM_OFFSET};
             left: 50%;
             transform: translateX(-50%);
-            background: linear-gradient(180deg, rgba(12,18,28,0.95), rgba(24,36,56,0.92));
-            border: 1px solid rgba(255,255,255,0.12);
-            border-radius: 16px;
-            padding: 24px 32px;
-            z-index: 1000;
+            background: ${PlayerSelection.UI_BACKGROUND_GRADIENT};
+            border: 1px solid ${PlayerSelection.UI_BORDER_COLOR};
+            border-radius: ${PlayerSelection.UI_BORDER_RADIUS};
+            padding: ${PlayerSelection.UI_PADDING};
+            z-index: ${PlayerSelection.UI_Z_INDEX};
             color: white;
             font-family: Arial, sans-serif;
             display: flex;
-            gap: 24px;
+            gap: ${PlayerSelection.UI_GAP};
             align-items: center;
         `;
 
@@ -245,45 +330,45 @@ export class PlayerSelection {
     leftArrow.textContent = "‹";
     leftArrow.title = "Previous Bike";
     leftArrow.style.cssText = `
-      width: 48px; height: 48px; border-radius: 12px;
-      background: rgba(255,255,255,0.1);
-      color: #fff; border: 1px solid rgba(255,255,255,0.2);
-      font-size: 24px; cursor: pointer;
+      width: ${PlayerSelection.ARROW_BUTTON_SIZE}; height: ${PlayerSelection.ARROW_BUTTON_SIZE}; border-radius: ${PlayerSelection.ARROW_BUTTON_BORDER_RADIUS};
+      background: ${PlayerSelection.ARROW_BUTTON_BG};
+      color: #fff; border: ${PlayerSelection.ARROW_BUTTON_BORDER};
+      font-size: ${PlayerSelection.ARROW_BUTTON_FONT_SIZE}; cursor: pointer;
       transition: background 0.2s;
     `;
     leftArrow.addEventListener("mouseenter", () => {
-      leftArrow.style.background = "rgba(255,255,255,0.2)";
+      leftArrow.style.background = PlayerSelection.ARROW_BUTTON_BG_HOVER;
     });
     leftArrow.addEventListener("mouseleave", () => {
-      leftArrow.style.background = "rgba(255,255,255,0.1)";
+      leftArrow.style.background = PlayerSelection.ARROW_BUTTON_BG;
     });
     leftArrow.addEventListener("click", () => this._prevBike());
     uiContainer.appendChild(leftArrow);
 
     // Center: Bike info
     const infoPanel = document.createElement("div");
-    infoPanel.style.cssText = "text-align: center; min-width: 300px;";
+    infoPanel.style.cssText = `text-align: center; min-width: ${PlayerSelection.INFO_PANEL_MIN_WIDTH};`;
 
     const infoName = document.createElement("div");
     infoName.style.cssText =
-      "font-weight: bold; font-size: 24px; margin-bottom: 8px;";
+      `font-weight: bold; font-size: ${PlayerSelection.INFO_NAME_FONT_SIZE}; margin-bottom: ${PlayerSelection.INFO_NAME_MARGIN_BOTTOM};`;
     const infoStats = document.createElement("div");
-    infoStats.style.cssText = "font-size: 14px; color: #bbb; margin-bottom: 16px;";
+    infoStats.style.cssText = `font-size: ${PlayerSelection.INFO_STATS_FONT_SIZE}; color: ${PlayerSelection.INFO_STATS_COLOR}; margin-bottom: ${PlayerSelection.INFO_STATS_MARGIN_BOTTOM};`;
 
     const startButton = document.createElement("button");
     startButton.textContent = "START GAME";
     startButton.style.cssText = `
-      padding: 12px 32px; font-size: 16px;
-      background: #4CAF50; color: #fff;
-      border: none; border-radius: 10px;
+      padding: ${PlayerSelection.START_BUTTON_PADDING}; font-size: ${PlayerSelection.START_BUTTON_FONT_SIZE};
+      background: ${PlayerSelection.START_BUTTON_BG}; color: #fff;
+      border: none; border-radius: ${PlayerSelection.START_BUTTON_BORDER_RADIUS};
       cursor: pointer; font-weight: bold;
       transition: background 0.2s;
     `;
     startButton.addEventListener("mouseenter", () => {
-      startButton.style.background = "#45a049";
+      startButton.style.background = PlayerSelection.START_BUTTON_BG_HOVER;
     });
     startButton.addEventListener("mouseleave", () => {
-      startButton.style.background = "#4CAF50";
+      startButton.style.background = PlayerSelection.START_BUTTON_BG;
     });
     startButton.addEventListener("click", () => {
       if (this.selectedBike && this.onSelectionComplete) {
@@ -303,17 +388,17 @@ export class PlayerSelection {
     rightArrow.textContent = "›";
     rightArrow.title = "Next Bike";
     rightArrow.style.cssText = `
-      width: 48px; height: 48px; border-radius: 12px;
-      background: rgba(255,255,255,0.1);
-      color: #fff; border: 1px solid rgba(255,255,255,0.2);
-      font-size: 24px; cursor: pointer;
+      width: ${PlayerSelection.ARROW_BUTTON_SIZE}; height: ${PlayerSelection.ARROW_BUTTON_SIZE}; border-radius: ${PlayerSelection.ARROW_BUTTON_BORDER_RADIUS};
+      background: ${PlayerSelection.ARROW_BUTTON_BG};
+      color: #fff; border: ${PlayerSelection.ARROW_BUTTON_BORDER};
+      font-size: ${PlayerSelection.ARROW_BUTTON_FONT_SIZE}; cursor: pointer;
       transition: background 0.2s;
     `;
     rightArrow.addEventListener("mouseenter", () => {
-      rightArrow.style.background = "rgba(255,255,255,0.2)";
+      rightArrow.style.background = PlayerSelection.ARROW_BUTTON_BG_HOVER;
     });
     rightArrow.addEventListener("mouseleave", () => {
-      rightArrow.style.background = "rgba(255,255,255,0.1)";
+      rightArrow.style.background = PlayerSelection.ARROW_BUTTON_BG;
     });
     rightArrow.addEventListener("click", () => this._nextBike());
     uiContainer.appendChild(rightArrow);
@@ -354,7 +439,7 @@ export class PlayerSelection {
     // Update start button
     if (this.startButton) {
       this.startButton.disabled = false;
-      this.startButton.style.opacity = "1";
+      this.startButton.style.opacity = PlayerSelection.BUTTON_OPACITY_DISABLED;
       this.startButton.style.cursor = "pointer";
     }
 
@@ -390,9 +475,10 @@ export class PlayerSelection {
     };
 
     // Preserve current rotation so swapping models doesn't reset the spin
+    const DEFAULT_ROTATION = 0;
     const preservedRotationY = this.previewModel
       ? this.previewModel.rotation.y
-      : 0;
+      : DEFAULT_ROTATION;
 
     // Remove existing preview model from main scene
     // DON'T dispose geometries/materials as they're shared with preloaded model
@@ -412,7 +498,7 @@ export class PlayerSelection {
       if (!model) return;
 
       // Scale the model bigger for preview (0.6 instead of game's 0.25)
-      model.scale.setScalar(0.6);
+      model.scale.setScalar(PlayerSelection.PREVIEW_SCALE);
 
       // Compute bounding box to find wheel bottom
       const bbox = new THREE.Box3().setFromObject(model);
@@ -433,7 +519,7 @@ export class PlayerSelection {
       const groundOffset = -wheelBottom; // Lift bike so wheelBottom is at Y=0
 
       // Position the bike in the right lane with wheels on ground
-      pivot.position.set(-8.5, groundOffset, -3);
+      pivot.position.set(PlayerSelection.PREVIEW_X_POSITION, groundOffset, PlayerSelection.PREVIEW_Z_POSITION);
 
       // Apply preserved rotation to the pivot so swapping keeps the spin
       pivot.rotation.y = preservedRotationY;
@@ -484,7 +570,7 @@ export class PlayerSelection {
           if (!model) return;
 
           // Scale the model bigger for preview (0.6 instead of game's 0.25)
-          model.scale.setScalar(0.6);
+          model.scale.setScalar(PlayerSelection.PREVIEW_SCALE);
 
           // Compute bounding box to find wheel bottom
           const bbox = new THREE.Box3().setFromObject(model);
@@ -505,7 +591,7 @@ export class PlayerSelection {
           const groundOffset = -wheelBottom; // Lift bike so wheelBottom is at Y=0
 
           // Position the bike in the right lane with wheels on ground
-          pivot.position.set(-8.5, groundOffset, -3);
+          pivot.position.set(PlayerSelection.PREVIEW_X_POSITION, groundOffset, PlayerSelection.PREVIEW_Z_POSITION);
 
           // Apply preserved rotation to the pivot so swapping keeps the spin
           pivot.rotation.y = preservedRotationY;
@@ -557,7 +643,11 @@ export class PlayerSelection {
               return;
             }
             // Position fallback at ground level (approximate)
-            fallback.position.set(-8.5, 0.5, -3);
+            fallback.position.set(
+              PlayerSelection.PREVIEW_X_POSITION,
+              PlayerSelection.PREVIEW_FALLBACK_Y_POSITION,
+              PlayerSelection.PREVIEW_Z_POSITION
+            );
             this.previewModel = fallback;
             this.scene.add(fallback);
           } catch (e) {
@@ -577,8 +667,16 @@ export class PlayerSelection {
     // Position camera to the side of the bike for side view
     // Bike center will be calculated based on bounding box
     // Camera farther back since bike is bigger (0.6 scale)
-    this.camera.position.set(-4, 1.0, -3);
-    this.camera.lookAt(-8.5, 0.5, -3);
+    this.camera.position.set(
+      PlayerSelection.CAMERA_X_POSITION,
+      PlayerSelection.CAMERA_Y_POSITION,
+      PlayerSelection.CAMERA_Z_POSITION
+    );
+    this.camera.lookAt(
+      PlayerSelection.CAMERA_LOOK_AT_X,
+      PlayerSelection.CAMERA_LOOK_AT_Y,
+      PlayerSelection.CAMERA_LOOK_AT_Z
+    );
     this.camera.updateProjectionMatrix();
 
     // attach keyboard listeners for arrow navigation when showing
