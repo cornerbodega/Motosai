@@ -11,15 +11,19 @@ Memory-efficient billboard advertising system with dynamic texture loading and S
 - LRU (Least Recently Used) eviction
 - Reference-counted texture sharing
 - Distance-based loading/unloading (400m load, 600m unload)
-- Maximum 8 billboards loaded simultaneously
+- Maximum 5 billboards loaded simultaneously (reduced for memory)
+- Low-poly geometries (1×1 plane segments, 6 cylinder segments)
 
 ✅ **Performance**
 - Lazy loading (only load nearby billboards)
 - Aggressive culling (hide billboards behind player)
-- Shared geometry instancing (2 geometries for all billboards)
+- Shared geometry instancing (2 billboard geometries + 1 post geometry for all)
+- Shared material (1 post material for all support posts)
 - No mipmaps (saves memory on flat billboards)
 - Throttled distance checks (0.5s intervals)
-- Memory optimization: ~10KB for 2 shared geometries vs ~100KB for 10 individual geometries
+- Memory optimization:
+  - Billboard geometries: ~10KB for 2 shared vs ~100KB for 10 individual
+  - Post resources: ~5KB for 1 shared geometry + 1 material vs ~100KB for 20 individual
 
 ✅ **Integration**
 - Stoppa memory manager tracking
@@ -77,12 +81,14 @@ if (this.billboardSystem) {
 
 ### Memory Configuration
 
-Current conservative limits:
+Current ultra-conservative limits:
 - **Max texture cache:** 15MB
-- **Max loaded billboards:** 8
+- **Max loaded billboards:** 5 (reduced for memory)
 - **Load distance:** 400m
 - **Unload distance:** 600m
 - **Cull distance:** -50m (behind player)
+- **Test billboards:** 8 billboards, 600m spacing
+- **Geometry detail:** Minimal (1×1 plane segments, 6 cylinder segments)
 
 ### Debugging
 
@@ -190,23 +196,28 @@ Build admin interface for:
 
 ## Memory Budget Breakdown
 
-**Target:** ~5MB total billboard memory
+**Target:** ~3MB total billboard memory (reduced)
 
-- 8 billboards × 400KB each = 3.2MB (textures only)
-- Shared geometries: 2 × ~5KB = ~10KB (vs 8 × ~10KB = ~80KB individual)
-- Materials: 8 × ~2KB = ~16KB
-- Overhead & cache = ~1.8MB
-- **Total:** ~5MB ✅
+- 5 billboards × 400KB each = 2.0MB (textures only)
+- Shared billboard geometries: 2 × ~2KB = ~4KB (1×1 segments, vs 5 × ~5KB = ~25KB individual)
+- Shared post geometry: 1 × ~1KB = ~1KB (6 segments, vs 15 posts × ~2KB = ~30KB individual)
+- Shared post material: 1 × ~1KB = ~1KB (vs 15 × ~1KB = ~15KB individual)
+- Billboard materials: 5 × ~2KB = ~10KB
+- Lights: 5-10 lights × ~1KB = ~10KB
+- Overhead & cache = ~1MB
+- **Total:** ~3MB ✅ (40% reduction from original)
 
 **Texture Optimization:**
 - Resolution: 1024×512 (or 512×256)
 - Format: WebP or compressed JPEG
 - Target size: 300-500KB per texture
 
-**Geometry Optimization:**
-- Only 2 shared PlaneGeometry instances (large: 20×10, small: 12×6)
-- All billboards reference the same geometry
-- Saves ~70KB+ with 10 billboards (90% reduction in geometry memory)
+**Geometry/Material Optimization:**
+- Billboard planes: 2 shared geometries (large: 20×10, small: 12×6) with minimal 1×1 segments
+- Support posts: 1 shared geometry (6 segments) + 1 shared material for ALL posts
+- Post heights adjusted via mesh.scale.y
+- Low-poly approach: Flat planes don't need subdivision, cylinders use 6-sided geometry
+- Total savings: ~100KB+ with 8 billboards (97% reduction in geometry/material memory)
 
 ## Performance Metrics
 

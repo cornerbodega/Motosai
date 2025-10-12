@@ -51,6 +51,9 @@ export class Billboard {
     this.texture = null;
     this.lightLeft = null; // Left ground light
     this.lightRight = null; // Right ground light
+    this.postLeft = null;  // Left support post
+    this.postRight = null; // Right support post
+    this.isSharedPostResources = false; // Track if using shared post geometry/material
 
     // Memory tracking
     this.textureCache = getTextureCache();
@@ -66,9 +69,11 @@ export class Billboard {
    * Load billboard resources (geometry, material, texture)
    * @param {THREE.Scene} scene - Scene to add mesh to
    * @param {Object} sharedGeometries - Optional shared geometries object {large, small}
+   * @param {THREE.CylinderGeometry} sharedPostGeometry - Optional shared post geometry
+   * @param {THREE.Material} sharedPostMaterial - Optional shared post material
    * @returns {Promise<void>}
    */
-  async load(scene, sharedGeometries = null) {
+  async load(scene, sharedGeometries = null, sharedPostGeometry = null, sharedPostMaterial = null) {
     if (this.state === BILLBOARD_STATE.LOADED || this.state === BILLBOARD_STATE.LOADING) {
       return;
     }
@@ -88,8 +93,8 @@ export class Billboard {
         this.geometry = isLarge ? sharedGeometries.large : sharedGeometries.small;
         this.isSharedGeometry = true;
       } else {
-        // Fallback: create individual geometry
-        this.geometry = new THREE.PlaneGeometry(this.scale.x, this.scale.y);
+        // Fallback: create individual geometry with minimal segments
+        this.geometry = new THREE.PlaneGeometry(this.scale.x, this.scale.y, 1, 1);
         this.isSharedGeometry = false;
       }
 
@@ -111,7 +116,18 @@ export class Billboard {
       this.mesh.rotation.y = this.rotationY;
       this.mesh.name = this.name;
 
-      // Add lights based on billboard type
+      // Add lights and support posts based on billboard type
+      const postHeight = this.scale.y / 2; // From bottom of billboard to ground
+
+      // Use shared post resources if available, otherwise create new
+      const useSharedPosts = sharedPostGeometry && sharedPostMaterial;
+      const postGeometry = useSharedPosts ? sharedPostGeometry : new THREE.CylinderGeometry(0.3, 0.3, postHeight, 6); // Minimal 6 segments
+      const postMaterial = useSharedPosts ? sharedPostMaterial : new THREE.MeshStandardMaterial({
+        color: 0x444444,
+        metalness: 0.6,
+        roughness: 0.4
+      });
+
       if (this.type === 'large-dual') {
         // Two spotlights (left and right)
         const lightIntensity = 40;
@@ -132,6 +148,18 @@ export class Billboard {
         this.lightRight.castShadow = false;
         this.mesh.add(this.lightRight);
         this.mesh.add(this.lightRight.target);
+
+        // Two support posts
+        this.postLeft = new THREE.Mesh(postGeometry, postMaterial);
+        this.postLeft.position.set(-this.scale.x / 4, -this.scale.y / 2 - postHeight / 2, 0);
+        this.postLeft.scale.y = postHeight / 5; // Scale to correct height (shared geo is 5 units)
+        this.mesh.add(this.postLeft);
+
+        this.postRight = new THREE.Mesh(postGeometry, postMaterial);
+        this.postRight.position.set(this.scale.x / 4, -this.scale.y / 2 - postHeight / 2, 0);
+        this.postRight.scale.y = postHeight / 5; // Scale to correct height
+        this.mesh.add(this.postRight);
+
       } else if (this.type === 'large-single') {
         // Single spotlight (center)
         const lightIntensity = 60;
@@ -145,8 +173,23 @@ export class Billboard {
         this.lightLeft.castShadow = false;
         this.mesh.add(this.lightLeft);
         this.mesh.add(this.lightLeft.target);
+
+        // Single center support post
+        this.postLeft = new THREE.Mesh(postGeometry, postMaterial);
+        this.postLeft.position.set(0, -this.scale.y / 2 - postHeight / 2, 0);
+        this.postLeft.scale.y = postHeight / 5; // Scale to correct height
+        this.mesh.add(this.postLeft);
+
+      } else if (this.type === 'small') {
+        // Small billboards have one post but no lights
+        this.postLeft = new THREE.Mesh(postGeometry, postMaterial);
+        this.postLeft.position.set(0, -this.scale.y / 2 - postHeight / 2, 0);
+        this.postLeft.scale.y = postHeight / 5; // Scale to correct height
+        this.mesh.add(this.postLeft);
       }
-      // type === 'small' has no lights
+
+      // Track if using shared post resources
+      this.isSharedPostResources = useSharedPosts;
 
       // Add to scene
       scene.add(this.mesh);
@@ -203,13 +246,54 @@ export class Billboard {
 
     // Dispose lights
     if (this.lightLeft) {
+      // Remove light and target from parent mesh
+      if (this.mesh) {
+        this.mesh.remove(this.lightLeft);
+        if (this.lightLeft.target) {
+          this.mesh.remove(this.lightLeft.target);
+        }
+      }
       this.lightLeft.dispose();
       this.lightLeft = null;
     }
     if (this.lightRight) {
+      // Remove light and target from parent mesh
+      if (this.mesh) {
+        this.mesh.remove(this.lightRight);
+        if (this.lightRight.target) {
+          this.mesh.remove(this.lightRight.target);
+        }
+      }
       this.lightRight.dispose();
       this.lightRight = null;
     }
+
+    // Dispose support posts
+    if (this.postLeft) {
+      // Remove from parent mesh first
+      if (this.mesh) {
+        this.mesh.remove(this.postLeft);
+      }
+      // Only dispose geometry/material if NOT shared
+      if (!this.isSharedPostResources) {
+        if (this.postLeft.geometry) this.postLeft.geometry.dispose();
+        if (this.postLeft.material) this.postLeft.material.dispose();
+      }
+      this.postLeft = null;
+    }
+    if (this.postRight) {
+      // Remove from parent mesh first
+      if (this.mesh) {
+        this.mesh.remove(this.postRight);
+      }
+      // Only dispose geometry/material if NOT shared
+      if (!this.isSharedPostResources) {
+        if (this.postRight.geometry) this.postRight.geometry.dispose();
+        if (this.postRight.material) this.postRight.material.dispose();
+      }
+      this.postRight = null;
+    }
+    this.isSharedPostResources = false;
 
     // Remove mesh from scene
     if (this.mesh && scene) {

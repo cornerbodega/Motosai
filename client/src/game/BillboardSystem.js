@@ -18,15 +18,25 @@ export class BillboardSystem {
     this.cullDistance = -50;      // Hide billboards 50m behind player
 
     // Performance settings
-    this.maxLoadedBillboards = 8; // Max 8 billboards loaded at once
+    this.maxLoadedBillboards = 5; // Max 5 billboards loaded at once (reduced for memory)
     this.updateInterval = 0.5;    // Check distances every 0.5 seconds
     this.timeSinceUpdate = 0;
 
     // Shared geometries (memory optimization - reuse across all billboards)
+    // Use minimal segments for low-poly optimization (1x1 segments for flat planes)
     this.sharedGeometries = {
-      large: new THREE.PlaneGeometry(20, 10),
-      small: new THREE.PlaneGeometry(12, 6)
+      large: new THREE.PlaneGeometry(20, 10, 1, 1),
+      small: new THREE.PlaneGeometry(12, 6, 1, 1)
     };
+
+    // Shared post geometry and material (all posts use same size)
+    // Use minimal segments for low-poly optimization
+    this.sharedPostGeometry = new THREE.CylinderGeometry(0.3, 0.3, 5, 6); // Only 6 segments
+    this.sharedPostMaterial = new THREE.MeshStandardMaterial({
+      color: 0x444444, // Dark gray metal
+      metalness: 0.6,
+      roughness: 0.4
+    });
 
     // Stats tracking
     this.stats = {
@@ -42,10 +52,11 @@ export class BillboardSystem {
       this.stoppaId = window.stoppa.register('BillboardSystem', this);
     }
 
-    console.log('🪧 BillboardSystem initialized');
+    console.log('🪧 BillboardSystem initialized (Memory-Optimized)');
     console.log(`  Load distance: ${this.loadDistance}m`);
     console.log(`  Unload distance: ${this.unloadDistance}m`);
-    console.log(`  Max loaded: ${this.maxLoadedBillboards}`);
+    console.log(`  Max loaded: ${this.maxLoadedBillboards} billboards`);
+    console.log(`  Optimizations: Shared geometries (1×1 segments), shared post resources (6 segments)`);
   }
 
   /**
@@ -152,7 +163,7 @@ export class BillboardSystem {
       const toLoad = billboardsToLoad.slice(0, slotsAvailable);
 
       for (const { billboard } of toLoad) {
-        billboard.load(this.scene, this.sharedGeometries).catch(error => {
+        billboard.load(this.scene, this.sharedGeometries, this.sharedPostGeometry, this.sharedPostMaterial).catch(error => {
           console.error(`Failed to load billboard ${billboard.name}:`, error);
         });
       }
@@ -261,6 +272,16 @@ export class BillboardSystem {
       this.sharedGeometries = null;
     }
 
+    // Dispose shared post resources
+    if (this.sharedPostGeometry) {
+      this.sharedPostGeometry.dispose();
+      this.sharedPostGeometry = null;
+    }
+    if (this.sharedPostMaterial) {
+      this.sharedPostMaterial.dispose();
+      this.sharedPostMaterial = null;
+    }
+
     // Unregister from Stoppa
     if (this.stoppaId && window.stoppa) {
       window.stoppa.unregister(this.stoppaId);
@@ -275,7 +296,7 @@ export class BillboardSystem {
    * @param {number} count - Number of billboards to create
    * @param {number} spacing - Spacing between billboards (meters)
    */
-  createTestBillboards(count = 10, spacing = 500) {
+  createTestBillboards(count = 8, spacing = 600) {
     console.log(`Creating ${count} test billboards...`);
 
     const sides = ['left', 'right'];
