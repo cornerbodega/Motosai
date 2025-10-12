@@ -110,10 +110,11 @@ export class PlayerSelection {
 
   static BUTTON_OPACITY_DISABLED = '1';
 
-  constructor(scene, camera, audioManager = null) {
+  constructor(scene, camera, audioManager = null, ufoController = null) {
     this.scene = scene;
     this.camera = camera;
     this.audioManager = audioManager;
+    this.ufoController = ufoController;
     this.selectedBike = null;
     this.availableBikes = [];
     this.unlockedBikes = ["default"];
@@ -134,6 +135,10 @@ export class PlayerSelection {
     this.pavementMesh = null;
     // Fries model for selection screen
     this.friesModel = null;
+
+    // UFO floating animation
+    this.ufoFloatAnimationId = null;
+    this.lastFloatTime = 0;
 
     this.initializeBikes();
   }
@@ -418,8 +423,60 @@ export class PlayerSelection {
     startButton.addEventListener("click", () => {
       if (this.selectedBike && this.onSelectionComplete) {
         if (this.audioManager) this.audioManager.playUISelect();
-        this.onSelectionComplete(this.selectedBike);
-        this.hideSelectionUI();
+
+        // Disable and grey out the start button
+        startButton.disabled = true;
+        startButton.style.opacity = '0.5';
+        startButton.style.cursor = 'not-allowed';
+        startButton.style.background = '#666';
+
+        // Hide the selection menu UI
+        this.hideUIOnly();
+
+        // Animate camera rotation to look up
+        const startRotationY = this.camera.rotation.y;
+        const targetRotationY = startRotationY + Math.PI / 9; // 20 degrees upward
+        const rotationDuration = 500; // 0.5 seconds
+        const rotationStartTime = performance.now();
+
+        const animateCameraRotation = (currentTime) => {
+          const elapsed = currentTime - rotationStartTime;
+          const progress = Math.min(elapsed / rotationDuration, 1);
+
+          // Ease-out curve for smooth deceleration
+          const eased = 1 - Math.pow(1 - progress, 3);
+
+          this.camera.rotation.y = startRotationY + (targetRotationY - startRotationY) * eased;
+
+          if (progress < 1) {
+            requestAnimationFrame(animateCameraRotation);
+          }
+        };
+
+        requestAnimationFrame(animateCameraRotation);
+
+        // If UFO controller is available, animate UFO to bike
+        if (this.ufoController && this.previewModel) {
+          // Get the bike preview position before hiding UI
+          const bikePosition = this.previewModel.position.clone();
+
+          // Start UFO animation to fly above the bike
+          this.ufoController.playFlyToBikeAnimation(bikePosition, () => {
+            // Once UFO reaches the bike, start floating animation
+            this.startUFOFloating();
+
+            // Continue with game after a brief delay to show floating
+            setTimeout(() => {
+              this.stopUFOFloating();
+              this.hideSelectionUI();
+              this.onSelectionComplete(this.selectedBike);
+            }, 4000); // 4 second delay to show floating
+          });
+        } else {
+          // No UFO or no preview model - just proceed normally
+          this.hideSelectionUI();
+          this.onSelectionComplete(this.selectedBike);
+        }
       }
     });
 
@@ -929,17 +986,35 @@ export class PlayerSelection {
     if (initial) this.selectBike(initial);
   }
 
-  hideSelectionUI() {
-    // Restore original camera position and rotation
-    if (this.originalCameraPosition) {
-      this.camera.position.copy(this.originalCameraPosition);
-      this.originalCameraPosition = null;
-    }
-    if (this.originalCameraRotation) {
-      this.camera.rotation.copy(this.originalCameraRotation);
-      this.originalCameraRotation = null;
-    }
+  startUFOFloating() {
+    if (!this.ufoController || !this.previewModel) return;
 
+    this.lastFloatTime = performance.now();
+    const animate = (currentTime) => {
+      const deltaTime = (currentTime - this.lastFloatTime) / 1000; // Convert to seconds
+      this.lastFloatTime = currentTime;
+
+      // Update UFO floating animation
+      const bikePosition = this.previewModel.position.clone();
+      this.ufoController.updateFloatingAboveBike(deltaTime, bikePosition);
+
+      this.ufoFloatAnimationId = requestAnimationFrame(animate);
+    };
+
+    this.ufoFloatAnimationId = requestAnimationFrame(animate);
+  }
+
+  stopUFOFloating() {
+    if (this.ufoFloatAnimationId) {
+      cancelAnimationFrame(this.ufoFloatAnimationId);
+      this.ufoFloatAnimationId = null;
+    }
+    if (this.ufoController) {
+      this.ufoController.stopFloating();
+    }
+  }
+
+  hideUIOnly() {
     // Remove key handler
     if (this._selectionKeyHandler) {
       window.removeEventListener("keydown", this._selectionKeyHandler);
@@ -951,7 +1026,21 @@ export class PlayerSelection {
       this.selectionUI.parentElement.removeChild(this.selectionUI);
     }
     this.selectionUI = null;
+  }
 
+  restoreCamera() {
+    // Restore original camera position and rotation
+    if (this.originalCameraPosition) {
+      this.camera.position.copy(this.originalCameraPosition);
+      this.originalCameraPosition = null;
+    }
+    if (this.originalCameraRotation) {
+      this.camera.rotation.copy(this.originalCameraRotation);
+      this.originalCameraRotation = null;
+    }
+  }
+
+  cleanupSceneObjects() {
     // Remove preview bike model from main scene
     // DON'T dispose geometries/materials as they're shared with preloaded model
     if (this.previewModel && this.scene) {
@@ -978,5 +1067,19 @@ export class PlayerSelection {
       this.scene.remove(this.friesModel);
       this.friesModel = null;
     }
+  }
+
+  hideSelectionUI() {
+    // Stop UFO floating animation
+    this.stopUFOFloating();
+
+    // Hide UI elements
+    this.hideUIOnly();
+
+    // Restore camera
+    this.restoreCamera();
+
+    // Cleanup scene objects
+    this.cleanupSceneObjects();
   }
 }

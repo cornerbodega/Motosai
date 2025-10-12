@@ -27,6 +27,10 @@ export class UFOController {
 
     // Animation state
     this.isEscaping = false;
+    this.isFlyingToBike = false;
+    this.flyToBikeAnimationRunning = false;
+    this.isFloatingAboveBike = false;
+    this.floatTime = 0;
   }
 
   async load() {
@@ -155,7 +159,7 @@ export class UFOController {
     const glowMaterial = new THREE.MeshBasicMaterial({
       color: 0x00ffff,
       transparent: true,
-      opacity: 0.2,
+      opacity: 0.1,
       side: THREE.BackSide
     });
     this.glowMesh = new THREE.Mesh(glowGeometry, glowMaterial);
@@ -197,8 +201,12 @@ export class UFOController {
       console.warn('UFOController.update called but ufo is null');
       return;
     }
-    if (this.isEscaping) {
-      // Don't update position while escaping
+    if (this.isEscaping || this.isFlyingToBike) {
+      // Don't update position while escaping or flying to bike
+      return;
+    }
+    if (this.isFloatingAboveBike) {
+      // Handle floating animation separately
       return;
     }
 
@@ -301,7 +309,7 @@ export class UFOController {
 
     // Pulse glow
     if (this.glowMesh) {
-      this.glowMesh.material.opacity = 0.15 + Math.sin(this.bobTime * 2) * 0.1;
+      this.glowMesh.material.opacity = 0.1 + Math.sin(this.bobTime * 2) * 0.05;
     }
 
     // Animate lights
@@ -427,6 +435,101 @@ export class UFOController {
     };
 
     animate();
+  }
+
+  playFlyToBikeAnimation(targetPosition, onComplete) {
+    if (!this.ufo) {
+      if (onComplete) onComplete();
+      return;
+    }
+
+    // Set flying flag to prevent update() from interfering
+    this.isFlyingToBike = true;
+    this.flyToBikeAnimationRunning = true;
+
+    const startPos = this.ufo.position.clone();
+    const startRotation = this.ufo.rotation.clone();
+    const startTime = Date.now();
+    const flyDuration = 1000; // 1 second to fly to bike
+
+    // Calculate target position above the bike
+    const targetX = targetPosition.x;
+    const targetY = targetPosition.y + 8; // 8 units above the bike
+    const targetZ = targetPosition.z;
+
+    const animate = () => {
+      // Check if animation was cancelled
+      if (!this.flyToBikeAnimationRunning) {
+        console.log('UFO fly-to-bike animation cancelled');
+        if (onComplete) onComplete();
+        return;
+      }
+
+      const elapsed = Date.now() - startTime;
+      const t = Math.min(elapsed / flyDuration, 1);
+
+      // Ease-in-out for smooth movement
+      const eased = t < 0.5
+        ? 2 * t * t
+        : 1 - Math.pow(-2 * t + 2, 2) / 2;
+
+      // Move toward target position
+      this.ufo.position.x = startPos.x + (targetX - startPos.x) * eased;
+      this.ufo.position.y = startPos.y + (targetY - startPos.y) * eased;
+      this.ufo.position.z = startPos.z + (targetZ - startPos.z) * eased;
+
+      // Gentle rotation while flying
+      this.ufo.rotation.y += 0.03;
+
+      if (t < 1) {
+        requestAnimationFrame(animate);
+      } else {
+        // Animation complete - start floating
+        this.isFlyingToBike = false;
+        this.flyToBikeAnimationRunning = false;
+        this.isFloatingAboveBike = true;
+        console.log('UFO reached bike - now floating');
+        if (onComplete) onComplete();
+      }
+    };
+
+    animate();
+  }
+
+  updateFloatingAboveBike(deltaTime, targetPosition) {
+    if (!this.ufo || !this.isFloatingAboveBike) return;
+
+    this.floatTime += deltaTime;
+
+    // Gentle floating motion above the bike
+    const bobHeight = Math.sin(this.floatTime * 1.5) * 0.5;
+    const wobbleX = Math.cos(this.floatTime * 0.8) * 0.3;
+    const wobbleZ = Math.sin(this.floatTime * 1.2) * 0.3;
+
+    // Position UFO above the target with floating motion
+    this.ufo.position.x = targetPosition.x + wobbleX;
+    this.ufo.position.y = targetPosition.y + 8 + bobHeight; // 8 units above + bobbing
+    this.ufo.position.z = targetPosition.z + wobbleZ;
+
+    // Slow rotation
+    this.ufo.rotation.y += deltaTime * 0.5;
+
+    // Gentle tilting
+    this.ufo.rotation.x = Math.sin(this.floatTime * 0.6) * 0.1;
+    this.ufo.rotation.z = Math.cos(this.floatTime * 0.5) * 0.08;
+
+    // Pulse glow
+    if (this.glowMesh) {
+      this.glowMesh.material.opacity = 0.1 + Math.sin(this.floatTime * 2) * 0.05;
+    }
+
+    // Update particle trail
+    this.updateParticleTrail();
+  }
+
+  stopFloating() {
+    this.isFloatingAboveBike = false;
+    this.floatTime = 0;
   }
 
   cleanup() {

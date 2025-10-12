@@ -92,8 +92,9 @@ export class BillboardSystem {
    * Update billboard loading/unloading based on player position
    * @param {number} deltaTime - Time since last frame
    * @param {THREE.Vector3} playerPosition - Current player position
+   * @param {string} timeOfDay - Current time of day ('dawn', 'day', 'dusk', 'night')
    */
-  update(deltaTime, playerPosition) {
+  update(deltaTime, playerPosition, timeOfDay = 'day') {
     // Throttle distance checks for performance
     this.timeSinceUpdate += deltaTime;
     if (this.timeSinceUpdate < this.updateInterval) {
@@ -143,8 +144,9 @@ export class BillboardSystem {
           continue;
         }
 
-        // Show visible billboards
+        // Show visible billboards and update lights based on time of day
         billboard.show();
+        billboard.updateLights(timeOfDay);
       }
 
       // Queue billboards for loading if within range and in front
@@ -163,7 +165,7 @@ export class BillboardSystem {
       const toLoad = billboardsToLoad.slice(0, slotsAvailable);
 
       for (const { billboard } of toLoad) {
-        billboard.load(this.scene, this.sharedGeometries, this.sharedPostGeometry, this.sharedPostMaterial).catch(error => {
+        billboard.load(this.scene, this.sharedGeometries, this.sharedPostGeometry, this.sharedPostMaterial, timeOfDay).catch(error => {
           console.error(`Failed to load billboard ${billboard.name}:`, error);
         });
       }

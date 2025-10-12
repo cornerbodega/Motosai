@@ -71,9 +71,10 @@ export class Billboard {
    * @param {Object} sharedGeometries - Optional shared geometries object {large, small}
    * @param {THREE.CylinderGeometry} sharedPostGeometry - Optional shared post geometry
    * @param {THREE.Material} sharedPostMaterial - Optional shared post material
+   * @param {string} timeOfDay - Current time of day for initial light state
    * @returns {Promise<void>}
    */
-  async load(scene, sharedGeometries = null, sharedPostGeometry = null, sharedPostMaterial = null) {
+  async load(scene, sharedGeometries = null, sharedPostGeometry = null, sharedPostMaterial = null, timeOfDay = 'day') {
     if (this.state === BILLBOARD_STATE.LOADED || this.state === BILLBOARD_STATE.LOADING) {
       return;
     }
@@ -193,6 +194,9 @@ export class Billboard {
 
       // Add to scene
       scene.add(this.mesh);
+
+      // Set initial light state based on time of day
+      this.updateLights(timeOfDay);
 
       this.state = BILLBOARD_STATE.LOADED;
       console.log(`Billboard loaded: ${this.name} at ${this.position.z.toFixed(0)}m`);
@@ -324,6 +328,27 @@ export class Billboard {
       if (this.state === BILLBOARD_STATE.CULLED) {
         this.state = BILLBOARD_STATE.LOADED;
       }
+    }
+  }
+
+  /**
+   * Update billboard lights based on time of day
+   * Lights are ON during dusk and night (dusk to dawn)
+   * Lights are OFF during dawn and day
+   * @param {string} timeOfDay - Current time of day ('dawn', 'day', 'dusk', 'night')
+   */
+  updateLights(timeOfDay) {
+    // Determine if lights should be on (dusk and night only)
+    const lightsOn = (timeOfDay === 'dusk' || timeOfDay === 'night');
+
+    // Update left light if it exists
+    if (this.lightLeft) {
+      this.lightLeft.visible = lightsOn;
+    }
+
+    // Update right light if it exists (for dual billboards)
+    if (this.lightRight) {
+      this.lightRight.visible = lightsOn;
     }
   }
 

@@ -158,6 +158,7 @@ export class MotosaiGame {
     this.dayCycleDuration = 120.0; // 120 seconds for full day
     this.dayCycleTime = 0; // Current time in the cycle (0-120)
     this.dayCycleTimeOfDay = 'day'; // Current time of day
+    this.currentTimeOfDay = 'day'; // Current calculated time of day (for billboard lights, etc.)
     this.timesOfDay = ['dawn', 'day', 'dusk', 'night']; // Cycle order
 
     // Pre-allocate reusable objects for updateCamera to prevent memory leaks
@@ -1229,7 +1230,8 @@ export class MotosaiGame {
     this.playerSelection = new PlayerSelection(
       this.scene,
       this.camera,
-      this.audioManager
+      this.audioManager,
+      null // ufoController will be set after it's created
     );
 
     // Start intro animation - wait for user to click START GAME
@@ -1254,6 +1256,9 @@ export class MotosaiGame {
 
       // Initialize UFOController with the UFO from intro BEFORE bike selection
       this.ufoController = new UFOController(this.scene);
+
+      // Pass ufoController to playerSelection so it can animate the UFO
+      this.playerSelection.ufoController = this.ufoController;
 
       if (this.ufo) {
         // Use UFO from intro
@@ -2331,6 +2336,9 @@ export class MotosaiGame {
       currentPeriod = 'night';
       blendFactor = (t - 90) / 30;
     }
+
+    // Store current time of day for other systems (like billboard lights)
+    this.currentTimeOfDay = currentPeriod;
 
     // Update directional light to follow the visible celestial body
     if (this.sunLight) {
@@ -3603,7 +3611,7 @@ export class MotosaiGame {
 
         // Update billboard system (distance-based loading/unloading)
         if (this.billboardSystem) {
-          this.billboardSystem.update(deltaTime, state.position);
+          this.billboardSystem.update(deltaTime, state.position, this.currentTimeOfDay);
         }
 
         // Update HUD
