@@ -2791,16 +2791,16 @@ export class MotosaiGame {
         starfieldVisible: false
       },
       dusk: {
-        sky: 0xFF4466,
-        ambientColor: 0xFF8855,
-        ambientIntensity: 0.28,
-        sunColor: 0xFF6633,
-        sunIntensity: 2.2,
-        hemiSky: 0xCC4466,
-        hemiGround: 0x332211,
-        hemiIntensity: 0.5,
-        fillColor: 0xFF9966,
-        fillIntensity: 0.35,
+        sky: 0xFF8833,          // Epic bright orange sky
+        ambientColor: 0xFFAA55, // Golden orange ambient
+        ambientIntensity: 0.32,
+        sunColor: 0xFF6600,     // Deep epic orange sun
+        sunIntensity: 2.8,      // Brighter for more drama
+        hemiSky: 0xFF9944,      // Warm orange hemisphere
+        hemiGround: 0x4A3020,   // Warm brown ground
+        hemiIntensity: 0.6,
+        fillColor: 0xFFBB66,    // Light golden orange fill
+        fillIntensity: 0.4,
         starfieldVisible: false
       },
       night: {

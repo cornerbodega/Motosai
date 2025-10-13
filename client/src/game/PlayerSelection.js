@@ -447,30 +447,6 @@ export class PlayerSelection {
         // Hide the selection menu UI
         this.hideUIOnly();
 
-        // Animate camera rotation to look up
-        const startRotationY = this.camera.rotation.y;
-        const targetRotationY = startRotationY + Math.PI / 9; // 20 degrees upward
-        const rotationDuration = 500; // 0.5 seconds
-        const rotationStartTime = performance.now();
-
-        const animateCameraRotation = (currentTime) => {
-          const elapsed = currentTime - rotationStartTime;
-          const progress = Math.min(elapsed / rotationDuration, 1);
-
-          // Ease-out curve for smooth deceleration
-          const eased = 1 - Math.pow(1 - progress, 3);
-
-          this.camera.rotation.y = startRotationY + (targetRotationY - startRotationY) * eased;
-
-          if (progress < 1) {
-            this.cameraRotationAnimationId = requestAnimationFrame(animateCameraRotation);
-          } else {
-            this.cameraRotationAnimationId = null;
-          }
-        };
-
-        this.cameraRotationAnimationId = requestAnimationFrame(animateCameraRotation);
-
         // If UFO controller is available, animate UFO to bike
         if (this.ufoController && this.previewModel) {
           // Stop the UFO from spinning
@@ -481,7 +457,31 @@ export class PlayerSelection {
 
           // Start UFO animation to fly above the bike
           this.ufoController.playFlyToBikeAnimation(bikePosition, () => {
-            // Once UFO reaches the bike, start floating animation
+            // Once UFO reaches the bike, start camera rotation to look up
+            const startRotationY = this.camera.rotation.y;
+            const targetRotationY = startRotationY + Math.PI / 4; // 45 degrees upward
+            const rotationDuration = 500; // 0.5 seconds
+            const rotationStartTime = performance.now();
+
+            const animateCameraRotation = (currentTime) => {
+              const elapsed = currentTime - rotationStartTime;
+              const progress = Math.min(elapsed / rotationDuration, 1);
+
+              // Ease-out curve for smooth deceleration
+              const eased = 1 - Math.pow(1 - progress, 3);
+
+              this.camera.rotation.y = startRotationY + (targetRotationY - startRotationY) * eased;
+
+              if (progress < 1) {
+                this.cameraRotationAnimationId = requestAnimationFrame(animateCameraRotation);
+              } else {
+                this.cameraRotationAnimationId = null;
+              }
+            };
+
+            this.cameraRotationAnimationId = requestAnimationFrame(animateCameraRotation);
+
+            // Start floating animation
             this.startUFOFloating();
 
             // Continue with game after animation completes
@@ -489,7 +489,7 @@ export class PlayerSelection {
               this.stopUFOFloating();
               this.hideSelectionUI();
               this.onSelectionComplete(this.selectedBike);
-            }, 3000); // 3 second delay for all animations
+            }, 2000); // 2 second delay for all animations
           });
         } else {
           // No UFO or no preview model - just proceed normally
@@ -1102,6 +1102,10 @@ export class PlayerSelection {
 
           // Keep rotating
           this.ufoController.ufo.rotation.y += 0.05;
+
+          // Make camera follow UFO
+          const ufoPos = this.ufoController.ufo.position;
+          this.camera.lookAt(ufoPos.x, ufoPos.y, ufoPos.z);
 
           if (progress < 1) {
             this.ufoFlyAwayAnimationId = requestAnimationFrame(animate);

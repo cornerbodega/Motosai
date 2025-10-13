@@ -1327,9 +1327,9 @@ export class TrafficSystem {
   checkCollision(position, radius) {
     // Check if position collides with any vehicle using tight bounding boxes
     for (const vehicle of this.vehicles) {
-      // Get vehicle's bounding box - make it slightly smaller for lane splitting
-      const vehicleHalfLength = vehicle.length / 2 * 0.9; // 90% of actual size
-      const vehicleHalfWidth = vehicle.width / 2 * 0.85; // 85% of actual width for easier lane splitting
+      // Get vehicle's bounding box - make it smaller so player needs to actually hit vehicle
+      const vehicleHalfLength = vehicle.length / 2 * 0.75; // 75% of actual size - tighter collision
+      const vehicleHalfWidth = vehicle.width / 2 * 0.70; // 70% of actual width - easier lane splitting
       
       // Check if bike position is within vehicle's rectangular bounds
       const xDist = Math.abs(position.x - vehicle.position.x);
@@ -1385,8 +1385,10 @@ export class TrafficSystem {
     let debugMesh = this.debugBoxMeshes.get(vehicle.id);
 
     if (!debugMesh) {
-      // Create new debug box with correct dimensions (width, height, length)
-      const geometry = new THREE.BoxGeometry(vehicle.width, vehicle.height, vehicle.length);
+      // Create new debug box with ACTUAL collision dimensions (reduced size)
+      const collisionWidth = vehicle.width * 0.70; // Match checkCollision reduction
+      const collisionLength = vehicle.length * 0.75; // Match checkCollision reduction
+      const geometry = new THREE.BoxGeometry(collisionWidth, vehicle.height, collisionLength);
       const material = new THREE.MeshBasicMaterial({
         color: 0x00ff00,
         wireframe: true,
