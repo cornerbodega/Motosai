@@ -30,11 +30,13 @@ export class TrafficSystem {
     this.sedanModel = null;
     this.sedanModelLoaded = false;
     this.sedanModelDimensions = { width: 1.8, height: 1.4, length: 4.5 }; // Default fallback
+    this.sedanYOffset = 0; // Y offset from origin to bottom of model - will be calculated on load
     this.loadSedanModel();
 
     this.semiModel = null;
     this.semiModelLoaded = false;
     this.semiModelDimensions = { width: 2.5, height: 4.0, length: 16.0 }; // Default fallback
+    this.semiYOffset = 0; // Y offset from origin to bottom of model - will be calculated on load
     this.loadSemiModel();
 
     // Color palette for cars (will be applied to the sedan body material)
@@ -211,18 +213,26 @@ export class TrafficSystem {
         this.sedanModel = gltf.scene;
         this.sedanModelLoaded = true;
 
-        // Automatically detect model dimensions
+        // Automatically detect model dimensions and origin offset
         const bbox = new THREE.Box3().setFromObject(this.sedanModel);
         const size = new THREE.Vector3();
+        const center = new THREE.Vector3();
         bbox.getSize(size);
+        bbox.getCenter(center);
+
         this.sedanModelDimensions = {
           width: size.x,
           height: size.y,
           length: size.z
         };
 
+        // Calculate Y offset from model origin to bottom (for ground placement)
+        this.sedanYOffset = center.y - size.y / 2;
+
         console.log('Sedan model loaded successfully');
         console.log('Detected sedan dimensions:', this.sedanModelDimensions);
+        console.log('Sedan bbox center:', center);
+        console.log('Sedan Y offset (origin to bottom):', this.sedanYOffset);
 
         // Log the model structure for debugging
         const meshes = [];
@@ -255,18 +265,26 @@ export class TrafficSystem {
         this.semiModel = gltf.scene;
         this.semiModelLoaded = true;
 
-        // Automatically detect model dimensions
+        // Automatically detect model dimensions and origin offset
         const bbox = new THREE.Box3().setFromObject(this.semiModel);
         const size = new THREE.Vector3();
+        const center = new THREE.Vector3();
         bbox.getSize(size);
+        bbox.getCenter(center);
+
         this.semiModelDimensions = {
           width: size.x,
           height: size.y,
           length: size.z
         };
 
+        // Calculate Y offset from model origin to bottom (for ground placement)
+        this.semiYOffset = center.y - size.y / 2;
+
         console.log('Semi model loaded successfully');
         console.log('Detected semi dimensions:', this.semiModelDimensions);
+        console.log('Semi bbox center:', center);
+        console.log('Semi Y offset (origin to bottom):', this.semiYOffset);
       },
       undefined,
       (error) => {
@@ -341,6 +359,7 @@ export class TrafficSystem {
         baseSpeed: vehicleData.baseSpeed,
         length: type.length,
         width: type.width,
+        height: type.height,
         isOncoming: false,
         isBraking: vehicleData.isBraking || false,
         frontVehicle: null,
@@ -383,6 +402,7 @@ export class TrafficSystem {
         baseSpeed: type.speed,
         length: type.length,
         width: type.width,
+        height: type.height,
         isOncoming: false,
         isBraking: false,
         frontVehicle: null,
@@ -413,12 +433,57 @@ export class TrafficSystem {
       }
       const spawnZ = playerZ + spawnOffset;
 
-      vehicle.position.set(laneX, 0.5, spawnZ);
+      vehicle.position.set(laneX, ROAD_CONSTANTS.ROAD_Y, spawnZ);
       vehicle.velocity.z = vehicle.speed; // Already in m/s
     }
-    
-    vehicle.mesh.position.copy(vehicle.position);
-    
+
+    // Calculate bounding box in LOCAL space (before positioning in world)
+    // This gives us the actual dimensions of the scaled mesh
+    vehicle.mesh.position.set(0, 0, 0); // Temp at origin
+    vehicle.mesh.updateMatrixWorld(true);
+
+    const localBBox = new THREE.Box3().setFromObject(vehicle.mesh);
+    const meshSize = new THREE.Vector3();
+    localBBox.getSize(meshSize);
+
+    // The bottom of the mesh in local space
+    const meshBottom = localBBox.min.y;
+
+    // Update vehicle dimensions to ACTUAL mesh size
+    vehicle.width = meshSize.x;
+    vehicle.height = meshSize.y;
+    vehicle.length = meshSize.z;
+
+    // Y offset to place bottom at ground (ROAD_Y)
+    vehicle.meshYOffset = -meshBottom;
+
+    // NOW position the mesh in world space with the offset
+    vehicle.mesh.position.set(
+      vehicle.position.x,
+      ROAD_CONSTANTS.ROAD_Y + vehicle.meshYOffset,
+      vehicle.position.z
+    );
+
+    // Debug logging for first vehicle of each type
+    if (vehicle.type === 'semi' && !this._loggedSemi) {
+      console.log('🚛 SEMI DEBUG:');
+      console.log('  meshSize:', `${meshSize.x.toFixed(2)} x ${meshSize.y.toFixed(2)} x ${meshSize.z.toFixed(2)}`);
+      console.log('  vehicle dimensions:', `${vehicle.width.toFixed(2)} x ${vehicle.height.toFixed(2)} x ${vehicle.length.toFixed(2)}`);
+      console.log('  meshBottom:', meshBottom);
+      console.log('  meshYOffset:', vehicle.meshYOffset);
+      console.log('  finalY:', vehicle.mesh.position.y);
+      this._loggedSemi = true;
+    }
+    if (!this._loggedCar) {
+      console.log('🚗 CAR DEBUG:');
+      console.log('  meshSize:', `${meshSize.x.toFixed(2)} x ${meshSize.y.toFixed(2)} x ${meshSize.z.toFixed(2)}`);
+      console.log('  vehicle dimensions:', `${vehicle.width.toFixed(2)} x ${vehicle.height.toFixed(2)} x ${vehicle.length.toFixed(2)}`);
+      console.log('  meshBottom:', meshBottom);
+      console.log('  meshYOffset:', vehicle.meshYOffset);
+      console.log('  finalY:', vehicle.mesh.position.y);
+      this._loggedCar = true;
+    }
+
     this.vehicles.push(vehicle);
     this.scene.add(vehicle.mesh);
     
@@ -964,9 +1029,9 @@ export class TrafficSystem {
       }
     }
     
-    // Update mesh position and ensure proper Y coordinate
+    // Update mesh position using pre-calculated Y offset
     vehicle.mesh.position.copy(vehicle.position);
-    vehicle.mesh.position.y = Math.max(vehicle.mesh.position.y, ROAD_CONSTANTS.ROAD_Y); // Prevent underground cars
+    vehicle.mesh.position.y = ROAD_CONSTANTS.ROAD_Y + (vehicle.meshYOffset || 0);
     
     // Update brake lights with emissive glow
     if (vehicle.mesh.userData.brake1 && vehicle.mesh.userData.brake1.material) {
@@ -1313,8 +1378,8 @@ export class TrafficSystem {
     let debugMesh = this.debugBoxMeshes.get(vehicle.id);
 
     if (!debugMesh) {
-      // Create new debug box
-      const geometry = new THREE.BoxGeometry(vehicle.width, vehicle.length * 0.5, vehicle.length);
+      // Create new debug box with correct dimensions (width, height, length)
+      const geometry = new THREE.BoxGeometry(vehicle.width, vehicle.height, vehicle.length);
       const material = new THREE.MeshBasicMaterial({
         color: 0x00ff00,
         wireframe: true,
@@ -1328,7 +1393,7 @@ export class TrafficSystem {
 
     // Update debug box position to match vehicle collision box
     debugMesh.position.copy(vehicle.position);
-    debugMesh.position.y = vehicle.length * 0.25; // Center vertically
+    debugMesh.position.y = vehicle.height / 2 + ROAD_CONSTANTS.ROAD_Y; // Center vertically at correct height
     debugMesh.visible = vehicle.mesh.visible;
   }
 
@@ -1453,9 +1518,10 @@ export class TrafficSystem {
         vehicle.laneChangeProgress = update.laneChangeProgress;
         vehicle.speed = update.speed;
         vehicle.isBraking = update.isBraking;
-        
-        // Update mesh position
+
+        // Update mesh position using pre-calculated Y offset
         vehicle.mesh.position.copy(vehicle.position);
+        vehicle.mesh.position.y = ROAD_CONSTANTS.ROAD_Y + (vehicle.meshYOffset || 0);
       }
     });
   }

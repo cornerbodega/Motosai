@@ -943,86 +943,75 @@ export class MotosaiGame {
       [this.sunLight.position.x, this.sunLight.position.y, this.sunLight.position.z] :
       [0, 200, 100];
 
-    // Calculate natural lighting from actual sun position
-    const naturalLighting = this.calculateNaturalLighting(currentSunPosition);
-
-    // EPIC STYLIZED COLOR OVERLAYS - blend with natural lighting
-    const stylePresets = {
+    // EPIC STYLIZED LIGHTING PRESETS - exact colors you wanted!
+    const presets = {
       dawn: {
-        // GOLDEN SUNRISE - saturate warm tones
-        skyTint: 1.4,  // Boost saturation
-        warmShift: 80,  // Add warm orange
-        coolShift: -60,  // Remove blue
-        intensityMult: 1.0
+        // EPIC GOLDEN SUNRISE - intense warm glow
+        sky: 0xFF6B4A,  // Vibrant orange-red
+        ambientColor: 0xFFB380,  // Warm peachy glow
+        ambientIntensity: 0.35,
+        sunColor: 0xFFA040,  // Golden orange sun
+        sunIntensity: 2.5,
+        hemiSky: 0xFF8866,  // Warm orange sky
+        hemiGround: 0x4A3020,  // Dark warm earth
+        hemiIntensity: 0.6,
+        fillColor: 0xFFCC99,  // Soft golden fill
+        fillIntensity: 0.4,
+        starfieldVisible: false
       },
       day: {
-        // BRILLIANT BLUE - saturate cool tones
-        skyTint: 1.3,  // Boost saturation
-        warmShift: -20,  // Slight cool
-        coolShift: 40,  // Add blue
-        intensityMult: 1.3  // BRIGHTER!
+        // BRILLIANT BLUE DAY - vibrant and saturated
+        sky: 0x4A9FFF,  // Rich saturated blue
+        ambientColor: 0xE0F0FF,  // Cool bright ambient
+        ambientIntensity: 0.65,
+        sunColor: 0xFFFFF5,  // Brilliant white sun
+        sunIntensity: 5.5,  // INTENSE!
+        hemiSky: 0x5BB0FF,  // Bright sky blue
+        hemiGround: 0xB8A890,  // Natural earth
+        hemiIntensity: 0.9,
+        fillColor: 0xCCE5FF,  // Cool blue fill
+        fillIntensity: 0.55,
+        starfieldVisible: false
       },
       dusk: {
-        // EPIC SUNSET - deep orange and purple
-        skyTint: 1.5,  // Max saturation
-        warmShift: 100,  // Heavy orange
-        coolShift: -80,  // Remove blue, add purple
-        intensityMult: 0.95
+        // EPIC SUNSET - dramatic purple and orange
+        sky: 0xFF4466,  // Deep red-orange
+        ambientColor: 0xFF8855,  // Fiery orange ambient
+        ambientIntensity: 0.28,
+        sunColor: 0xFF6633,  // Deep orange sun
+        sunIntensity: 2.2,
+        hemiSky: 0xCC4466,  // Purple-red sky
+        hemiGround: 0x332211,  // Dark earth
+        hemiIntensity: 0.5,
+        fillColor: 0xFF9966,  // Warm orange fill
+        fillIntensity: 0.35,
+        starfieldVisible: false
       },
       night: {
-        // DRAMATIC DARKNESS - keep natural dark
-        skyTint: 0.8,  // Desaturate
-        warmShift: -40,  // Cool tones
-        coolShift: 20,  // Slight blue
-        intensityMult: 0.5  // Much darker
+        // DRAMATIC DARK NIGHT - proper darkness
+        sky: 0x020510,  // Nearly black with blue tint
+        ambientColor: 0x0A1530,  // Very dark blue
+        ambientIntensity: 0.02,  // BARELY visible
+        sunColor: 0x4060A0,  // Dim moonlight
+        sunIntensity: 0.12,  // Very subtle
+        hemiSky: 0x050A18,  // Dark night
+        hemiGround: 0x000000,  // Pure black
+        hemiIntensity: 0.05,
+        fillColor: 0x0A1525,  // Dark blue fill
+        fillIntensity: 0.02,
+        starfieldVisible: true
       }
     };
 
-    const style = stylePresets[timeOfDay];
-    if (!style) {
+    const preset = presets[timeOfDay];
+    if (!preset) {
       console.error('Unknown time of day:', timeOfDay);
       return;
     }
 
-    // Blend natural lighting with stylized overlay
-    const blendColor = (naturalColor, warmShift, coolShift, saturation) => {
-      let r = (naturalColor >> 16) & 0xFF;
-      let g = (naturalColor >> 8) & 0xFF;
-      let b = naturalColor & 0xFF;
-
-      // Apply warm/cool shift
-      r = Math.min(255, Math.max(0, r + warmShift));
-      g = Math.min(255, Math.max(0, g + Math.round(warmShift * 0.6)));
-      b = Math.min(255, Math.max(0, b + coolShift));
-
-      // Apply saturation boost
-      const gray = (r + g + b) / 3;
-      r = Math.round(gray + (r - gray) * saturation);
-      g = Math.round(gray + (g - gray) * saturation);
-      b = Math.round(gray + (b - gray) * saturation);
-
-      r = Math.min(255, Math.max(0, r));
-      g = Math.min(255, Math.max(0, g));
-      b = Math.min(255, Math.max(0, b));
-
-      return (r << 16) | (g << 8) | b;
-    };
-
-    // Apply stylization to natural lighting
-    const fullPreset = {
-      sky: blendColor(naturalLighting.sky, style.warmShift, style.coolShift, style.skyTint),
-      ambientColor: blendColor(naturalLighting.ambientColor, style.warmShift, style.coolShift, style.skyTint),
-      ambientIntensity: naturalLighting.ambientIntensity * style.intensityMult,
-      sunColor: blendColor(naturalLighting.sunColor, style.warmShift, style.coolShift, style.skyTint),
-      sunIntensity: naturalLighting.sunIntensity * style.intensityMult,
-      hemiSky: blendColor(naturalLighting.hemiSky, style.warmShift, style.coolShift, style.skyTint),
-      hemiGround: naturalLighting.hemiGround,
-      hemiIntensity: naturalLighting.hemiIntensity * style.intensityMult,
-      fillColor: blendColor(naturalLighting.fillColor, style.warmShift, style.coolShift, style.skyTint),
-      fillIntensity: naturalLighting.fillIntensity * style.intensityMult,
-      starfieldVisible: naturalLighting.starfieldVisible,
-      sunPosition: currentSunPosition  // Keep sun where it is!
-    };
+    // Use exact preset colors, sun stays put
+    const fullPreset = preset;
+    fullPreset.sunPosition = currentSunPosition;
 
     // Initialize transition state if not exists
     if (!this.timeOfDayTransition) {
@@ -2773,38 +2762,58 @@ export class MotosaiGame {
   }
 
   updateContinuousLighting(period, blendFactor) {
-    // Get preset colors for current and next period
+    // EPIC PRESET COLORS - same as the buttons!
     const presets = {
       dawn: {
-        sky: 0xFFA07A,
-        ambientColor: 0xFFD4AA,
+        sky: 0xFF6B4A,
+        ambientColor: 0xFFB380,
         ambientIntensity: 0.35,
-        sunColor: 0xFFCC99,
-        sunIntensity: 1.4,
+        sunColor: 0xFFA040,
+        sunIntensity: 2.5,
+        hemiSky: 0xFF8866,
+        hemiGround: 0x4A3020,
+        hemiIntensity: 0.6,
+        fillColor: 0xFFCC99,
+        fillIntensity: 0.4,
         starfieldVisible: false
       },
       day: {
-        sky: 0x87CEEB,
-        ambientColor: 0xFFFFFF,
-        ambientIntensity: 0.5,
-        sunColor: 0xFFFAF0,
-        sunIntensity: 2.8,
+        sky: 0x4A9FFF,
+        ambientColor: 0xE0F0FF,
+        ambientIntensity: 0.65,
+        sunColor: 0xFFFFF5,
+        sunIntensity: 5.5,
+        hemiSky: 0x5BB0FF,
+        hemiGround: 0xB8A890,
+        hemiIntensity: 0.9,
+        fillColor: 0xCCE5FF,
+        fillIntensity: 0.55,
         starfieldVisible: false
       },
       dusk: {
-        sky: 0xFF8C5A,
-        ambientColor: 0xFF9966,
-        ambientIntensity: 0.3,
-        sunColor: 0xFF7744,
-        sunIntensity: 1.2,
+        sky: 0xFF4466,
+        ambientColor: 0xFF8855,
+        ambientIntensity: 0.28,
+        sunColor: 0xFF6633,
+        sunIntensity: 2.2,
+        hemiSky: 0xCC4466,
+        hemiGround: 0x332211,
+        hemiIntensity: 0.5,
+        fillColor: 0xFF9966,
+        fillIntensity: 0.35,
         starfieldVisible: false
       },
       night: {
-        sky: 0x0C1445,
-        ambientColor: 0x556688,
-        ambientIntensity: 0.18,
-        sunColor: 0xAABBDD,
-        sunIntensity: 0.35,
+        sky: 0x020510,
+        ambientColor: 0x0A1530,
+        ambientIntensity: 0.02,
+        sunColor: 0x4060A0,
+        sunIntensity: 0.12,
+        hemiSky: 0x050A18,
+        hemiGround: 0x000000,
+        hemiIntensity: 0.05,
+        fillColor: 0x0A1525,
+        fillIntensity: 0.02,
         starfieldVisible: true
       }
     };
@@ -2819,12 +2828,18 @@ export class MotosaiGame {
     // Smooth easing for color transitions
     const easedBlend = this._easeInOutQuad(blendFactor);
 
-    // Blend colors
+    // Blend ALL the colors for EPIC transitions
     const skyColor = this._lerpColor(current.sky, next.sky, easedBlend);
     const ambientColor = this._lerpColor(current.ambientColor, next.ambientColor, easedBlend);
     const sunColor = this._lerpColor(current.sunColor, next.sunColor, easedBlend);
+    const hemiSky = this._lerpColor(current.hemiSky, next.hemiSky, easedBlend);
+    const hemiGround = this._lerpColor(current.hemiGround, next.hemiGround, easedBlend);
+    const fillColor = this._lerpColor(current.fillColor, next.fillColor, easedBlend);
+
     const ambientIntensity = this._lerp(current.ambientIntensity, next.ambientIntensity, easedBlend);
     const sunIntensity = this._lerp(current.sunIntensity, next.sunIntensity, easedBlend);
+    const hemiIntensity = this._lerp(current.hemiIntensity, next.hemiIntensity, easedBlend);
+    const fillIntensity = this._lerp(current.fillIntensity, next.fillIntensity, easedBlend);
 
     // Apply to scene
     if (this.backgrounds) {
@@ -2850,6 +2865,25 @@ export class MotosaiGame {
     if (this.sunLight) {
       this.sunLight.color.setHex(sunColor);
       this.sunLight.intensity = sunIntensity;
+    }
+
+    // Update hemisphere light
+    if (this.hemiLight) {
+      this.hemiLight.color.setHex(hemiSky);
+      this.hemiLight.groundColor.setHex(hemiGround);
+      this.hemiLight.intensity = hemiIntensity;
+    }
+
+    // Update fill light
+    if (this.fillLight) {
+      this.fillLight.color.setHex(fillColor);
+      this.fillLight.intensity = fillIntensity;
+    }
+
+    // Update rim light
+    if (this.rimLight) {
+      this.rimLight.color.setHex(fillColor);
+      this.rimLight.intensity = fillIntensity * 0.5;
     }
   }
 
