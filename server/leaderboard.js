@@ -3,8 +3,18 @@ import { supabase } from './utils/supabase.js';
 class LeaderboardManager {
   constructor() {
     this.sessionStats = new Map(); // Track active sessions in memory
-    this.leaderboardCache = null;
-    this.cacheExpiry = 0;
+
+    // Separate caches for each leaderboard type
+    this.leaderboardCache = {
+      vehiclesPassed: null,
+      distance: null,
+      speed: null
+    };
+    this.cacheExpiry = {
+      vehiclesPassed: 0,
+      distance: 0,
+      speed: 0
+    };
     this.cacheTimeout = 30000; // Cache for 30 seconds
     this.sessionTimeout = 30 * 60 * 1000; // 30 minutes in milliseconds
 
@@ -69,8 +79,10 @@ class LeaderboardManager {
         return { success: false, error: error.message };
       }
 
-      // Clear cache to force refresh
-      this.leaderboardCache = null;
+      // Clear all caches to force refresh
+      this.leaderboardCache.vehiclesPassed = null;
+      this.leaderboardCache.distance = null;
+      this.leaderboardCache.speed = null;
 
       // Get player's rank
       const rank = await this.getPlayerRank(playerId, stats.vehiclesPassed);
@@ -118,12 +130,12 @@ class LeaderboardManager {
     }
   }
 
-  // Get top scores (cached) - Only best score per player
+  // Get top scores (cached) - Only best score per player, sorted by vehicles passed
   async getTopScores(limit = 10) {
     try {
       // Check cache
-      if (this.leaderboardCache && Date.now() < this.cacheExpiry) {
-        return this.leaderboardCache.slice(0, limit);
+      if (this.leaderboardCache.vehiclesPassed && Date.now() < this.cacheExpiry.vehiclesPassed) {
+        return this.leaderboardCache.vehiclesPassed.slice(0, limit);
       }
 
       // Use a raw SQL query to get each player's best score
@@ -158,18 +170,102 @@ class LeaderboardManager {
           .sort((a, b) => b.vehicles_passed - a.vehicles_passed)
           .slice(0, 50);
 
-        this.leaderboardCache = uniqueData;
-        this.cacheExpiry = Date.now() + this.cacheTimeout;
-        return this.leaderboardCache.slice(0, limit);
+        this.leaderboardCache.vehiclesPassed = uniqueData;
+        this.cacheExpiry.vehiclesPassed = Date.now() + this.cacheTimeout;
+        return this.leaderboardCache.vehiclesPassed.slice(0, limit);
       }
 
       // Update cache
-      this.leaderboardCache = data || [];
-      this.cacheExpiry = Date.now() + this.cacheTimeout;
+      this.leaderboardCache.vehiclesPassed = data || [];
+      this.cacheExpiry.vehiclesPassed = Date.now() + this.cacheTimeout;
 
-      return this.leaderboardCache.slice(0, limit);
+      return this.leaderboardCache.vehiclesPassed.slice(0, limit);
     } catch (error) {
       console.error('Error in getTopScores:', error);
+      return [];
+    }
+  }
+
+  // Get top scores by distance (cached) - Only best distance per player
+  async getTopScoresByDistance(limit = 10) {
+    try {
+      // Check cache
+      if (this.leaderboardCache.distance && Date.now() < this.cacheExpiry.distance) {
+        return this.leaderboardCache.distance.slice(0, limit);
+      }
+
+      // Fetch all and deduplicate in memory
+      const { data: allData, error: fetchError } = await supabase
+        .from('mo_leaderboard')
+        .select('*')
+        .order('distance_traveled', { ascending: false })
+        .limit(200);
+
+      if (fetchError) {
+        console.error('Error fetching distance leaderboard:', fetchError);
+        return [];
+      }
+
+      // Deduplicate: keep only best distance per player
+      const playerBestMap = new Map();
+      (allData || []).forEach(entry => {
+        const existing = playerBestMap.get(entry.player_id);
+        if (!existing || entry.distance_traveled > existing.distance_traveled) {
+          playerBestMap.set(entry.player_id, entry);
+        }
+      });
+
+      const uniqueData = Array.from(playerBestMap.values())
+        .sort((a, b) => b.distance_traveled - a.distance_traveled)
+        .slice(0, 50);
+
+      this.leaderboardCache.distance = uniqueData;
+      this.cacheExpiry.distance = Date.now() + this.cacheTimeout;
+      return this.leaderboardCache.distance.slice(0, limit);
+    } catch (error) {
+      console.error('Error in getTopScoresByDistance:', error);
+      return [];
+    }
+  }
+
+  // Get top scores by speed (cached) - Only best speed per player
+  async getTopScoresBySpeed(limit = 10) {
+    try {
+      // Check cache
+      if (this.leaderboardCache.speed && Date.now() < this.cacheExpiry.speed) {
+        return this.leaderboardCache.speed.slice(0, limit);
+      }
+
+      // Fetch all and deduplicate in memory
+      const { data: allData, error: fetchError } = await supabase
+        .from('mo_leaderboard')
+        .select('*')
+        .order('max_speed', { ascending: false })
+        .limit(200);
+
+      if (fetchError) {
+        console.error('Error fetching speed leaderboard:', fetchError);
+        return [];
+      }
+
+      // Deduplicate: keep only best speed per player
+      const playerBestMap = new Map();
+      (allData || []).forEach(entry => {
+        const existing = playerBestMap.get(entry.player_id);
+        if (!existing || entry.max_speed > existing.max_speed) {
+          playerBestMap.set(entry.player_id, entry);
+        }
+      });
+
+      const uniqueData = Array.from(playerBestMap.values())
+        .sort((a, b) => b.max_speed - a.max_speed)
+        .slice(0, 50);
+
+      this.leaderboardCache.speed = uniqueData;
+      this.cacheExpiry.speed = Date.now() + this.cacheTimeout;
+      return this.leaderboardCache.speed.slice(0, limit);
+    } catch (error) {
+      console.error('Error in getTopScoresBySpeed:', error);
       return [];
     }
   }
@@ -207,6 +303,80 @@ class LeaderboardManager {
         .slice(0, limit);
     } catch (error) {
       console.error('Error in getDailyTopScores:', error);
+      return [];
+    }
+  }
+
+  // Get daily top scores by distance - Only best distance per player today
+  async getDailyTopScoresByDistance(limit = 10) {
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      // Fetch all daily scores
+      const { data, error } = await supabase
+        .from('mo_leaderboard')
+        .select('*')
+        .gte('created_at', today.toISOString())
+        .order('distance_traveled', { ascending: false })
+        .limit(200);
+
+      if (error) {
+        console.error('Error fetching daily distance leaderboard:', error);
+        return [];
+      }
+
+      // Deduplicate: keep only best distance per player for today
+      const playerBestMap = new Map();
+      (data || []).forEach(entry => {
+        const existing = playerBestMap.get(entry.player_id);
+        if (!existing || entry.distance_traveled > existing.distance_traveled) {
+          playerBestMap.set(entry.player_id, entry);
+        }
+      });
+
+      return Array.from(playerBestMap.values())
+        .sort((a, b) => b.distance_traveled - a.distance_traveled)
+        .slice(0, limit);
+    } catch (error) {
+      console.error('Error in getDailyTopScoresByDistance:', error);
+      return [];
+    }
+  }
+
+  // Get daily top scores by speed - Only best speed per player today
+  async getDailyTopScoresBySpeed(limit = 10) {
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      // Fetch all daily scores
+      const { data, error } = await supabase
+        .from('mo_leaderboard')
+        .select('*')
+        .gte('created_at', today.toISOString())
+        .order('max_speed', { ascending: false })
+        .limit(200);
+
+      if (error) {
+        console.error('Error fetching daily speed leaderboard:', error);
+        return [];
+      }
+
+      // Deduplicate: keep only best speed per player for today
+      const playerBestMap = new Map();
+      (data || []).forEach(entry => {
+        const existing = playerBestMap.get(entry.player_id);
+        if (!existing || entry.max_speed > existing.max_speed) {
+          playerBestMap.set(entry.player_id, entry);
+        }
+      });
+
+      return Array.from(playerBestMap.values())
+        .sort((a, b) => b.max_speed - a.max_speed)
+        .slice(0, limit);
+    } catch (error) {
+      console.error('Error in getDailyTopScoresBySpeed:', error);
       return [];
     }
   }

@@ -2,13 +2,23 @@ export class LeaderboardUI {
   constructor(game) {
     this.game = game;
     this.serverUrl = import.meta.env.VITE_SERVER_URL || 'http://localhost:8080';
-    this.leaderboardData = [];
-    this.dailyLeaderboardData = [];
+
+    // Separate data storage for each leaderboard type
+    this.leaderboardData = {
+      carsPassed: [],
+      speed: []
+    };
+    this.dailyLeaderboardData = {
+      carsPassed: [],
+      speed: []
+    };
+
     this.showDaily = false;
+    this.leaderboardType = 'carsPassed'; // 'carsPassed', 'distance', or 'speed'
     this.updateInterval = 30000; // Update every 30 seconds
     this.lastUpdate = 0;
     this.isVisible = true;
-    this.isMinimized = false;
+    this.isMinimized = true; // Start collapsed
 
     // Player's current rank
     this.playerRank = null;
@@ -45,7 +55,7 @@ export class LeaderboardUI {
       position: fixed;
       right: 20px;
       top: 140px;
-      width: 200px;
+      width: 220px;
       background: linear-gradient(135deg, rgba(0, 0, 0, 0.9) 0%, rgba(20, 20, 40, 0.9) 100%);
       border: 2px solid rgba(100, 200, 255, 0.3);
       border-radius: 10px;
@@ -56,7 +66,7 @@ export class LeaderboardUI {
       box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
       backdrop-filter: blur(10px);
       transition: all 0.3s ease;
-      max-height: 350px;
+      max-height: 300px;
       overflow: hidden;
       display: block;
     `;
@@ -65,11 +75,19 @@ export class LeaderboardUI {
     const header = document.createElement('div');
     header.style.cssText = `
       display: flex;
-      justify-content: space-between;
-      align-items: center;
+      flex-direction: column;
       margin-bottom: 8px;
       border-bottom: 2px solid rgba(100, 200, 255, 0.3);
       padding-bottom: 6px;
+      gap: 5px;
+    `;
+
+    // Title row with minimize button
+    const titleRow = document.createElement('div');
+    titleRow.style.cssText = `
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
     `;
 
     // Title with icon
@@ -85,36 +103,12 @@ export class LeaderboardUI {
     `;
     title.innerHTML = `
       <span style="font-size: 16px;">🏆</span>
-      <span id="leaderboard-title">TOP 10</span>
+      <span id="leaderboard-title">LEADERBOARDS</span>
     `;
-
-    // Controls
-    const controls = document.createElement('div');
-    controls.style.cssText = `
-      display: flex;
-      gap: 10px;
-      align-items: center;
-    `;
-
-    // Toggle button (Daily/All-Time)
-    const toggleBtn = document.createElement('button');
-    toggleBtn.id = 'toggle-leaderboard';
-    toggleBtn.style.cssText = `
-      background: rgba(100, 200, 255, 0.2);
-      border: 1px solid rgba(100, 200, 255, 0.5);
-      color: white;
-      padding: 4px 8px;
-      border-radius: 5px;
-      cursor: pointer;
-      font-size: 11px;
-      font-family: 'Orbitron', monospace;
-      transition: all 0.2s;
-    `;
-    toggleBtn.textContent = 'DAILY';
-    toggleBtn.onclick = () => this.toggleLeaderboardType();
 
     // Minimize button
     const minimizeBtn = document.createElement('button');
+    minimizeBtn.id = 'minimize-btn';
     minimizeBtn.style.cssText = `
       background: transparent;
       border: none;
@@ -126,10 +120,97 @@ export class LeaderboardUI {
     minimizeBtn.innerHTML = '⎯';
     minimizeBtn.onclick = () => this.toggleMinimize();
 
-    controls.appendChild(toggleBtn);
-    controls.appendChild(minimizeBtn);
-    header.appendChild(title);
-    header.appendChild(controls);
+    titleRow.appendChild(title);
+    titleRow.appendChild(minimizeBtn);
+
+    // Controls row 1 - Type selector only
+    const controlsRow1 = document.createElement('div');
+    controlsRow1.id = 'controls-row-1';
+    controlsRow1.style.cssText = `
+      display: flex;
+      gap: 5px;
+      align-items: center;
+      justify-content: space-between;
+    `;
+
+    // Leaderboard type selector (dropdown)
+    const typeSelector = document.createElement('select');
+    typeSelector.id = 'leaderboard-type-selector';
+    typeSelector.style.cssText = `
+      background: rgba(100, 200, 255, 0.3);
+      border: 1px solid rgba(100, 200, 255, 0.5);
+      color: white;
+      padding: 5px 8px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 11px;
+      font-family: 'Orbitron', monospace;
+      transition: all 0.2s;
+      flex: 1;
+    `;
+    typeSelector.innerHTML = `
+      <option value="carsPassed" style="background: #1a1a2e; color: white;">Cars Passed</option>
+      <option value="speed" style="background: #1a1a2e; color: white;">Speed</option>
+    `;
+    typeSelector.onchange = (e) => this.changeLeaderboardType(e.target.value);
+
+    controlsRow1.appendChild(typeSelector);
+
+    // Controls row 2 - Daily/All-Time tabs
+    const controlsRow2 = document.createElement('div');
+    controlsRow2.id = 'controls-row-2';
+    controlsRow2.style.cssText = `
+      display: flex;
+      gap: 3px;
+      align-items: center;
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 5px;
+      padding: 3px;
+    `;
+
+    // All-Time tab
+    const allTimeTab = document.createElement('button');
+    allTimeTab.id = 'all-time-tab';
+    allTimeTab.style.cssText = `
+      background: rgba(100, 200, 255, 0.5);
+      border: none;
+      color: white;
+      padding: 5px 8px;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 10px;
+      font-family: 'Orbitron', monospace;
+      transition: all 0.2s;
+      flex: 1;
+      font-weight: bold;
+    `;
+    allTimeTab.textContent = 'ALL-TIME';
+    allTimeTab.onclick = () => this.switchToAllTime();
+
+    // Daily tab
+    const dailyTab = document.createElement('button');
+    dailyTab.id = 'daily-tab';
+    dailyTab.style.cssText = `
+      background: transparent;
+      border: none;
+      color: rgba(255, 255, 255, 0.6);
+      padding: 5px 8px;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 10px;
+      font-family: 'Orbitron', monospace;
+      transition: all 0.2s;
+      flex: 1;
+    `;
+    dailyTab.textContent = 'DAILY';
+    dailyTab.onclick = () => this.switchToDaily();
+
+    controlsRow2.appendChild(allTimeTab);
+    controlsRow2.appendChild(dailyTab);
+
+    header.appendChild(titleRow);
+    header.appendChild(controlsRow1);
+    header.appendChild(controlsRow2);
 
     // Player stats section
     const playerStats = document.createElement('div');
@@ -147,7 +228,7 @@ export class LeaderboardUI {
     const listContainer = document.createElement('div');
     listContainer.id = 'leaderboard-list-container';
     listContainer.style.cssText = `
-      max-height: 250px;
+      max-height: 120px;
       overflow-y: auto;
       overflow-x: hidden;
       padding-right: 5px;
@@ -267,8 +348,15 @@ export class LeaderboardUI {
     this.loadingElement = loading;
     this.noDataElement = noData;
     this.playerStatsElement = playerStats;
-    this.toggleButton = toggleBtn;
+    this.allTimeTab = allTimeTab;
+    this.dailyTab = dailyTab;
     this.titleElement = document.getElementById('leaderboard-title');
+    this.minimizeBtn = minimizeBtn;
+    this.controlsRow1 = controlsRow1;
+    this.controlsRow2 = controlsRow2;
+
+    // Start in minimized state
+    this.applyMinimizedState();
   }
 
   async fetchLeaderboard() {
@@ -283,24 +371,38 @@ export class LeaderboardUI {
                        this.game.multiplayer?.playerId;
 
       if (playerId) {
-        // Fetch player-centered context for both all-time and daily
-        const [allTimeResponse, dailyResponse, playerResponse] = await Promise.all([
+        // Fetch context-based leaderboards (3 entries around player)
+        const [
+          carsResponse, speedResponse,
+          dailyCarsResponse, dailySpeedResponse,
+          playerResponse
+        ] = await Promise.all([
           fetch(`${this.serverUrl}/api/leaderboard/context/${playerId}`),
+          fetch(`${this.serverUrl}/api/leaderboard/context-speed/${playerId}`),
           fetch(`${this.serverUrl}/api/leaderboard/context/${playerId}?daily=true`),
+          fetch(`${this.serverUrl}/api/leaderboard/context-speed/${playerId}?daily=true`),
           fetch(`${this.serverUrl}/api/leaderboard/player/${playerId}`)
         ]);
 
-        const allTimeData = await allTimeResponse.json();
-        const dailyData = await dailyResponse.json();
+        // Parse all responses
+        const carsData = await carsResponse.json();
+        const speedData = await speedResponse.json();
+        const dailyCarsData = await dailyCarsResponse.json();
+        const dailySpeedData = await dailySpeedResponse.json();
         const playerData = await playerResponse.json();
 
-        if (allTimeData.success) {
-          this.leaderboardData = allTimeData.entries || [];
-          this.playerRank = allTimeData.playerRank;
+        // Store data for each type (context returns 'entries' not 'leaderboard')
+        if (carsData.success) {
+          this.leaderboardData.carsPassed = carsData.entries || [];
         }
-
-        if (dailyData.success) {
-          this.dailyLeaderboardData = dailyData.entries || [];
+        if (speedData.success) {
+          this.leaderboardData.speed = speedData.entries || [];
+        }
+        if (dailyCarsData.success) {
+          this.dailyLeaderboardData.carsPassed = dailyCarsData.entries || [];
+        }
+        if (dailySpeedData.success) {
+          this.dailyLeaderboardData.speed = dailySpeedData.entries || [];
         }
 
         if (playerData.success) {
@@ -308,21 +410,35 @@ export class LeaderboardUI {
           this.updatePlayerStats();
         }
       } else {
-        // No player ID - just fetch top 3
-        const [allTimeResponse, dailyResponse] = await Promise.all([
+        // No player ID - fetch top 3
+        const [
+          carsResponse, speedResponse,
+          dailyCarsResponse, dailySpeedResponse
+        ] = await Promise.all([
           fetch(`${this.serverUrl}/api/leaderboard/top?limit=3`),
-          fetch(`${this.serverUrl}/api/leaderboard/daily?limit=3`)
+          fetch(`${this.serverUrl}/api/leaderboard/top-speed?limit=3`),
+          fetch(`${this.serverUrl}/api/leaderboard/daily?limit=3`),
+          fetch(`${this.serverUrl}/api/leaderboard/daily-speed?limit=3`)
         ]);
 
-        const allTimeData = await allTimeResponse.json();
-        const dailyData = await dailyResponse.json();
+        // Parse all responses
+        const carsData = await carsResponse.json();
+        const speedData = await speedResponse.json();
+        const dailyCarsData = await dailyCarsResponse.json();
+        const dailySpeedData = await dailySpeedResponse.json();
 
-        if (allTimeData.success) {
-          this.leaderboardData = allTimeData.leaderboard || [];
+        // Store data for each type
+        if (carsData.success) {
+          this.leaderboardData.carsPassed = carsData.leaderboard || [];
         }
-
-        if (dailyData.success) {
-          this.dailyLeaderboardData = dailyData.leaderboard || [];
+        if (speedData.success) {
+          this.leaderboardData.speed = speedData.leaderboard || [];
+        }
+        if (dailyCarsData.success) {
+          this.dailyLeaderboardData.carsPassed = dailyCarsData.leaderboard || [];
+        }
+        if (dailySpeedData.success) {
+          this.dailyLeaderboardData.speed = dailySpeedData.leaderboard || [];
         }
       }
 
@@ -339,7 +455,8 @@ export class LeaderboardUI {
   }
 
   updateDisplay() {
-    const data = this.showDaily ? this.dailyLeaderboardData : this.leaderboardData;
+    const dataSource = this.showDaily ? this.dailyLeaderboardData : this.leaderboardData;
+    const data = dataSource[this.leaderboardType];
 
     // Hide loading
     this.loadingElement.style.display = 'none';
@@ -358,23 +475,12 @@ export class LeaderboardUI {
 
     const playerId = this.game.multiplayerManager?.playerId || this.game.multiplayer?.playerId;
 
-    // The server already returns the correct 3 entries (player + neighbors)
-    // We just need to determine their ranks for display
+    // Display entries
     data.forEach((entry, index) => {
-      // For context entries, we need to fetch the rank from a larger dataset
-      // But we can use entry.rank if server provides it, or calculate from position
       const entryDiv = document.createElement('div');
       entryDiv.className = 'leaderboard-entry';
 
-      // Calculate rank - if this is from context endpoint, need to figure out actual rank
-      // The entries are already in order, but we need their global rank
-      let rank;
-      if (entry.rank) {
-        rank = entry.rank;
-      } else {
-        // For now, use index + 1 as a placeholder (will fix if needed)
-        rank = index + 1;
-      }
+      let rank = entry.rank || index + 1;
 
       // Add special classes for top 3
       if (rank === 1) entryDiv.classList.add('gold');
@@ -436,7 +542,7 @@ export class LeaderboardUI {
         };
       }
 
-      // Score
+      // Score section - display different metric based on type
       const scoreSection = document.createElement('div');
       scoreSection.style.cssText = `
         font-size: ${isCurrentPlayer ? '14px' : '12px'};
@@ -444,7 +550,17 @@ export class LeaderboardUI {
         color: white;
         ${isCurrentPlayer ? 'font-weight: 900 !important;' : ''}
       `;
-      scoreSection.textContent = entry.vehicles_passed || 0;
+
+      // Format the score based on leaderboard type
+      let scoreValue;
+      if (this.leaderboardType === 'carsPassed') {
+        scoreValue = entry.vehicles_passed || 0;
+      } else if (this.leaderboardType === 'speed') {
+        const mph = Math.round((entry.max_speed || 0) * 2.237);
+        scoreValue = `${mph}mph`;
+      }
+
+      scoreSection.textContent = scoreValue;
 
       entryDiv.appendChild(rankSection);
       entryDiv.appendChild(nameSection);
@@ -461,40 +577,78 @@ export class LeaderboardUI {
     }
 
     this.playerStatsElement.style.display = 'block';
+    const speedMph = Math.round((this.playerBest.max_speed || 0) * 2.237);
+
     this.playerStatsElement.innerHTML = `
-      <div style="color: #ffa500; font-weight: bold; margin-bottom: 5px;">Your Best Score</div>
-      <div style="display: flex; justify-content: space-between;">
-        <span>Vehicles Passed:</span>
-        <span style="color: white; font-weight: bold;">${this.playerBest.vehicles_passed}</span>
+      <div style="display: flex; justify-content: space-between; font-size: 11px;">
+        <span>Cars Passed:</span>
+        <span style="color: white; font-weight: bold;">${this.playerBest.vehicles_passed || 0}</span>
       </div>
-      <div style="display: flex; justify-content: space-between;">
+      <div style="display: flex; justify-content: space-between; font-size: 11px;">
         <span>Max Speed:</span>
-        <span style="color: white;">${Math.round(this.playerBest.max_speed * 2.237)} mph</span>
+        <span style="color: white; font-weight: bold;">${speedMph} mph</span>
       </div>
     `;
   }
 
-  toggleLeaderboardType() {
-    this.showDaily = !this.showDaily;
-    this.toggleButton.textContent = this.showDaily ? 'ALL-TIME' : 'DAILY';
-    this.titleElement.textContent = this.showDaily ? 'DAILY' : 'TOP 10';
+  changeLeaderboardType(type) {
+    this.leaderboardType = type;
+    this.updateDisplay();
+  }
+
+  switchToAllTime() {
+    if (!this.showDaily) return; // Already on all-time
+    this.showDaily = false;
+
+    // Update tab styling
+    this.allTimeTab.style.background = 'rgba(100, 200, 255, 0.5)';
+    this.allTimeTab.style.color = 'white';
+    this.allTimeTab.style.fontWeight = 'bold';
+    this.dailyTab.style.background = 'transparent';
+    this.dailyTab.style.color = 'rgba(255, 255, 255, 0.6)';
+    this.dailyTab.style.fontWeight = 'normal';
+
+    this.updateDisplay();
+  }
+
+  switchToDaily() {
+    if (this.showDaily) return; // Already on daily
+    this.showDaily = true;
+
+    // Update tab styling
+    this.dailyTab.style.background = 'rgba(100, 200, 255, 0.5)';
+    this.dailyTab.style.color = 'white';
+    this.dailyTab.style.fontWeight = 'bold';
+    this.allTimeTab.style.background = 'transparent';
+    this.allTimeTab.style.color = 'rgba(255, 255, 255, 0.6)';
+    this.allTimeTab.style.fontWeight = 'normal';
+
     this.updateDisplay();
   }
 
   toggleMinimize() {
     this.isMinimized = !this.isMinimized;
+    this.applyMinimizedState();
+  }
 
+  applyMinimizedState() {
     if (this.isMinimized) {
-      this.container.style.height = '50px';
+      this.container.style.height = '45px';
       this.container.style.overflow = 'hidden';
+      this.controlsRow1.style.display = 'none';
+      this.controlsRow2.style.display = 'none';
       document.getElementById('leaderboard-list-container').style.display = 'none';
       this.playerStatsElement.style.display = 'none';
+      this.minimizeBtn.innerHTML = '+';
     } else {
       this.container.style.height = 'auto';
+      this.controlsRow1.style.display = 'flex';
+      this.controlsRow2.style.display = 'flex';
       document.getElementById('leaderboard-list-container').style.display = 'block';
       if (this.playerBest) {
         this.playerStatsElement.style.display = 'block';
       }
+      this.minimizeBtn.innerHTML = '⎯';
     }
   }
 
@@ -560,8 +714,9 @@ export class LeaderboardUI {
 
   // Update leaderboard with live data
   updateLiveEntry(playerId, username, vehiclesPassed) {
-    // Find or create entry for live updates
-    const currentData = this.showDaily ? this.dailyLeaderboardData : this.leaderboardData;
+    // Find or create entry for live updates (only for carsPassed leaderboard)
+    const dataSource = this.showDaily ? this.dailyLeaderboardData : this.leaderboardData;
+    const currentData = dataSource.carsPassed;
     const existingIndex = currentData.findIndex(e => e.player_id === playerId);
 
     if (existingIndex >= 0) {
@@ -570,7 +725,11 @@ export class LeaderboardUI {
 
     // Re-sort and update display
     currentData.sort((a, b) => b.vehicles_passed - a.vehicles_passed);
-    this.updateDisplay();
+
+    // Only refresh display if we're currently showing carsPassed leaderboard
+    if (this.leaderboardType === 'carsPassed') {
+      this.updateDisplay();
+    }
   }
 
   dispose() {
@@ -603,8 +762,12 @@ export class LeaderboardUI {
     this.loadingElement = null;
     this.noDataElement = null;
     this.playerStatsElement = null;
-    this.toggleButton = null;
+    this.allTimeTab = null;
+    this.dailyTab = null;
     this.titleElement = null;
+    this.minimizeBtn = null;
+    this.controlsRow1 = null;
+    this.controlsRow2 = null;
     this.game = null;
   }
 }

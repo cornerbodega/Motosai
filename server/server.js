@@ -58,62 +58,45 @@ app.get('/api/hello', (req, res) => {
   });
 });
 
-// Visitor counter - will be loaded from database on startup
-let visitorCount = 0;
+// Visitor and visit counters - will be loaded from database on startup
+let visitorCount = 0;  // Unique visitors
+let visitCount = 0;     // Total visits
 
-// Load visitor count from database on startup
+// Load visitor and visit counts from database on startup
 (async () => {
   try {
+    console.log('🔍 Loading visitor and visit counts from database...');
     const { data, error } = await supabase
       .from('mo_visitors')
-      .select('count')
+      .select('visitors, visits')
       .order('timestamp', { ascending: false })
       .limit(1);
 
-    if (!error && data && data.length > 0) {
-      visitorCount = data[0].count || 0;
-      console.log(`✅ Loaded visitor count from database: ${visitorCount}`);
+    console.log('📊 Database query result:', { data, error });
+
+    if (error) {
+      console.log('⚠️ Database query error:', error.message);
+      console.log('ℹ️ Starting with visitors = 0, visits = 0');
+    } else if (!data || data.length === 0) {
+      console.log('ℹ️ No records in database, starting from 0');
     } else {
-      console.log('ℹ️ No visitor count in database, starting from 0');
+      console.log('✅ Raw data from database:', data[0]);
+      visitorCount = data[0].visitors || 0;
+      visitCount = data[0].visits || 0;
+      console.log(`✅ Loaded from database: ${visitorCount} visitors, ${visitCount} visits`);
     }
   } catch (error) {
-    console.log('ℹ️ Could not load visitor count from database (table may not exist), starting from 0');
+    console.log('⚠️ Could not load counts from database:', error);
+    console.log('ℹ️ Table may not exist. Starting from 0');
   }
 })();
 
-// Get and increment visitor count
-app.post('/api/visitors/increment', async (req, res) => {
-  try {
-    visitorCount++;
-
-    // Optionally persist to Supabase (create mo_visitors table if needed)
-    try {
-      await supabase
-        .from('mo_visitors')
-        .insert({
-          timestamp: new Date().toISOString(),
-          count: visitorCount
-        });
-    } catch (dbError) {
-      // Silently fail if table doesn't exist - in-memory counter still works
-      console.log('Visitor count not persisted to database (table may not exist)');
-    }
-
-    res.json({
-      success: true,
-      count: visitorCount
-    });
-  } catch (error) {
-    console.error('Error incrementing visitor count:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Get current visitor count without incrementing
+// Get current visitor and visit counts
 app.get('/api/visitors/count', (req, res) => {
   res.json({
     success: true,
-    count: visitorCount
+    visitors: visitorCount,
+    visits: visitCount
   });
 });
 
@@ -299,6 +282,66 @@ app.get('/api/leaderboard/daily', async (req, res) => {
   }
 });
 
+app.get('/api/leaderboard/top-distance', async (req, res) => {
+  const limit = parseInt(req.query.limit) || 10;
+
+  try {
+    const topScores = await leaderboardManager.getTopScoresByDistance(limit);
+    res.json({
+      success: true,
+      leaderboard: topScores
+    });
+  } catch (error) {
+    console.error('Error fetching distance leaderboard:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/leaderboard/top-speed', async (req, res) => {
+  const limit = parseInt(req.query.limit) || 10;
+
+  try {
+    const topScores = await leaderboardManager.getTopScoresBySpeed(limit);
+    res.json({
+      success: true,
+      leaderboard: topScores
+    });
+  } catch (error) {
+    console.error('Error fetching speed leaderboard:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/leaderboard/daily-distance', async (req, res) => {
+  const limit = parseInt(req.query.limit) || 10;
+
+  try {
+    const dailyScores = await leaderboardManager.getDailyTopScoresByDistance(limit);
+    res.json({
+      success: true,
+      leaderboard: dailyScores
+    });
+  } catch (error) {
+    console.error('Error fetching daily distance leaderboard:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/leaderboard/daily-speed', async (req, res) => {
+  const limit = parseInt(req.query.limit) || 10;
+
+  try {
+    const dailyScores = await leaderboardManager.getDailyTopScoresBySpeed(limit);
+    res.json({
+      success: true,
+      leaderboard: dailyScores
+    });
+  } catch (error) {
+    console.error('Error fetching daily speed leaderboard:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.get('/api/leaderboard/player/:playerId', async (req, res) => {
   const { playerId } = req.params;
 
@@ -317,7 +360,7 @@ app.get('/api/leaderboard/player/:playerId', async (req, res) => {
   }
 });
 
-// Get player position with neighbors (for contextual leaderboard display)
+// Get player position with neighbors (for contextual leaderboard display - Cars Passed)
 app.get('/api/leaderboard/context/:playerId', async (req, res) => {
   const { playerId } = req.params;
   const isDaily = req.query.daily === 'true';
@@ -377,6 +420,70 @@ app.get('/api/leaderboard/context/:playerId', async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching leaderboard context:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get player position with neighbors (for contextual leaderboard display - Speed)
+app.get('/api/leaderboard/context-speed/:playerId', async (req, res) => {
+  const { playerId } = req.params;
+  const isDaily = req.query.daily === 'true';
+
+  try {
+    // Get full leaderboard
+    const allScores = isDaily
+      ? await leaderboardManager.getDailyTopScoresBySpeed(1000)
+      : await leaderboardManager.getTopScoresBySpeed(1000);
+
+    console.log(`🔍 Speed context request for player: ${playerId}`);
+    console.log(`📊 Total scores in speed leaderboard: ${allScores.length}`);
+
+    // Find player's index
+    const playerIndex = allScores.findIndex(e => e.player_id === playerId);
+    console.log(`📍 Player found at speed index: ${playerIndex}`);
+
+    let contextEntries = [];
+    let playerRank = null;
+
+    if (playerIndex !== -1) {
+      // Player found - get their rank
+      playerRank = playerIndex + 1;
+      console.log(`🏆 Player speed rank: ${playerRank}`);
+
+      // Get one above, player, and one below with their ranks
+      if (playerIndex > 0) {
+        const above = { ...allScores[playerIndex - 1], rank: playerIndex };
+        contextEntries.push(above);
+        console.log(`⬆️  Above: ${above.username} (rank ${above.rank}, speed ${above.max_speed})`);
+      }
+
+      const me = { ...allScores[playerIndex], rank: playerIndex + 1 };
+      contextEntries.push(me);
+      console.log(`👤 Me: ${me.username} (rank ${me.rank}, speed ${me.max_speed})`);
+
+      if (playerIndex < allScores.length - 1) {
+        const below = { ...allScores[playerIndex + 1], rank: playerIndex + 2 };
+        contextEntries.push(below);
+        console.log(`⬇️  Below: ${below.username} (rank ${below.rank}, speed ${below.max_speed})`);
+      }
+    } else {
+      // Player not in leaderboard - return top 3 with ranks
+      console.log(`❌ Player not found in speed leaderboard - returning top 3`);
+      contextEntries = allScores.slice(0, 3).map((entry, index) => ({
+        ...entry,
+        rank: index + 1
+      }));
+      console.log(`📋 Top 3:`, contextEntries.map(e => `${e.username} (${e.max_speed})`));
+    }
+
+    res.json({
+      success: true,
+      entries: contextEntries,
+      playerRank: playerRank,
+      totalPlayers: allScores.length
+    });
+  } catch (error) {
+    console.error('Error fetching speed leaderboard context:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -527,42 +634,67 @@ app.post('/api/account/rename', async (req, res) => {
 io.on('connection', (socket) => {
   console.log('New client connected:', socket.id);
 
-  // Send welcome message with visitor count (don't increment yet - wait for player-join)
+  // Send welcome message with counts (don't increment yet - wait for player-join)
   socket.emit('welcome', {
     message: 'Welcome to Motosai Multiplayer!',
     socketId: socket.id,
     timestamp: new Date().toISOString(),
-    visitorCount: visitorCount
+    visitorCount: visitorCount,
+    visitCount: visitCount
   });
 
   // Handle player join
   socket.on('player-join', async (data) => {
     const { playerId, sessionId, username, isNewVisitor } = data;
+    console.log(`🔍 PLAYER-JOIN EVENT: username=${username}, playerId=${playerId}, isNewVisitor=${isNewVisitor}`);
+    console.log(`   Current counts: ${visitorCount} visitors, ${visitCount} visits`);
 
-    // Only increment visitor count for NEW visitors (no localStorage record)
+    // Always increment visit count (every connection)
+    visitCount++;
+
+    // Increment visitor count only for NEW visitors (no localStorage record)
     if (isNewVisitor) {
       visitorCount++;
-      console.log(`🆕 NEW VISITOR: ${username} - Total visitors: ${visitorCount}`);
+      console.log(`🆕 NEW VISITOR: ${username} - Visitors: ${visitorCount}, Visits: ${visitCount}`);
 
-      // Broadcast updated visitor count to all clients
-      io.emit('visitor-count-update', { count: visitorCount });
-
-      // Optionally persist to Supabase (create mo_visitors table if needed)
+      // Persist to Supabase
       try {
         await supabase
           .from('mo_visitors')
           .insert({
             timestamp: new Date().toISOString(),
-            count: visitorCount,
-            player_id: playerId
+            visitors: visitorCount,
+            visits: visitCount,
+            player_id: playerId,
+            event_type: 'new_visitor'
           });
       } catch (dbError) {
-        // Silently fail if table doesn't exist - in-memory counter still works
-        console.log('Visitor count not persisted to database (table may not exist)');
+        console.log('⚠️ Could not persist to database:', dbError.message);
       }
     } else {
-      console.log(`♻️ RETURNING VISITOR: ${username} - Not incrementing count`);
+      console.log(`♻️ RETURNING VISIT: ${username} - Visitors: ${visitorCount}, Visits: ${visitCount}`);
+
+      // Persist returning visit
+      try {
+        await supabase
+          .from('mo_visitors')
+          .insert({
+            timestamp: new Date().toISOString(),
+            visitors: visitorCount,
+            visits: visitCount,
+            player_id: playerId,
+            event_type: 'returning_visit'
+          });
+      } catch (dbError) {
+        console.log('⚠️ Could not persist to database:', dbError.message);
+      }
     }
+
+    // Broadcast updated counts to all clients
+    io.emit('visitor-count-update', {
+      visitors: visitorCount,
+      visits: visitCount
+    });
     
     // Store player info
     activePlayers.set(playerId, {

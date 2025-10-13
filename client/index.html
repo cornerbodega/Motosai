@@ -186,8 +186,9 @@
   <body>
     <div id="gameContainer">
       <div id="loadingScreen">
-        <div id="visitor-counter" style="color: white; font-size: 14px; margin-bottom: 20px; opacity: 0.7;">
-          Visitors: <span id="visitor-count">...</span>
+        <div style="color: white; font-size: 14px; margin-bottom: 20px; opacity: 0.7;">
+          <div>Visitors: <span id="visitor-count">...</span></div>
+          <div>Visits: <span id="visit-count">...</span></div>
         </div>
         <h1>🏍️ MOTOSAI</h1>
         <p style="color: white; font-size: 18px; margin-bottom: 20px; opacity: 0.9;">by marvin.technology</p>
@@ -197,8 +198,9 @@
       </div>
 
       <div id="startScreen">
-        <div id="visitor-counter-start" style="color: white; font-size: 14px; margin-bottom: 20px; opacity: 0.7;">
-          Visitors: <span id="visitor-count-start">...</span>
+        <div style="color: white; font-size: 14px; margin-bottom: 20px; opacity: 0.7;">
+          <div>Visitors: <span id="visitor-count-start">...</span></div>
+          <div>Visits: <span id="visit-count-start">...</span></div>
         </div>
         <h1>🏍️ MOTOSAI</h1>
         <p style="color: white; font-size: 18px; margin-bottom: 10px; opacity: 0.9;">by marvin.technology</p>
@@ -267,19 +269,26 @@
         try {
           const response = await fetch(`${serverUrl}/api/visitors/count`);
           const data = await response.json();
-          if (data.success && data.count !== undefined) {
-            updateVisitorCount(data.count);
+          if (data.success) {
+            updateCounts(data.visitors, data.visits);
           }
         } catch (error) {
-          console.error('Failed to fetch visitor count:', error);
+          console.error('Failed to fetch counts:', error);
         }
       }
 
-      function updateVisitorCount(count) {
-        const countElement = document.getElementById('visitor-count');
-        const countElementStart = document.getElementById('visitor-count-start');
-        if (countElement) countElement.textContent = count.toLocaleString();
-        if (countElementStart) countElementStart.textContent = count.toLocaleString();
+      function updateCounts(visitors, visits) {
+        // Update visitor count
+        const visitorElement = document.getElementById('visitor-count');
+        const visitorElementStart = document.getElementById('visitor-count-start');
+        if (visitorElement) visitorElement.textContent = visitors.toLocaleString();
+        if (visitorElementStart) visitorElementStart.textContent = visitors.toLocaleString();
+
+        // Update visit count
+        const visitElement = document.getElementById('visit-count');
+        const visitElementStart = document.getElementById('visit-count-start');
+        if (visitElement) visitElement.textContent = visits.toLocaleString();
+        if (visitElementStart) visitElementStart.textContent = visits.toLocaleString();
       }
 
       // Fetch initial count

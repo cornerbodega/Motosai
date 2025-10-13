@@ -42,14 +42,15 @@ export class PlayerSelection {
   static GAS_STATION_Y_POSITION = 0;
   static GAS_STATION_Z_POSITION = -3;
 
-  // Gas Station Colors
-  static GAS_STATION_ROOF_COLOR = 0x8B0000; // Dark red
-  static GAS_STATION_WALLS_COLOR = 0xD3D3D3; // Light gray
-  static GAS_STATION_PUMPS_COLOR = 0xFF4444; // Bright red
-  static GAS_STATION_METAL_COLOR = 0x4A4A4A; // Dark gray
-  static GAS_STATION_WINDOWS_COLOR = 0x87CEEB; // Sky blue
-  static GAS_STATION_TRIM_COLOR = 0x8B4513; // Brown
-  static GAS_STATION_DEFAULT_COLOR = 0xCCCCCC; // Default gray
+  // Gas Station Colors - Realistic scheme
+  static GAS_STATION_CANOPY_COLOR = 0xFFFFFF; // White canopy/roof
+  static GAS_STATION_CANOPY_TRIM_COLOR = 0xFF0000; // Red trim on canopy
+  static GAS_STATION_WALLS_COLOR = 0xE8E8E8; // Off-white walls
+  static GAS_STATION_PUMPS_COLOR = 0xFF4444; // Bright red pumps
+  static GAS_STATION_COLUMNS_COLOR = 0xC0C0C0; // Silver/metallic columns
+  static GAS_STATION_WINDOWS_COLOR = 0x4A90A4; // Tinted blue windows
+  static GAS_STATION_BASE_COLOR = 0x606060; // Dark gray base/ground
+  static GAS_STATION_ACCENTS_COLOR = 0xFFD700; // Gold/yellow accents
 
   // === PAVEMENT ===
   static PAVEMENT_WIDTH = 80;
@@ -820,56 +821,53 @@ export class PlayerSelection {
           PlayerSelection.GAS_STATION_Z_POSITION
         );
 
-        // Since it's a merged mesh, create vertex colors based on UV coordinates
+        // Log all mesh names for coloring reference
+        console.log('=== Gas Station Mesh Names ===');
         model.traverse((child) => {
           if (child.isMesh) {
+            console.log(`- ${child.name}`);
             child.castShadow = true;
             child.receiveShadow = true;
 
-            const geometry = child.geometry;
+            // Apply colors based on mesh names
+            if (child.material) {
+              const name = child.name.toLowerCase();
+              let targetColor = null;
 
-            // Create vertex colors array if it doesn't exist
-            if (!geometry.attributes.color) {
-              const colors = [];
-              const positionAttribute = geometry.attributes.position;
-              const uvAttribute = geometry.attributes.uv;
-
-              const colorPalette = [
-                new THREE.Color(PlayerSelection.GAS_STATION_ROOF_COLOR),
-                new THREE.Color(PlayerSelection.GAS_STATION_WALLS_COLOR),
-                new THREE.Color(PlayerSelection.GAS_STATION_PUMPS_COLOR),
-                new THREE.Color(PlayerSelection.GAS_STATION_METAL_COLOR),
-                new THREE.Color(PlayerSelection.GAS_STATION_WINDOWS_COLOR),
-                new THREE.Color(PlayerSelection.GAS_STATION_TRIM_COLOR)
-              ];
-
-              for (let i = 0; i < positionAttribute.count; i++) {
-                // Use UV coordinates to determine color regions
-                let colorIndex = 0;
-                if (uvAttribute) {
-                  const u = uvAttribute.getX(i);
-                  const v = uvAttribute.getY(i);
-                  // Divide UV space into regions
-                  colorIndex = Math.floor((u + v) * 3) % colorPalette.length;
-                } else {
-                  // Fallback: use Y position
-                  const y = positionAttribute.getY(i);
-                  colorIndex = Math.floor((y + 5) / 2) % colorPalette.length;
-                }
-
-                const color = colorPalette[colorIndex];
-                colors.push(color.r, color.g, color.b);
+              if (name === 'canopy') {
+                targetColor = PlayerSelection.GAS_STATION_CANOPY_COLOR;
+              } else if (name === 'canopy_outer' || name === 'canopy outer') {
+                targetColor = PlayerSelection.GAS_STATION_CANOPY_COLOR;
+              } else if (name === 'pump_stands' || name === 'canopy_roof_holder') {
+                targetColor = PlayerSelection.GAS_STATION_COLUMNS_COLOR;
+              } else if (name === 'pump1' || name === 'pump2') {
+                targetColor = PlayerSelection.GAS_STATION_PUMPS_COLOR;
+              } else if (name === 'pump_stands_ads') {
+                targetColor = PlayerSelection.GAS_STATION_ACCENTS_COLOR;
+              } else if (name === 'canopyparrt') {
+                targetColor = PlayerSelection.GAS_STATION_CANOPY_COLOR;
+              } else if (name === 'store_roof') {
+                targetColor = PlayerSelection.GAS_STATION_CANOPY_TRIM_COLOR;
+              } else if (name === 'trash_can') {
+                targetColor = PlayerSelection.GAS_STATION_BASE_COLOR;
+              } else if (name === 'ice_machine') {
+                targetColor = PlayerSelection.GAS_STATION_COLUMNS_COLOR;
+              } else if (name === 'window' || name === 'windows') {
+                targetColor = PlayerSelection.GAS_STATION_WINDOWS_COLOR;
+              } else if (name === 'store') {
+                targetColor = PlayerSelection.GAS_STATION_ACCENTS_COLOR;
               }
 
-              geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+              // Apply color if determined
+              if (targetColor !== null) {
+                // Create a new simple material with the target color
+                child.material = new THREE.MeshStandardMaterial({
+                  color: targetColor,
+                  roughness: 0.7,
+                  metalness: 0.2
+                });
+              }
             }
-
-            // Create material that uses vertex colors
-            child.material = new THREE.MeshStandardMaterial({
-              vertexColors: true,
-              roughness: 0.6,
-              metalness: 0.3
-            });
           }
         });
 
@@ -882,6 +880,7 @@ export class PlayerSelection {
       }
     );
   }
+
 
   loadFries() {
     // Load fries model using GLTFLoader
@@ -910,12 +909,16 @@ export class PlayerSelection {
 
             // Create vertex colors based on UV coordinates
             if (geometry.attributes.uv) {
-              const colors = [];
               const uvAttribute = geometry.attributes.uv;
 
+              // Define colors once (memory efficient - reused for all vertices)
               const topColor = new THREE.Color(PlayerSelection.FRIES_TOP_COLOR);
               const middleColor = new THREE.Color(PlayerSelection.FRIES_MIDDLE_COLOR);
               const bottomColor = new THREE.Color(PlayerSelection.FRIES_BOTTOM_COLOR);
+
+              // Pre-allocate color array for better performance
+              const colors = new Array(uvAttribute.count * 3);
+              let colorIndex = 0;
 
               for (let i = 0; i < uvAttribute.count; i++) {
                 const v = uvAttribute.getY(i); // V coordinate (0 = bottom, 1 = top)
@@ -932,7 +935,10 @@ export class PlayerSelection {
                   color = bottomColor;
                 }
 
-                colors.push(color.r, color.g, color.b);
+                // Direct array indexing is faster than push()
+                colors[colorIndex++] = color.r;
+                colors[colorIndex++] = color.g;
+                colors[colorIndex++] = color.b;
               }
 
               geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));

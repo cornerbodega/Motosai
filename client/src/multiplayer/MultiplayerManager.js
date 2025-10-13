@@ -33,6 +33,7 @@ export class MultiplayerManager {
 
       // Track if this is a new visitor (no localStorage record)
       const isNewVisitor = !storedPlayerId;
+      console.log(`🔍 VISITOR CHECK: storedPlayerId=${storedPlayerId}, isNewVisitor=${isNewVisitor}`);
 
       // If username is provided, use it. Otherwise use stored username or generate new one
       const usernameToUse = username || storedUsername || `Rider_${Math.random().toString(36).substring(7)}`;
