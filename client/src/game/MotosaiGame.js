@@ -234,10 +234,6 @@ export class MotosaiGame {
     this.initDevMenu();
     this.initLights();
 
-    // Initialize traffic system early so it's running during player selection
-    this.initBloodTrackSystem();
-    this.initTraffic();
-
     // Show intro FIRST, then show selection with desert background
     this.showIntroAndSelection(() => {
       // After selection, initialize player-specific components
@@ -297,7 +293,47 @@ export class MotosaiGame {
       this.initMinimap();
       // Powerup system removed
 
-      // Initialize multiplayer (traffic already initialized before player selection)
+      // Initialize vehicle pass counter, leaderboard, and account modal AFTER player selection
+      this.vehiclePassCounter = new VehiclePassCounter(this);
+      this.leaderboardUI = new LeaderboardUI(this);
+      this.accountModal = new AccountModal(this);
+
+      // Setup stats update interval (every 10 seconds)
+      this.statsUpdateInterval = setInterval(() => {
+        if (this.multiplayer?.socket && this.vehiclePassCounter) {
+          this.multiplayer.socket.emit('stats-update', {
+            stats: this.vehiclePassCounter.getSessionStats()
+          });
+        }
+      }, 10000);
+
+      // Listen for leaderboard events
+      if (this.multiplayer?.socket) {
+        this.multiplayer.socket.on('new-high-score', (data) => {
+          if (this.leaderboardUI) {
+            this.leaderboardUI.onNewHighScore(data);
+          }
+        });
+
+        this.multiplayer.socket.on('player-stats-update', (data) => {
+          if (this.leaderboardUI) {
+            this.leaderboardUI.updateLiveEntry(
+              data.playerId,
+              data.username,
+              data.vehiclesPassed
+            );
+          }
+        });
+
+        this.multiplayer.socket.on('score-submitted', (result) => {
+          console.log('Score submitted result:', result);
+          if (this.vehiclePassCounter && this.vehiclePassCounter.isMobile) {
+            this.vehiclePassCounter.fetchPlayerBest();
+          }
+        });
+      }
+
+      // Initialize multiplayer (traffic already initialized during intro->selection transition)
       if (this.isMultiplayerEnabled) {
         this.initMultiplayer();
       }
@@ -1347,6 +1383,25 @@ export class MotosaiGame {
     }
   }
 
+  waitForVehicleModels(callback) {
+    // Poll until both sedan and semi models are loaded
+    const checkInterval = setInterval(() => {
+      if (this.trafficSystem.sedanModelLoaded && this.trafficSystem.semiModelLoaded) {
+        clearInterval(checkInterval);
+        callback();
+      }
+    }, 100); // Check every 100ms
+
+    // Timeout after 10 seconds and spawn anyway with fallback geometry
+    setTimeout(() => {
+      clearInterval(checkInterval);
+      if (!this.trafficSystem.sedanModelLoaded || !this.trafficSystem.semiModelLoaded) {
+        console.warn('Vehicle models took too long to load, using fallback geometry');
+        callback();
+      }
+    }, 10000);
+  }
+
   initTraffic() {
     this.trafficSystem = new TrafficSystem(
       this.scene,
@@ -1611,6 +1666,19 @@ export class MotosaiGame {
       // Initialize Billboard System
       this.initBillboards();
 
+      // Initialize blood track system (needed by traffic)
+      this.initBloodTrackSystem();
+
+      // Initialize traffic system before player selection but wait for models to load
+      this.trafficSystem = new TrafficSystem(
+        this.scene,
+        this.highway,
+        this.camera,
+        this.bloodTrackSystem,
+        this.multiplayer
+      );
+      this.traffic = this.trafficSystem;
+
       // Initialize UFOController with the UFO from intro BEFORE bike selection
       this.ufoController = new UFOController(this.scene);
 
@@ -1694,6 +1762,12 @@ export class MotosaiGame {
 
       // Show player selection on top of desert
       this.playerSelection.showSelectionUI();
+
+      // Spawn traffic during player selection (after models load)
+      this.waitForVehicleModels(() => {
+        console.log('Vehicle models loaded, spawning traffic during selection');
+        this.trafficSystem.spawn(this.currentConfig.maxVehicles);
+      });
 
       // Set up selection callback
       this.playerSelection.onSelectionComplete = (selectedBike) => {
