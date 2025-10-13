@@ -26,8 +26,18 @@ export class VirtualJoystick {
     this.deltaX = 0;
     this.deltaY = 0;
 
+    // Store bound event handlers for proper cleanup
+    this.boundOnTouchStart = this.onTouchStart.bind(this);
+    this.boundOnTouchMove = this.onTouchMove.bind(this);
+    this.boundOnTouchEnd = this.onTouchEnd.bind(this);
+    this.boundOnMouseDown = this.onMouseDown.bind(this);
+    this.boundOnMouseMove = this.onMouseMove.bind(this);
+    this.boundOnMouseUp = this.onMouseUp.bind(this);
+    this.boundOnResize = this.onResize.bind(this);
+
     this.createElements();
     this.attachEventListeners();
+    this.render(); // Show joystick immediately
   }
 
   createElements() {
@@ -58,18 +68,18 @@ export class VirtualJoystick {
 
   attachEventListeners() {
     // Touch events
-    this.touchZone.addEventListener('touchstart', this.onTouchStart.bind(this), { passive: false });
-    this.options.container.addEventListener('touchmove', this.onTouchMove.bind(this), { passive: false });
-    this.options.container.addEventListener('touchend', this.onTouchEnd.bind(this), { passive: false });
-    this.options.container.addEventListener('touchcancel', this.onTouchEnd.bind(this), { passive: false });
+    this.touchZone.addEventListener('touchstart', this.boundOnTouchStart, { passive: false });
+    this.options.container.addEventListener('touchmove', this.boundOnTouchMove, { passive: false });
+    this.options.container.addEventListener('touchend', this.boundOnTouchEnd, { passive: false });
+    this.options.container.addEventListener('touchcancel', this.boundOnTouchEnd, { passive: false });
 
     // Mouse events for testing on desktop
-    this.touchZone.addEventListener('mousedown', this.onMouseDown.bind(this));
-    this.options.container.addEventListener('mousemove', this.onMouseMove.bind(this));
-    this.options.container.addEventListener('mouseup', this.onMouseUp.bind(this));
+    this.touchZone.addEventListener('mousedown', this.boundOnMouseDown);
+    this.options.container.addEventListener('mousemove', this.boundOnMouseMove);
+    this.options.container.addEventListener('mouseup', this.boundOnMouseUp);
 
     // Handle resize
-    window.addEventListener('resize', this.onResize.bind(this));
+    window.addEventListener('resize', this.boundOnResize);
   }
 
   onTouchStart(event) {
@@ -184,9 +194,7 @@ export class VirtualJoystick {
     // Clear canvas
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-    if (!this.active) return;
-
-    // Draw base circle
+    // Always draw base circle
     this.ctx.beginPath();
     this.ctx.arc(this.baseX, this.baseY, this.options.radius, 0, Math.PI * 2);
     this.ctx.fillStyle = this.options.color;
@@ -195,30 +203,33 @@ export class VirtualJoystick {
     this.ctx.lineWidth = 2;
     this.ctx.stroke();
 
-    // Draw connection line
-    this.ctx.beginPath();
-    this.ctx.moveTo(this.baseX, this.baseY);
-    this.ctx.lineTo(this.currentX, this.currentY);
-    this.ctx.strokeStyle = this.options.strokeColor;
-    this.ctx.lineWidth = 2;
-    this.ctx.stroke();
-
-    // Draw inner circle (thumb)
-    this.ctx.beginPath();
-    this.ctx.arc(this.currentX, this.currentY, this.options.innerRadius, 0, Math.PI * 2);
-    this.ctx.fillStyle = this.options.innerColor;
-    this.ctx.fill();
-    this.ctx.strokeStyle = this.options.strokeColor;
-    this.ctx.lineWidth = 2;
-    this.ctx.stroke();
-
-    // Draw directional indicators
+    // Always draw directional indicators
     this.ctx.font = '12px Arial';
     this.ctx.fillStyle = this.options.strokeColor;
     this.ctx.textAlign = 'center';
     this.ctx.textBaseline = 'middle';
     this.ctx.fillText('L', this.baseX - this.options.radius - 15, this.baseY);
     this.ctx.fillText('R', this.baseX + this.options.radius + 15, this.baseY);
+
+    // Only draw connection line and thumb when active
+    if (this.active) {
+      // Draw connection line
+      this.ctx.beginPath();
+      this.ctx.moveTo(this.baseX, this.baseY);
+      this.ctx.lineTo(this.currentX, this.currentY);
+      this.ctx.strokeStyle = this.options.strokeColor;
+      this.ctx.lineWidth = 2;
+      this.ctx.stroke();
+
+      // Draw inner circle (thumb)
+      this.ctx.beginPath();
+      this.ctx.arc(this.currentX, this.currentY, this.options.innerRadius, 0, Math.PI * 2);
+      this.ctx.fillStyle = this.options.innerColor;
+      this.ctx.fill();
+      this.ctx.strokeStyle = this.options.strokeColor;
+      this.ctx.lineWidth = 2;
+      this.ctx.stroke();
+    }
   }
 
   onResize() {
@@ -261,8 +272,36 @@ export class VirtualJoystick {
   }
 
   destroy() {
-    this.canvas.remove();
-    this.touchZone.remove();
-    window.removeEventListener('resize', this.onResize.bind(this));
+    // Remove all event listeners
+    if (this.touchZone) {
+      this.touchZone.removeEventListener('touchstart', this.boundOnTouchStart);
+      this.touchZone.removeEventListener('mousedown', this.boundOnMouseDown);
+    }
+
+    if (this.options.container) {
+      this.options.container.removeEventListener('touchmove', this.boundOnTouchMove);
+      this.options.container.removeEventListener('touchend', this.boundOnTouchEnd);
+      this.options.container.removeEventListener('touchcancel', this.boundOnTouchEnd);
+      this.options.container.removeEventListener('mousemove', this.boundOnMouseMove);
+      this.options.container.removeEventListener('mouseup', this.boundOnMouseUp);
+    }
+
+    window.removeEventListener('resize', this.boundOnResize);
+
+    // Null out canvas context
+    this.ctx = null;
+
+    // Remove DOM elements
+    if (this.canvas) this.canvas.remove();
+    if (this.touchZone) this.touchZone.remove();
+
+    // Null out bound handlers
+    this.boundOnTouchStart = null;
+    this.boundOnTouchMove = null;
+    this.boundOnTouchEnd = null;
+    this.boundOnMouseDown = null;
+    this.boundOnMouseMove = null;
+    this.boundOnMouseUp = null;
+    this.boundOnResize = null;
   }
 }

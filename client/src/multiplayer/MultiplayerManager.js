@@ -27,12 +27,23 @@ export class MultiplayerManager {
 
   async connect(username = null) {
     try {
+      // Check localStorage for existing player ID and username
+      let storedPlayerId = localStorage.getItem('motosai_player_id');
+      let storedUsername = localStorage.getItem('motosai_username');
+
+      // Track if this is a new visitor (no localStorage record)
+      const isNewVisitor = !storedPlayerId;
+
+      // If username is provided, use it. Otherwise use stored username or generate new one
+      const usernameToUse = username || storedUsername || `Rider_${Math.random().toString(36).substring(7)}`;
+
       // Join session via REST API first
       const response = await fetch(`${this.serverUrl}/api/session/join`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          username: username || `Rider_${Math.random().toString(36).substring(7)}`,
+        body: JSON.stringify({
+          playerId: storedPlayerId, // Send stored player ID if exists
+          username: usernameToUse,
           sessionName: 'global'
         })
       });
@@ -44,6 +55,11 @@ export class MultiplayerManager {
       this.sessionId = data.session.id;
       this.username = data.player.username;
 
+      // Store player ID and username in localStorage for future sessions
+      localStorage.setItem('motosai_player_id', this.playerId);
+      localStorage.setItem('motosai_username', this.username);
+      console.log('💾 Stored player ID and username in localStorage');
+
       // Connect WebSocket
       this.socket = io(this.serverUrl, {
         transports: ['websocket', 'polling']
@@ -52,15 +68,16 @@ export class MultiplayerManager {
       this.setupSocketListeners();
       this.setupSupabaseRealtime();
 
-      // Join the session
+      // Join the session - include isNewVisitor flag
       this.socket.emit('player-join', {
         playerId: this.playerId,
         sessionId: this.sessionId,
-        username: this.username
+        username: this.username,
+        isNewVisitor: isNewVisitor
       });
 
       this.isConnected = true;
-      console.log(`Connected as ${this.username} in session ${this.sessionId}`);
+      console.log(`Connected as ${this.username} in session ${this.sessionId} (${isNewVisitor ? 'NEW visitor' : 'returning visitor'})`);
 
       return { playerId: this.playerId, username: this.username };
 
@@ -568,7 +585,10 @@ export class MultiplayerManager {
       this.socket.off('traffic-vehicle-remove');
       this.socket.off('player-crash');
       this.socket.off('player-death');
-      
+      this.socket.off('race-invite');
+      this.socket.off('race-accept');
+      this.socket.off('race-decline');
+
       this.socket.disconnect();
       this.socket = null;
     }

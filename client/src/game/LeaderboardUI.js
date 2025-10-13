@@ -14,6 +14,13 @@ export class LeaderboardUI {
     this.playerRank = null;
     this.playerBest = null;
 
+    // Check if mobile - skip initialization on mobile to save memory
+    this.isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    if (this.isMobile) {
+      // Don't initialize on mobile - saves memory and CPU
+      return;
+    }
+
     this.createUI();
     this.fetchLeaderboard();
     this.setupKeyboardControls();
@@ -22,6 +29,12 @@ export class LeaderboardUI {
     this.updateTimer = setInterval(() => {
       this.fetchLeaderboard();
     }, this.updateInterval);
+  }
+
+  // Called by game when player connects to multiplayer
+  onPlayerConnected() {
+    console.log('🎮 Player connected - refreshing leaderboard');
+    this.fetchLeaderboard();
   }
 
   createUI() {
@@ -45,6 +58,7 @@ export class LeaderboardUI {
       transition: all 0.3s ease;
       max-height: 350px;
       overflow: hidden;
+      display: block;
     `;
 
     // Header
@@ -196,8 +210,9 @@ export class LeaderboardUI {
       }
 
       .leaderboard-entry.current-player {
-        border-left-color: #00ff00;
+        border: 2px solid #00ff00;
         background: rgba(0, 255, 0, 0.1);
+        font-weight: bold;
       }
 
       .rank-medal {
@@ -206,6 +221,9 @@ export class LeaderboardUI {
       }
     `;
     document.head.appendChild(scrollbarStyle);
+
+    // Store reference for cleanup
+    this.styleElement = scrollbarStyle;
 
     const list = document.createElement('div');
     list.id = 'leaderboard-list';
@@ -260,33 +278,51 @@ export class LeaderboardUI {
       this.listElement.style.display = 'none';
       this.noDataElement.style.display = 'none';
 
-      // Fetch both leaderboards
-      const [allTimeResponse, dailyResponse] = await Promise.all([
-        fetch(`${this.serverUrl}/api/leaderboard/top?limit=10`),
-        fetch(`${this.serverUrl}/api/leaderboard/daily?limit=10`)
-      ]);
+      // Try multiple ways to get player ID
+      const playerId = this.game.multiplayerManager?.playerId ||
+                       this.game.multiplayer?.playerId;
 
-      const allTimeData = await allTimeResponse.json();
-      const dailyData = await dailyResponse.json();
+      if (playerId) {
+        // Fetch player-centered context for both all-time and daily
+        const [allTimeResponse, dailyResponse, playerResponse] = await Promise.all([
+          fetch(`${this.serverUrl}/api/leaderboard/context/${playerId}`),
+          fetch(`${this.serverUrl}/api/leaderboard/context/${playerId}?daily=true`),
+          fetch(`${this.serverUrl}/api/leaderboard/player/${playerId}`)
+        ]);
 
-      if (allTimeData.success) {
-        this.leaderboardData = allTimeData.leaderboard || [];
-      }
-
-      if (dailyData.success) {
-        this.dailyLeaderboardData = dailyData.leaderboard || [];
-      }
-
-      // Fetch player's best score if logged in
-      if (this.game.multiplayerManager?.playerId) {
-        const playerResponse = await fetch(
-          `${this.serverUrl}/api/leaderboard/player/${this.game.multiplayerManager.playerId}`
-        );
+        const allTimeData = await allTimeResponse.json();
+        const dailyData = await dailyResponse.json();
         const playerData = await playerResponse.json();
+
+        if (allTimeData.success) {
+          this.leaderboardData = allTimeData.entries || [];
+          this.playerRank = allTimeData.playerRank;
+        }
+
+        if (dailyData.success) {
+          this.dailyLeaderboardData = dailyData.entries || [];
+        }
 
         if (playerData.success) {
           this.playerBest = playerData.bestScore;
           this.updatePlayerStats();
+        }
+      } else {
+        // No player ID - just fetch top 3
+        const [allTimeResponse, dailyResponse] = await Promise.all([
+          fetch(`${this.serverUrl}/api/leaderboard/top?limit=3`),
+          fetch(`${this.serverUrl}/api/leaderboard/daily?limit=3`)
+        ]);
+
+        const allTimeData = await allTimeResponse.json();
+        const dailyData = await dailyResponse.json();
+
+        if (allTimeData.success) {
+          this.leaderboardData = allTimeData.leaderboard || [];
+        }
+
+        if (dailyData.success) {
+          this.dailyLeaderboardData = dailyData.leaderboard || [];
         }
       }
 
@@ -295,9 +331,10 @@ export class LeaderboardUI {
 
     } catch (error) {
       console.error('Error fetching leaderboard:', error);
+      console.error('Error details:', error.message, error.stack);
       this.loadingElement.style.display = 'none';
       this.noDataElement.style.display = 'block';
-      this.noDataElement.textContent = 'Failed to load leaderboard';
+      this.noDataElement.textContent = `Failed to load: ${error.message}`;
     }
   }
 
@@ -319,40 +356,25 @@ export class LeaderboardUI {
     // Clear current list
     this.listElement.innerHTML = '';
 
-    // Find current player's index
-    const playerId = this.game.multiplayerManager?.playerId;
+    const playerId = this.game.multiplayerManager?.playerId || this.game.multiplayer?.playerId;
 
-    // If no player ID yet, try getting it from best score data
-    let playerIndex = -1;
-    if (playerId) {
-      playerIndex = data.findIndex(e => e.player_id === playerId);
-    } else if (this.playerBest && this.playerBest.player_id) {
-      playerIndex = data.findIndex(e => e.player_id === this.playerBest.player_id);
-    }
-
-    // Determine which 3 entries to show
-    let entriesToShow = [];
-
-    if (playerIndex === -1) {
-      // Player not in leaderboard - show top 3
-      entriesToShow = data.slice(0, 3);
-    } else {
-      // Show: above (rank-1), me (rank), below (rank+1)
-      // If player is rank 5, show ranks 4, 5, 6
-      const above = playerIndex > 0 ? data[playerIndex - 1] : null;
-      const me = data[playerIndex];
-      const below = playerIndex < data.length - 1 ? data[playerIndex + 1] : null;
-
-      if (above) entriesToShow.push(above);
-      entriesToShow.push(me);
-      if (below) entriesToShow.push(below);
-    }
-
-    // Add entries
-    entriesToShow.forEach((entry) => {
-      const rank = data.indexOf(entry) + 1;
+    // The server already returns the correct 3 entries (player + neighbors)
+    // We just need to determine their ranks for display
+    data.forEach((entry, index) => {
+      // For context entries, we need to fetch the rank from a larger dataset
+      // But we can use entry.rank if server provides it, or calculate from position
       const entryDiv = document.createElement('div');
       entryDiv.className = 'leaderboard-entry';
+
+      // Calculate rank - if this is from context endpoint, need to figure out actual rank
+      // The entries are already in order, but we need their global rank
+      let rank;
+      if (entry.rank) {
+        rank = entry.rank;
+      } else {
+        // For now, use index + 1 as a placeholder (will fix if needed)
+        rank = index + 1;
+      }
 
       // Add special classes for top 3
       if (rank === 1) entryDiv.classList.add('gold');
@@ -360,7 +382,8 @@ export class LeaderboardUI {
       else if (rank === 3) entryDiv.classList.add('bronze');
 
       // Check if this is the current player
-      if (playerId === entry.player_id) {
+      const isCurrentPlayer = playerId === entry.player_id;
+      if (isCurrentPlayer) {
         entryDiv.classList.add('current-player');
       }
 
@@ -381,27 +404,45 @@ export class LeaderboardUI {
 
       rankSection.innerHTML = `
         ${medal ? `<span class="rank-medal">${medal}</span>` : ''}
-        <span style="color: rgba(255, 255, 255, 0.6); font-size: 10px;">#${rank}</span>
+        <span style="color: ${isCurrentPlayer ? 'white' : 'rgba(255, 255, 255, 0.6)'}; font-size: 10px; ${isCurrentPlayer ? 'font-weight: bold !important;' : ''}">#${rank}</span>
       `;
 
       // Player name
       const nameSection = document.createElement('div');
       nameSection.style.cssText = `
         flex: 1;
-        font-size: 11px;
+        font-size: ${isCurrentPlayer ? '12px' : '11px'};
         color: white;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+        ${isCurrentPlayer ? 'font-weight: bold !important; cursor: pointer; text-decoration: underline;' : ''}
       `;
       nameSection.textContent = entry.username || 'Anonymous';
+
+      // Make current player's name clickable
+      if (isCurrentPlayer) {
+        nameSection.title = 'Click to manage your account';
+        nameSection.onclick = () => {
+          if (this.game.accountModal) {
+            this.game.accountModal.show();
+          }
+        };
+        nameSection.onmouseover = () => {
+          nameSection.style.color = '#aaaaaa';
+        };
+        nameSection.onmouseout = () => {
+          nameSection.style.color = 'white';
+        };
+      }
 
       // Score
       const scoreSection = document.createElement('div');
       scoreSection.style.cssText = `
-        font-size: 12px;
+        font-size: ${isCurrentPlayer ? '14px' : '12px'};
         font-weight: bold;
         color: white;
+        ${isCurrentPlayer ? 'font-weight: 900 !important;' : ''}
       `;
       scoreSection.textContent = entry.vehicles_passed || 0;
 
@@ -424,11 +465,11 @@ export class LeaderboardUI {
       <div style="color: #ffa500; font-weight: bold; margin-bottom: 5px;">Your Best Score</div>
       <div style="display: flex; justify-content: space-between;">
         <span>Vehicles Passed:</span>
-        <span style="color: #00ff00; font-weight: bold;">${this.playerBest.vehicles_passed}</span>
+        <span style="color: white; font-weight: bold;">${this.playerBest.vehicles_passed}</span>
       </div>
       <div style="display: flex; justify-content: space-between;">
         <span>Max Speed:</span>
-        <span style="color: #ffff00;">${Math.round(this.playerBest.max_speed * 2.237)} mph</span>
+        <span style="color: white;">${Math.round(this.playerBest.max_speed * 2.237)} mph</span>
       </div>
     `;
   }
@@ -463,12 +504,14 @@ export class LeaderboardUI {
   }
 
   setupKeyboardControls() {
-    document.addEventListener('keydown', (e) => {
+    // Store handler reference for proper cleanup
+    this.keydownHandler = (e) => {
       // Press L to toggle leaderboard visibility
       if (e.key === 'l' || e.key === 'L') {
         this.toggleVisibility();
       }
-    });
+    };
+    document.addEventListener('keydown', this.keydownHandler);
   }
 
   // Called when player achieves a new high score
@@ -531,11 +574,37 @@ export class LeaderboardUI {
   }
 
   dispose() {
+    // Clear interval timer
     if (this.updateTimer) {
       clearInterval(this.updateTimer);
+      this.updateTimer = null;
     }
-    if (this.container) {
-      this.container.remove();
+
+    // Remove event listener
+    if (this.keydownHandler) {
+      document.removeEventListener('keydown', this.keydownHandler);
+      this.keydownHandler = null;
     }
+
+    // Remove style element from DOM
+    if (this.styleElement && this.styleElement.parentNode) {
+      this.styleElement.parentNode.removeChild(this.styleElement);
+      this.styleElement = null;
+    }
+
+    // Remove container from DOM
+    if (this.container && this.container.parentNode) {
+      this.container.parentNode.removeChild(this.container);
+      this.container = null;
+    }
+
+    // Clear references to help garbage collection
+    this.listElement = null;
+    this.loadingElement = null;
+    this.noDataElement = null;
+    this.playerStatsElement = null;
+    this.toggleButton = null;
+    this.titleElement = null;
+    this.game = null;
   }
 }

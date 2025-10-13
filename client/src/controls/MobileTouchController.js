@@ -38,6 +38,9 @@ export class MobileTouchController {
     // Callbacks
     this.onInputChange = options.onInputChange || (() => {});
 
+    // Store global event listeners for cleanup
+    this.globalListeners = [];
+
     if (this.options.enabled) {
       this.initialize();
     }
@@ -70,7 +73,14 @@ export class MobileTouchController {
       innerColor: 'rgba(100, 100, 255, 0.6)',
       strokeColor: 'rgba(200, 200, 255, 0.8)',
       onChange: (data) => {
-        this.inputs.lean = -data.x * this.options.sensitivity.lean; // Invert X for lean
+        // Don't invert! Joystick right (+) should turn right (+)
+        this.inputs.lean = data.x * this.options.sensitivity.lean;
+
+        // Debug: Log steering input occasionally
+        if (Math.abs(this.inputs.lean) > 0.1 && Math.random() < 0.05) {
+          console.log('🕹️ Mobile joystick - lean:', this.inputs.lean.toFixed(2), 'raw x:', data.x.toFixed(2));
+        }
+
         this.notifyInputChange();
       },
       onStart: () => {
@@ -140,7 +150,16 @@ export class MobileTouchController {
     // Touch event handlers for throttle
     throttleBtn.addEventListener('touchstart', (e) => {
       e.preventDefault();
-      const touch = e.touches[0];
+      e.stopPropagation(); // Prevent event from bubbling
+
+      // Use changedTouches to get the NEW touch that just started, not touches[0]
+      const touch = e.changedTouches[0];
+
+      // Clear any existing throttle touch to prevent stuck state
+      if (this.activeTouches.has('throttle')) {
+        this.activeTouches.delete('throttle');
+      }
+
       this.activeTouches.set('throttle', touch.identifier);
       this.inputs.throttle = 1.0 * this.options.sensitivity.throttle;
       throttleBtn.style.background = 'linear-gradient(135deg, rgba(0, 255, 0, 0.6), rgba(0, 200, 0, 0.6))';
@@ -150,16 +169,42 @@ export class MobileTouchController {
 
     throttleBtn.addEventListener('touchend', (e) => {
       e.preventDefault();
+      e.stopPropagation(); // Prevent event from bubbling
       this.activeTouches.delete('throttle');
       this.inputs.throttle = 0;
       throttleBtn.style.background = 'linear-gradient(135deg, rgba(0, 255, 0, 0.3), rgba(0, 200, 0, 0.3))';
       this.notifyInputChange();
     }, { passive: false });
 
+    throttleBtn.addEventListener('touchcancel', (e) => {
+      e.preventDefault();
+      e.stopPropagation(); // Prevent event from bubbling
+      this.activeTouches.delete('throttle');
+      this.inputs.throttle = 0;
+      throttleBtn.style.background = 'linear-gradient(135deg, rgba(0, 255, 0, 0.3), rgba(0, 200, 0, 0.3))';
+      this.notifyInputChange();
+    }, { passive: false });
+
+    // Handle touch move to keep throttle active even if finger moves slightly
+    throttleBtn.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      // Keep throttle active as long as touch remains on button
+    }, { passive: false });
+
     // Touch event handlers for brake
     brakeBtn.addEventListener('touchstart', (e) => {
       e.preventDefault();
-      const touch = e.touches[0];
+      e.stopPropagation(); // Prevent event from bubbling
+
+      // Use changedTouches to get the NEW touch that just started, not touches[0]
+      const touch = e.changedTouches[0];
+
+      // Clear any existing brake touch to prevent stuck state
+      if (this.activeTouches.has('brake')) {
+        this.activeTouches.delete('brake');
+      }
+
       this.activeTouches.set('brake', touch.identifier);
       this.inputs.brake = 1.0 * this.options.sensitivity.brake;
       this.inputs.frontBrake = 0.6; // Front brake gets 60%
@@ -171,12 +216,31 @@ export class MobileTouchController {
 
     brakeBtn.addEventListener('touchend', (e) => {
       e.preventDefault();
+      e.stopPropagation(); // Prevent event from bubbling
       this.activeTouches.delete('brake');
       this.inputs.brake = 0;
       this.inputs.frontBrake = 0;
       this.inputs.rearBrake = 0;
       brakeBtn.style.background = 'linear-gradient(135deg, rgba(255, 0, 0, 0.3), rgba(200, 0, 0, 0.3))';
       this.notifyInputChange();
+    }, { passive: false });
+
+    brakeBtn.addEventListener('touchcancel', (e) => {
+      e.preventDefault();
+      e.stopPropagation(); // Prevent event from bubbling
+      this.activeTouches.delete('brake');
+      this.inputs.brake = 0;
+      this.inputs.frontBrake = 0;
+      this.inputs.rearBrake = 0;
+      brakeBtn.style.background = 'linear-gradient(135deg, rgba(255, 0, 0, 0.3), rgba(200, 0, 0, 0.3))';
+      this.notifyInputChange();
+    }, { passive: false });
+
+    // Handle touch move to keep brake active even if finger moves slightly
+    brakeBtn.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      // Keep brake active as long as touch remains on button
     }, { passive: false });
 
     // Mouse events for testing
@@ -212,9 +276,78 @@ export class MobileTouchController {
       this.notifyInputChange();
     });
 
+    // Mouse leave handlers (important for desktop testing - mouseup might not fire if cursor leaves button)
+    throttleBtn.addEventListener('mouseleave', (e) => {
+      this.inputs.throttle = 0;
+      throttleBtn.style.background = 'linear-gradient(135deg, rgba(0, 255, 0, 0.3), rgba(0, 200, 0, 0.3))';
+      this.notifyInputChange();
+    });
+
+    brakeBtn.addEventListener('mouseleave', (e) => {
+      this.inputs.brake = 0;
+      this.inputs.frontBrake = 0;
+      this.inputs.rearBrake = 0;
+      brakeBtn.style.background = 'linear-gradient(135deg, rgba(255, 0, 0, 0.3), rgba(200, 0, 0, 0.3))';
+      this.notifyInputChange();
+    });
+
     this.throttleBtn = throttleBtn;
     this.brakeBtn = brakeBtn;
     this.controlsContainer = controlsContainer;
+
+    // Add global touch tracking as a failsafe
+    // This handles cases where touchend doesn't fire on the button
+    const globalTouchEnd = (e) => {
+      // Check if any of our tracked touches ended
+      const endedTouches = Array.from(e.changedTouches);
+
+      endedTouches.forEach(touch => {
+        // Check if this touch was associated with throttle or brake
+        if (this.activeTouches.get('throttle') === touch.identifier) {
+          this.activeTouches.delete('throttle');
+          this.inputs.throttle = 0;
+          throttleBtn.style.background = 'linear-gradient(135deg, rgba(0, 255, 0, 0.3), rgba(0, 200, 0, 0.3))';
+          this.notifyInputChange();
+        }
+
+        if (this.activeTouches.get('brake') === touch.identifier) {
+          this.activeTouches.delete('brake');
+          this.inputs.brake = 0;
+          this.inputs.frontBrake = 0;
+          this.inputs.rearBrake = 0;
+          brakeBtn.style.background = 'linear-gradient(135deg, rgba(255, 0, 0, 0.3), rgba(200, 0, 0, 0.3))';
+          this.notifyInputChange();
+        }
+      });
+    };
+    document.addEventListener('touchend', globalTouchEnd);
+    this.globalListeners.push({ event: 'touchend', handler: globalTouchEnd });
+
+    // Add global touchcancel as a failsafe
+    const globalTouchCancel = (e) => {
+      // Clear all our touches on cancel
+      const cancelledTouches = Array.from(e.changedTouches);
+
+      cancelledTouches.forEach(touch => {
+        if (this.activeTouches.get('throttle') === touch.identifier) {
+          this.activeTouches.delete('throttle');
+          this.inputs.throttle = 0;
+          throttleBtn.style.background = 'linear-gradient(135deg, rgba(0, 255, 0, 0.3), rgba(0, 200, 0, 0.3))';
+          this.notifyInputChange();
+        }
+
+        if (this.activeTouches.get('brake') === touch.identifier) {
+          this.activeTouches.delete('brake');
+          this.inputs.brake = 0;
+          this.inputs.frontBrake = 0;
+          this.inputs.rearBrake = 0;
+          brakeBtn.style.background = 'linear-gradient(135deg, rgba(255, 0, 0, 0.3), rgba(200, 0, 0, 0.3))';
+          this.notifyInputChange();
+        }
+      });
+    };
+    document.addEventListener('touchcancel', globalTouchCancel);
+    this.globalListeners.push({ event: 'touchcancel', handler: globalTouchCancel });
   }
 
   initializeZoneLayout() {
@@ -293,6 +426,7 @@ export class MobileTouchController {
   }
 
   notifyInputChange() {
+    // Only log significant changes (throttle/brake press, not constant joystick updates)
     this.onInputChange({ ...this.inputs });
   }
 
@@ -333,6 +467,12 @@ export class MobileTouchController {
     if (this.controlsContainer) {
       this.controlsContainer.remove();
     }
+
+    // Remove global event listeners
+    this.globalListeners.forEach(({ event, handler }) => {
+      document.removeEventListener(event, handler);
+    });
+    this.globalListeners = [];
 
     this.activeTouches.clear();
   }

@@ -12,8 +12,8 @@ export class TrafficSystem {
     this.bloodTrackSystem = bloodTrackSystem;
     this.multiplayerManager = multiplayerManager;
     this.vehicles = [];
-    this.maxVehicles = 30; // Optimized for lower-end machines
-    this.spawnDistance = 200; // Reduced spawn distance for performance
+    this.maxVehicles = 20; // Reduced to 20 to prevent memory issues
+    this.spawnDistance = 150; // Reduced spawn distance for better performance and lower memory
 
     // Reusable vectors to prevent memory allocation in update loops
     this._tempVector = new THREE.Vector3();
@@ -22,13 +22,19 @@ export class TrafficSystem {
     // Use centralized material manager
     this.materialManager = getMaterialManager();
 
-    // Vehicle model loading
+    // Debug options
+    this.debugBoundingBoxes = false; // Toggle for bounding box visualization
+    this.debugBoxMeshes = new Map(); // Store debug box meshes per vehicle
+
+    // Vehicle model loading with dimension detection
     this.sedanModel = null;
     this.sedanModelLoaded = false;
+    this.sedanModelDimensions = { width: 1.8, height: 1.4, length: 4.5 }; // Default fallback
     this.loadSedanModel();
 
     this.semiModel = null;
     this.semiModelLoaded = false;
+    this.semiModelDimensions = { width: 2.5, height: 4.0, length: 16.0 }; // Default fallback
     this.loadSemiModel();
 
     // Color palette for cars (will be applied to the sedan body material)
@@ -204,7 +210,19 @@ export class TrafficSystem {
       (gltf) => {
         this.sedanModel = gltf.scene;
         this.sedanModelLoaded = true;
+
+        // Automatically detect model dimensions
+        const bbox = new THREE.Box3().setFromObject(this.sedanModel);
+        const size = new THREE.Vector3();
+        bbox.getSize(size);
+        this.sedanModelDimensions = {
+          width: size.x,
+          height: size.y,
+          length: size.z
+        };
+
         console.log('Sedan model loaded successfully');
+        console.log('Detected sedan dimensions:', this.sedanModelDimensions);
 
         // Log the model structure for debugging
         const meshes = [];
@@ -236,7 +254,19 @@ export class TrafficSystem {
       (gltf) => {
         this.semiModel = gltf.scene;
         this.semiModelLoaded = true;
+
+        // Automatically detect model dimensions
+        const bbox = new THREE.Box3().setFromObject(this.semiModel);
+        const size = new THREE.Vector3();
+        bbox.getSize(size);
+        this.semiModelDimensions = {
+          width: size.x,
+          height: size.y,
+          length: size.z
+        };
+
         console.log('Semi model loaded successfully');
+        console.log('Detected semi dimensions:', this.semiModelDimensions);
       },
       undefined,
       (error) => {
@@ -512,10 +542,10 @@ export class TrafficSystem {
       }
     });
 
-    // Scale to match vehicle type dimensions
-    const scaleX = type.width / 1.8;  // Base width ~1.8m
-    const scaleY = type.height / 1.4;  // Base height ~1.4m
-    const scaleZ = type.length / 4.5;  // Base length ~4.5m
+    // Scale to match vehicle type dimensions using detected model size
+    const scaleX = type.width / this.sedanModelDimensions.width;
+    const scaleY = type.height / this.sedanModelDimensions.height;
+    const scaleZ = type.length / this.sedanModelDimensions.length;
     vehicle.scale.set(scaleX, scaleY, scaleZ);
 
     // Store brake light and wheel references for animation (no materials to dispose - they're shared!)
@@ -618,11 +648,10 @@ export class TrafficSystem {
       }
     });
 
-    // Scale to match vehicle type dimensions
-    // Semi model base dimensions approximately: width ~2.5m, height ~4m, length ~16m
-    const scaleX = type.width / 2.5;
-    const scaleY = type.height / 4.0;
-    const scaleZ = type.length / 16.0;
+    // Scale to match vehicle type dimensions using detected model size
+    const scaleX = type.width / this.semiModelDimensions.width;
+    const scaleY = type.height / this.semiModelDimensions.height;
+    const scaleZ = type.length / this.semiModelDimensions.length;
     vehicle.scale.set(scaleX, scaleY, scaleZ);
 
     // Store brake light and wheel references for animation (no materials to dispose - they're shared!)
@@ -740,7 +769,7 @@ export class TrafficSystem {
     this.vehicles.forEach(vehicle => {
       // Check if vehicle is in frustum or close to player
       const distance = Math.abs(vehicle.position.z - playerPosition.z);
-      
+
       if (distance < 50) {
         // Always show vehicles very close to player
         vehicle.mesh.visible = true;
@@ -762,15 +791,15 @@ export class TrafficSystem {
           });
         }
         vehicle.mesh.visible = inFrustum;
-        
-        // Only update visible vehicles
-        if (inFrustum) {
-          this.updateVehicle(vehicle, deltaTime, playerPosition);
-        } else {
-          // Still update position for invisible vehicles (simplified)
-          vehicle.position.z += vehicle.velocity.z * deltaTime;
-          vehicle.mesh.position.copy(vehicle.position);
-        }
+
+        // ALWAYS run full updateVehicle to prevent teleporting
+        // This ensures smooth lane changes and lateral drift even when not visible
+        this.updateVehicle(vehicle, deltaTime, playerPosition);
+      }
+
+      // Update debug bounding box if enabled
+      if (this.debugBoundingBoxes) {
+        this.updateDebugBox(vehicle);
       }
     });
     
@@ -784,6 +813,10 @@ export class TrafficSystem {
         if (vehicle.isCreatingBloodTrail && this.bloodTrackSystem) {
           this.bloodTrackSystem.clearVehicleBloodTrail(vehicle.id);
           vehicle.isCreatingBloodTrail = false;
+        }
+        // Remove debug box if it exists
+        if (this.debugBoundingBoxes) {
+          this.removeDebugBox(vehicle.id);
         }
         // PROPERLY dispose using the disposal function
         this.disposeVehicleMesh(vehicle.mesh);
@@ -1260,6 +1293,54 @@ export class TrafficSystem {
     // This is smootherstep - even smoother than smoothstep
     return t * t * t * (t * (t * 6 - 15) + 10);
   }
+
+  // Debug visualization methods
+  setDebugBoundingBoxes(enabled) {
+    this.debugBoundingBoxes = enabled;
+
+    if (!enabled) {
+      // Remove all debug boxes
+      this.debugBoxMeshes.forEach((debugMesh, vehicleId) => {
+        this.scene.remove(debugMesh);
+        if (debugMesh.geometry) debugMesh.geometry.dispose();
+        if (debugMesh.material) debugMesh.material.dispose();
+      });
+      this.debugBoxMeshes.clear();
+    }
+  }
+
+  updateDebugBox(vehicle) {
+    let debugMesh = this.debugBoxMeshes.get(vehicle.id);
+
+    if (!debugMesh) {
+      // Create new debug box
+      const geometry = new THREE.BoxGeometry(vehicle.width, vehicle.length * 0.5, vehicle.length);
+      const material = new THREE.MeshBasicMaterial({
+        color: 0x00ff00,
+        wireframe: true,
+        transparent: true,
+        opacity: 0.5
+      });
+      debugMesh = new THREE.Mesh(geometry, material);
+      this.debugBoxMeshes.set(vehicle.id, debugMesh);
+      this.scene.add(debugMesh);
+    }
+
+    // Update debug box position to match vehicle collision box
+    debugMesh.position.copy(vehicle.position);
+    debugMesh.position.y = vehicle.length * 0.25; // Center vertically
+    debugMesh.visible = vehicle.mesh.visible;
+  }
+
+  removeDebugBox(vehicleId) {
+    const debugMesh = this.debugBoxMeshes.get(vehicleId);
+    if (debugMesh) {
+      this.scene.remove(debugMesh);
+      if (debugMesh.geometry) debugMesh.geometry.dispose();
+      if (debugMesh.material) debugMesh.material.dispose();
+      this.debugBoxMeshes.delete(vehicleId);
+    }
+  }
   
   updateFrustum() {
     if (this.camera) {
@@ -1280,6 +1361,12 @@ export class TrafficSystem {
         this.bloodTrackSystem.clearVehicleBloodTrail(vehicle.id);
         vehicle.isCreatingBloodTrail = false;
       }
+      // Remove debug box if it exists
+      if (this.debugBoundingBoxes) {
+        this.removeDebugBox(vehicle.id);
+      }
+      // MEMORY LEAK FIX: Properly dispose vehicle mesh
+      this.disposeVehicleMesh(vehicle.mesh);
     });
     this.vehicles = [];
 
@@ -1397,10 +1484,22 @@ export class TrafficSystem {
         this.scene.remove(vehicle.mesh);
         this.disposeVehicleMesh(vehicle.mesh);
       }
+      // Remove debug boxes
+      if (this.debugBoundingBoxes) {
+        this.removeDebugBox(vehicle.id);
+      }
     });
 
     // Clear vehicles array
     this.vehicles = [];
+
+    // Clear all debug boxes
+    this.debugBoxMeshes.forEach((debugMesh) => {
+      this.scene.remove(debugMesh);
+      if (debugMesh.geometry) debugMesh.geometry.dispose();
+      if (debugMesh.material) debugMesh.material.dispose();
+    });
+    this.debugBoxMeshes.clear();
 
     // Dispose sedan material cache
     if (this.sedanMaterialCache) {

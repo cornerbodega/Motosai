@@ -98,8 +98,6 @@ export class DeathAnimation {
       color: 0xffaa00,
       transparent: true,
       opacity: 0,
-      emissive: 0xffaa00,
-      emissiveIntensity: 2,
     });
 
     this.bloodTrailMaterial = new THREE.PointsMaterial({
@@ -193,8 +191,6 @@ export class DeathAnimation {
           color: 0xffff00,
           transparent: true,
           opacity: opacity,
-          emissive: 0xffff00,
-          emissiveIntensity: 0.3,
         })
       );
     }

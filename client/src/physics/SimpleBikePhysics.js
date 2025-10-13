@@ -97,36 +97,49 @@ export class SimpleBikePhysics {
   }
 
   setControls(controls) {
-    // Update controls
-    if (controls.throttle !== undefined) this.controls.throttle = Math.max(0, Math.min(1, controls.throttle));
-    if (controls.steer !== undefined) this.controls.steer = Math.max(-1, Math.min(1, controls.steer));
+    // Update controls - always set values directly, don't accumulate
+    if (controls.throttle !== undefined) {
+      this.controls.throttle = Math.max(0, Math.min(1, controls.throttle));
+    }
+    if (controls.steer !== undefined) {
+      this.controls.steer = Math.max(-1, Math.min(1, controls.steer));
+    }
 
-    // Fix: Properly handle brake inputs - don't use Math.max which keeps brakes stuck on
-    // Instead, set brake to the maximum of the current frame's front and rear brake values
+    // Handle brake inputs - take the actual values from this frame, don't accumulate
     let currentBrake = 0;
     let frontBrake = 0;
     let rearBrake = 0;
 
-    if (controls.frontBrake !== undefined) {
-      frontBrake = controls.frontBrake;
-      currentBrake = Math.max(currentBrake, frontBrake);
-    }
-    if (controls.rearBrake !== undefined) {
-      rearBrake = controls.rearBrake;
-      currentBrake = Math.max(currentBrake, rearBrake * 0.7);
-    }
-    if (controls.brake !== undefined) {
-      // Generic brake applies both front and rear
-      frontBrake = controls.brake * 0.7;  // 70% front
-      rearBrake = controls.brake * 0.3;   // 30% rear
-      currentBrake = Math.max(currentBrake, controls.brake);
+    // Only process brake inputs if any brake control is explicitly provided
+    const hasBrakeInput = controls.frontBrake !== undefined ||
+                          controls.rearBrake !== undefined ||
+                          controls.brake !== undefined;
+
+    if (hasBrakeInput) {
+      if (controls.frontBrake !== undefined) {
+        frontBrake = controls.frontBrake;
+        currentBrake = Math.max(currentBrake, frontBrake);
+      }
+      if (controls.rearBrake !== undefined) {
+        rearBrake = controls.rearBrake;
+        currentBrake = Math.max(currentBrake, rearBrake * 0.7);
+      }
+      if (controls.brake !== undefined) {
+        // Generic brake applies both front and rear
+        frontBrake = Math.max(frontBrake, controls.brake * 0.7);  // 70% front
+        rearBrake = Math.max(rearBrake, controls.brake * 0.3);   // 30% rear
+        currentBrake = Math.max(currentBrake, controls.brake);
+      }
+
+      // Set the brake values for this frame
+      this.controls.brake = Math.max(0, Math.min(1, currentBrake));
+      this.controls.frontBrake = Math.max(0, Math.min(1, frontBrake));
+      this.controls.rearBrake = Math.max(0, Math.min(1, rearBrake));
     }
 
-    this.controls.brake = Math.max(0, Math.min(1, currentBrake));
-    this.controls.frontBrake = Math.max(0, Math.min(1, frontBrake));
-    this.controls.rearBrake = Math.max(0, Math.min(1, rearBrake));
-
-    if (controls.lean !== undefined) this.controls.steer = controls.lean; // Map lean to steer
+    if (controls.lean !== undefined) {
+      this.controls.steer = controls.lean; // Map lean to steer
+    }
   }
   
   update(deltaTime, trafficSystem = null) {
@@ -165,15 +178,40 @@ export class SimpleBikePhysics {
   }
   
   updateSpeed(deltaTime) {
-    // Apply throttle
-    if (this.controls.throttle > 0) {
+    // Apply thresholds to ignore very small values from input smoothing
+    // This prevents one control from blocking the other due to slow decay
+    const threshold = 0.05; // Ignore values below 5%
+    const effectiveBrake = this.controls.brake > threshold ? this.controls.brake : 0;
+    const effectiveThrottle = this.controls.throttle > threshold ? this.controls.throttle : 0;
+
+    // Check brake FIRST - brake always works, even with throttle
+    if (effectiveBrake > 0) {
+      // Reset throttle time
+      this.throttleHoldTime = 0;
+      this.acceleration = this.baseAcceleration;
+
+      // Realistic brake physics with weight transfer
+      const speedFactor = Math.min(1.5, 1 + this.speed / 50); // More effective at higher speeds
+      const brakePower = effectiveBrake * this.brakeDeceleration * speedFactor;
+
+      // Apply braking with ABS simulation (prevents lockup)
+      const maxBraking = this.speed / deltaTime; // Can't brake more than current speed
+      const actualBraking = Math.min(brakePower * deltaTime, maxBraking * 0.95); // 95% to prevent instant stop
+
+      this.speed -= actualBraking;
+
+      // Don't go backwards
+      if (this.speed < 0) this.speed = 0;
+    }
+    // Apply throttle (only if not braking)
+    else if (effectiveThrottle > 0) {
       // Track how long throttle is held
       this.throttleHoldTime += deltaTime;
-      
+
       // Calculate RPM-based torque multiplier for realistic power delivery
       const rpmPercent = this.rpm / 15000; // 0 to 1 based on max RPM
       let torqueMultiplier;
-      
+
       if (rpmPercent < 0.3) {
         // Low RPM - already strong torque
         torqueMultiplier = this.powerBand.lowRPM;
@@ -184,11 +222,11 @@ export class SimpleBikePhysics {
         // High RPM - maintains power
         torqueMultiplier = this.powerBand.highRPM;
       }
-      
+
       // Realistic speed-based air resistance and power curve
       const displaySpeedMPH = this.speed * 2.237; // Display speed in MPH
       let dragCoefficient;
-      
+
       if (displaySpeedMPH < 60) {
         // 0-60mph: Minimal drag, full power
         dragCoefficient = 1.0;
@@ -209,49 +247,29 @@ export class SimpleBikePhysics {
         // Keep reasonable acceleration at extreme speeds
         dragCoefficient = Math.max(0.3, 0.5 * Math.exp(-displaySpeedMPH / 1000));
       }
-      
+
       // Add boost over time for achieving extreme speeds (game mechanic)
       const timeBoost = 1 + Math.min(this.throttleHoldTime / 10, 2); // Max 3x after 20 seconds
-      
+
       // Calculate final acceleration
       const gearRatio = this.gear <= 3 ? 1.2 : (this.gear <= 5 ? 1.0 : 0.85); // Lower gears = more torque
       const finalAcceleration = this.baseAcceleration * torqueMultiplier * dragCoefficient * gearRatio * timeBoost;
-      
+
       // Apply acceleration with throttle control (apply speed multiplier)
-      const accelPower = this.controls.throttle * finalAcceleration;
+      const accelPower = effectiveThrottle * finalAcceleration;
       this.speed += accelPower * deltaTime * this.bikeStats.speedMultiplier;
-      
+
       // Small boosts at milestones for game feel
       if (displaySpeedMPH > 100 && displaySpeedMPH < 101) this.speed *= 1.005;
       if (displaySpeedMPH > 200 && displaySpeedMPH < 201) this.speed *= 1.005;
       if (displaySpeedMPH > 300 && displaySpeedMPH < 301) this.speed *= 1.003;
-    }
-    // Apply brakes
-    else if (this.controls.brake > 0) {
-      // Reset throttle time
-      this.throttleHoldTime = 0;
-      this.acceleration = this.baseAcceleration;
-      
-      // Realistic brake physics with weight transfer
-      const speedFactor = Math.min(1.5, 1 + this.speed / 50); // More effective at higher speeds
-      const brakePower = this.controls.brake * this.brakeDeceleration * speedFactor;
-      
-      // Apply braking with ABS simulation (prevents lockup)
-      const maxBraking = this.speed / deltaTime; // Can't brake more than current speed
-      const actualBraking = Math.min(brakePower * deltaTime, maxBraking * 0.95); // 95% to prevent instant stop
-      
-      this.speed -= actualBraking;
-      
-      // No engine braking - coast freely
-      // Don't go backwards
-      if (this.speed < 0) this.speed = 0;
     }
     // Coasting - minimal deceleration for fun gameplay
     else {
       // Reset throttle time
       this.throttleHoldTime = 0;
       this.acceleration = this.baseAcceleration;
-      
+
       // Minimal coasting deceleration - bike should maintain speed
       let coastDecel = 0.1; // Almost no deceleration
 
@@ -313,17 +331,23 @@ export class SimpleBikePhysics {
   }
   
   updateTurning(deltaTime) {
-    // Only turn if we're moving
-    if (this.speed < 0.5) {
-      this.turnSpeed = 0;
-      return;
+    // Allow steering at any speed (for mobile controls)
+    // Low speed turns are slower but still possible
+
+    // Debug: Log steering input
+    if (Math.abs(this.controls.steer) > 0.1 && Math.random() < 0.05) {
+      console.log('🏍️ updateTurning - steer:', this.controls.steer.toFixed(2), 'speed:', (this.speed * 2.237).toFixed(1), 'mph');
     }
-    
+
     // Calculate turn rate based on display speed (realistic scaling)
     const displaySpeedMPH = this.speed * 2.237; // Display speed in MPH
     let speedFactor = 1.0;
-    if (displaySpeedMPH < 20) {
-      speedFactor = 0.8; // Reduced turning at low speeds too
+
+    // Allow full steering at low speeds (for mobile controls)
+    if (displaySpeedMPH < 5) {
+      speedFactor = 1.0; // Full steering at very low speeds
+    } else if (displaySpeedMPH < 20) {
+      speedFactor = 0.8; // Good turning at low speeds
     } else if (displaySpeedMPH < 50) {
       speedFactor = Math.max(0.3, 0.8 - (displaySpeedMPH / 50) * 0.4);
     } else if (displaySpeedMPH < 80) {

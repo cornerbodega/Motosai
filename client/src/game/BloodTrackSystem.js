@@ -34,12 +34,12 @@ export class BloodTrackSystem {
   getMaxTracksForQuality(quality) {
     switch(quality) {
       case 'low':
-        return 500;   // Minimal tracks for low-end devices
+        return 300;   // Minimal tracks for low-end devices
       case 'medium':
-        return 2000;  // Moderate amount
+        return 1000;  // Moderate amount
       case 'high':
       default:
-        return 5000;  // Full amount for high-end devices
+        return 2000;  // Reduced from 5000 to prevent memory issues
     }
   }
 

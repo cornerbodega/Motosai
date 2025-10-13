@@ -148,6 +148,10 @@ export class PlayerSelection {
     this.friesAnimationStartTime = 0;
     this.ufoFlewAway = false;
 
+    // Animation frame tracking to prevent memory leaks
+    this.cameraRotationAnimationId = null;
+    this.ufoFlyAwayAnimationId = null;
+
     this.initializeBikes();
   }
 
@@ -457,14 +461,19 @@ export class PlayerSelection {
           this.camera.rotation.y = startRotationY + (targetRotationY - startRotationY) * eased;
 
           if (progress < 1) {
-            requestAnimationFrame(animateCameraRotation);
+            this.cameraRotationAnimationId = requestAnimationFrame(animateCameraRotation);
+          } else {
+            this.cameraRotationAnimationId = null;
           }
         };
 
-        requestAnimationFrame(animateCameraRotation);
+        this.cameraRotationAnimationId = requestAnimationFrame(animateCameraRotation);
 
         // If UFO controller is available, animate UFO to bike
         if (this.ufoController && this.previewModel) {
+          // Stop the UFO from spinning
+          this.ufoController.stopSpinning = true;
+
           // Get the bike preview position before hiding UI
           const bikePosition = this.previewModel.position.clone();
 
@@ -1008,6 +1017,11 @@ export class PlayerSelection {
       const bikePosition = this.previewModel.position.clone();
       this.ufoController.updateFloatingAboveBike(deltaTime, bikePosition);
 
+      // Spin the UFO
+      if (this.ufoController.ufo) {
+        this.ufoController.ufo.rotation.y += 0.02; // Continuous spinning
+      }
+
       // Show beam after 0.5 seconds
       const elapsedSinceStart = (currentTime - this.ufoBeamStartTime) / 1000;
       if (elapsedSinceStart >= 0.5 && this.friesModel && this.ufoController.ufo) {
@@ -1080,13 +1094,14 @@ export class PlayerSelection {
           this.ufoController.ufo.rotation.y += 0.05;
 
           if (progress < 1) {
-            requestAnimationFrame(animate);
+            this.ufoFlyAwayAnimationId = requestAnimationFrame(animate);
           } else {
+            this.ufoFlyAwayAnimationId = null;
             console.log('UFO reached game start position');
           }
         };
 
-        animate();
+        this.ufoFlyAwayAnimationId = requestAnimationFrame(animate);
       }
       return;
     }
@@ -1356,6 +1371,14 @@ export class PlayerSelection {
     if (this.previewAnimationId) {
       cancelAnimationFrame(this.previewAnimationId);
       this.previewAnimationId = null;
+    }
+    if (this.cameraRotationAnimationId) {
+      cancelAnimationFrame(this.cameraRotationAnimationId);
+      this.cameraRotationAnimationId = null;
+    }
+    if (this.ufoFlyAwayAnimationId) {
+      cancelAnimationFrame(this.ufoFlyAwayAnimationId);
+      this.ufoFlyAwayAnimationId = null;
     }
 
     // Remove event listeners

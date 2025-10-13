@@ -31,6 +31,13 @@ export class UFOController {
     this.flyToBikeAnimationRunning = false;
     this.isFloatingAboveBike = false;
     this.floatTime = 0;
+    this.stopSpinning = false; // Flag to stop spinning when user hits START
+
+    // Animation frame tracking to prevent memory leaks
+    this.escapeAnimationId = null;
+    this.flyToBikeAnimationId = null;
+    this.introAnimationId = null;
+    this.flyAwayAnimationId = null;
   }
 
   async load() {
@@ -410,8 +417,10 @@ export class UFOController {
         // Just do gentle bobbing while waiting
         const bobTime = elapsed / 1000;
         this.ufo.position.y = startPos.y + Math.sin(bobTime * 3) * 1;
-        this.ufo.rotation.y += 0.02;
-        requestAnimationFrame(animate);
+        if (!this.stopSpinning) {
+          this.ufo.rotation.y += 0.02;
+        }
+        this.escapeAnimationId = requestAnimationFrame(animate);
         return;
       }
 
@@ -445,17 +454,18 @@ export class UFOController {
       // Don't fade - just let it fly away (keeps materials opaque for respawn)
 
       if (totalT < 1) {
-        requestAnimationFrame(animate);
+        this.escapeAnimationId = requestAnimationFrame(animate);
       } else {
         // Escape complete - just mark as not escaping, UFO stays in scene
         this.isEscaping = false;
         this.escapeAnimationRunning = false;
+        this.escapeAnimationId = null;
         console.log('UFO escape complete - ready for respawn');
         if (onComplete) onComplete();
       }
     };
 
-    animate();
+    this.escapeAnimationId = requestAnimationFrame(animate);
   }
 
   playFlyToBikeAnimation(targetPosition, onComplete) {
@@ -499,22 +509,25 @@ export class UFOController {
       this.ufo.position.y = startPos.y + (targetY - startPos.y) * eased;
       this.ufo.position.z = startPos.z + (targetZ - startPos.z) * eased;
 
-      // Gentle rotation while flying
-      this.ufo.rotation.y += 0.03;
+      // Gentle rotation while flying (unless spinning is stopped)
+      if (!this.stopSpinning) {
+        this.ufo.rotation.y += 0.03;
+      }
 
       if (t < 1) {
-        requestAnimationFrame(animate);
+        this.flyToBikeAnimationId = requestAnimationFrame(animate);
       } else {
         // Animation complete - start floating
         this.isFlyingToBike = false;
         this.flyToBikeAnimationRunning = false;
         this.isFloatingAboveBike = true;
+        this.flyToBikeAnimationId = null;
         console.log('UFO reached bike - now floating');
         if (onComplete) onComplete();
       }
     };
 
-    animate();
+    this.flyToBikeAnimationId = requestAnimationFrame(animate);
   }
 
   updateFloatingAboveBike(deltaTime, targetPosition) {
@@ -532,8 +545,10 @@ export class UFOController {
     this.ufo.position.y = targetPosition.y + 8 + bobHeight; // 8 units above + bobbing
     this.ufo.position.z = targetPosition.z + wobbleZ;
 
-    // Slow rotation
-    this.ufo.rotation.y += deltaTime * 0.5;
+    // Slow rotation (unless spinning is stopped)
+    if (!this.stopSpinning) {
+      this.ufo.rotation.y += deltaTime * 0.5;
+    }
 
     // Gentle tilting
     this.ufo.rotation.x = Math.sin(this.floatTime * 0.6) * 0.1;
@@ -615,15 +630,16 @@ export class UFOController {
       this.ufo.rotation.x = -0.3;
 
       if (progress < 1) {
-        requestAnimationFrame(animate);
+        this.introAnimationId = requestAnimationFrame(animate);
       } else {
         this.isPlayingIntro = false;
+        this.introAnimationId = null;
         console.log('UFO intro complete at position:', this.ufo.position);
         if (onComplete) onComplete();
       }
     };
 
-    animate();
+    this.introAnimationId = requestAnimationFrame(animate);
   }
 
   playFlyAwayAnimation(onComplete) {
@@ -659,19 +675,38 @@ export class UFOController {
       // Don't fade out - keep UFO visible
 
       if (progress < 1) {
-        requestAnimationFrame(animate);
+        this.flyAwayAnimationId = requestAnimationFrame(animate);
       } else {
         this.isFlyingAway = false;
+        this.flyAwayAnimationId = null;
         console.log('UFO fly away complete');
         if (onComplete) onComplete();
       }
     };
 
-    animate();
+    this.flyAwayAnimationId = requestAnimationFrame(animate);
   }
 
   cleanup() {
     console.log('UFOController: Starting cleanup');
+
+    // Cancel all animation frames
+    if (this.escapeAnimationId) {
+      cancelAnimationFrame(this.escapeAnimationId);
+      this.escapeAnimationId = null;
+    }
+    if (this.flyToBikeAnimationId) {
+      cancelAnimationFrame(this.flyToBikeAnimationId);
+      this.flyToBikeAnimationId = null;
+    }
+    if (this.introAnimationId) {
+      cancelAnimationFrame(this.introAnimationId);
+      this.introAnimationId = null;
+    }
+    if (this.flyAwayAnimationId) {
+      cancelAnimationFrame(this.flyAwayAnimationId);
+      this.flyAwayAnimationId = null;
+    }
 
     // Cancel any running animations
     this.escapeAnimationRunning = false;

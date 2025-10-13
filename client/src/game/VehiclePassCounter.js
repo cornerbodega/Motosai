@@ -9,6 +9,7 @@ export class VehiclePassCounter {
     this.maxCombo = 0;
     this.lastPassTime = 0;
     this.comboTimeout = 3000; // 3 seconds to maintain combo
+    this.activeAnimations = new Set(); // Track active animation frames
 
     // Stats for leaderboard
     this.sessionStats = {
@@ -19,8 +20,16 @@ export class VehiclePassCounter {
       comboMultiplier: 1
     };
 
+    // Player best score
+    this.playerBest = null;
+    this.playerRank = null;
+
+    // Detect mobile
+    this.isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
     // UI elements
     this.createUI();
+    this.fetchPlayerBest();
   }
 
   createUI() {
@@ -38,14 +47,24 @@ export class VehiclePassCounter {
       z-index: 1000;
       text-align: right;
     `;
+
+    // Show high score and rank on mobile (since leaderboard is hidden)
+    const mobileStatsHTML = this.isMobile ? `
+      <div id="player-best" style="font-size: 14px; color: #aaa; margin-top: 10px;">
+        Best: -- | Rank: --
+      </div>
+    ` : '';
+
     counterDiv.innerHTML = `
       <div style="font-size: 18px; color: #ffa500;">VEHICLES PASSED</div>
       <div id="pass-count" style="font-size: 36px; font-weight: bold; color: white;">0</div>
+      ${mobileStatsHTML}
     `;
     document.body.appendChild(counterDiv);
 
     // Store references
     this.counterElement = document.getElementById('pass-count');
+    this.bestScoreElement = this.isMobile ? document.getElementById('player-best') : null;
   }
 
   update(playerPosition, trafficSystem, playerSpeed) {
@@ -143,21 +162,38 @@ export class VehiclePassCounter {
 
       // Animate the ring
       const startTime = Date.now();
+      const animationState = { cancelled: false, frameId: null };
+      this.activeAnimations.add(animationState);
+
       const animate = () => {
+        if (animationState.cancelled) {
+          // Animation was cancelled - clean up immediately
+          if (this.game.scene) {
+            this.game.scene.remove(ring);
+          }
+          geometry.dispose();
+          material.dispose();
+          this.activeAnimations.delete(animationState);
+          return;
+        }
+
         const elapsed = Date.now() - startTime;
         const progress = elapsed / 500; // 0.5 second animation
 
         if (progress < 1) {
           ring.scale.set(1 + progress * 2, 1 + progress * 2, 1);
           ring.material.opacity = 0.8 * (1 - progress);
-          requestAnimationFrame(animate);
+          animationState.frameId = requestAnimationFrame(animate);
         } else {
-          this.game.scene.remove(ring);
+          if (this.game.scene) {
+            this.game.scene.remove(ring);
+          }
           geometry.dispose();
           material.dispose();
+          this.activeAnimations.delete(animationState);
         }
       };
-      animate();
+      animationState.frameId = requestAnimationFrame(animate);
     }
   }
 
@@ -206,11 +242,68 @@ export class VehiclePassCounter {
     this.resetCombo();
   }
 
+  async fetchPlayerBest() {
+    if (!this.isMobile) return; // Only needed on mobile
+
+    try {
+      const playerId = this.game.multiplayerManager?.playerId || this.game.multiplayer?.playerId;
+      if (!playerId) {
+        console.log('No player ID available yet for fetching best score');
+        return;
+      }
+
+      const serverUrl = this.game.multiplayerManager?.serverUrl || this.game.multiplayer?.serverUrl || 'http://localhost:8080';
+
+      // Fetch player's best score
+      const response = await fetch(`${serverUrl}/api/leaderboard/player/${playerId}`);
+      const data = await response.json();
+
+      if (data.success && data.bestScore) {
+        this.playerBest = data.bestScore.vehicles_passed;
+
+        // Fetch player's rank
+        const contextResponse = await fetch(`${serverUrl}/api/leaderboard/context/${playerId}`);
+        const contextData = await contextResponse.json();
+
+        if (contextData.success && contextData.playerRank) {
+          this.playerRank = contextData.playerRank;
+        }
+
+        this.updateBestScoreDisplay();
+      }
+    } catch (error) {
+      console.error('Error fetching player best score:', error);
+    }
+  }
+
+  updateBestScoreDisplay() {
+    if (!this.bestScoreElement) return;
+
+    const bestText = this.playerBest !== null ? this.playerBest : '--';
+    const rankText = this.playerRank !== null ? this.playerRank : '--';
+
+    this.bestScoreElement.innerHTML = `Best: <span style="color: #00ff00;">${bestText}</span> | Rank: <span style="color: #ffa500;">#${rankText}</span>`;
+  }
+
   dispose() {
+    // Cancel all active animations
+    this.activeAnimations.forEach(animationState => {
+      animationState.cancelled = true;
+      if (animationState.frameId) {
+        cancelAnimationFrame(animationState.frameId);
+      }
+    });
+    this.activeAnimations.clear();
+
     // Clean up UI elements
     const counterDiv = document.getElementById('vehicle-counter');
     if (counterDiv) {
       counterDiv.remove();
     }
+
+    // Clear references
+    this.counterElement = null;
+    this.bestScoreElement = null;
+    this.game = null;
   }
 }

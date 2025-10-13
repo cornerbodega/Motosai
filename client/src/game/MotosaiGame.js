@@ -38,6 +38,7 @@ import { DeviceDetection } from "../utils/DeviceDetection.js";
 import { MobileTouchController } from "../controls/MobileTouchController.js";
 import { VehiclePassCounter } from "./VehiclePassCounter.js";
 import { LeaderboardUI } from "./LeaderboardUI.js";
+import { AccountModal } from "./AccountModal.js";
 // PowerupSystem removed
 
 export class MotosaiGame {
@@ -66,7 +67,7 @@ export class MotosaiGame {
     console.log("  stoppa.cleanup() - Force cleanup");
     console.log("  stoppa.takeSnapshot() - Take memory snapshot");
 
-    // Material tracking for debugging
+    // Material tracking and aggressive memory cleanup
     this.materialTrackingInterval = setInterval(() => {
       if (window.materialTracker) {
         window.materialTracker.logStats();
@@ -77,6 +78,19 @@ export class MotosaiGame {
             "color: #ff0000; font-weight: bold"
           );
           window.materialTracker.findLeakSource();
+        }
+      }
+
+      // Log memory stats
+      if (performance.memory) {
+        const usedMB = (performance.memory.usedJSHeapSize / (1024 * 1024)).toFixed(1);
+        const totalMB = (performance.memory.totalJSHeapSize / (1024 * 1024)).toFixed(1);
+        console.log(`💾 Memory: ${usedMB}MB / ${totalMB}MB`);
+
+        // Warn if memory usage is high
+        if (performance.memory.usedJSHeapSize > 150 * 1024 * 1024) {
+          console.warn(`⚠️ HIGH MEMORY USAGE: ${usedMB}MB - Triggering cleanup`);
+          this.performMemoryCleanup();
         }
       }
     }, 5000); // Every 5 seconds
@@ -178,6 +192,8 @@ export class MotosaiGame {
     // Track active timers to prevent memory leaks
     this.activeTimers = new Set();
     this.activeChatTimers = new Set();
+    this.countdownInterval = null; // Track countdown intervals
+    this.raceCountdownInterval = null; // Track race countdown intervals
 
     // Day/night cycle system (120-second full cycle)
     this.dayCycleEnabled = true;
@@ -583,6 +599,23 @@ export class MotosaiGame {
               console.log('Day/night cycle started (60s per day)');
             } else {
               console.log('Day/night cycle stopped');
+            }
+          }
+        }
+      ]
+    });
+
+    // Add debug options
+    this.devMenu.addSection({
+      name: 'Debug Options',
+      buttons: [
+        {
+          label: () => this.trafficSystem?.debugBoundingBoxes ? '✅ Hide Collision Boxes' : '📦 Show Collision Boxes',
+          onClick: () => {
+            if (this.trafficSystem) {
+              const newState = !this.trafficSystem.debugBoundingBoxes;
+              this.trafficSystem.setDebugBoundingBoxes(newState);
+              console.log(`Vehicle collision boxes: ${newState ? 'ON' : 'OFF'}`);
             }
           }
         }
@@ -1164,9 +1197,10 @@ export class MotosaiGame {
     // For backward compatibility
     this.traffic = this.trafficSystem;
 
-    // Initialize vehicle pass counter and leaderboard
+    // Initialize vehicle pass counter, leaderboard, account modal, and placement toast
     this.vehiclePassCounter = new VehiclePassCounter(this);
     this.leaderboardUI = new LeaderboardUI(this);
+    this.accountModal = new AccountModal(this);
 
     // Setup stats update interval (every 10 seconds)
     this.statsUpdateInterval = setInterval(() => {
@@ -1192,6 +1226,16 @@ export class MotosaiGame {
             data.username,
             data.vehiclesPassed
           );
+        }
+      });
+
+      // Listen for score submission result
+      this.multiplayer.socket.on('score-submitted', (result) => {
+        console.log('Score submitted result:', result);
+
+        // Update mobile stats display if on mobile
+        if (this.vehiclePassCounter && this.vehiclePassCounter.isMobile) {
+          this.vehiclePassCounter.fetchPlayerBest();
         }
       });
     }
@@ -1265,7 +1309,7 @@ export class MotosaiGame {
         hapticFeedback: true,
         controlLayout: 'joystick', // or 'zones'
         sensitivity: {
-          lean: 1.0,
+          lean: 1.3, // Increased to 1.3 to compensate for InputController smoothing and reach max lean
           throttle: 1.0,
           brake: 1.0
         },
@@ -1524,6 +1568,14 @@ export class MotosaiGame {
       // Update minimap with correct player ID
       if (this.minimap && this.multiplayer.playerId) {
         this.minimap.setLocalPlayer(this.multiplayer.playerId);
+      }
+
+      // Refresh leaderboard with player ID
+      console.log('🔍 Checking leaderboard UI:', this.leaderboardUI, 'Player ID:', this.multiplayer.playerId);
+      if (this.leaderboardUI) {
+        this.leaderboardUI.onPlayerConnected();
+      } else {
+        console.warn('⚠️ Leaderboard UI not found when player connected');
       }
 
       // Add multiplayer status to HUD
@@ -2011,13 +2063,14 @@ export class MotosaiGame {
     this.container.appendChild(countdown);
 
     let count = 3;
-    const countInterval = setInterval(() => {
+    this.raceCountdownInterval = setInterval(() => {
       if (count > 0) {
         countdown.textContent = count;
         count--;
       } else {
         countdown.textContent = "GO!";
-        clearInterval(countInterval);
+        clearInterval(this.raceCountdownInterval);
+        this.raceCountdownInterval = null;
         setTimeout(() => {
           countdown.remove();
           this.startRace(opponentId ? "friend" : "ai", distance, opponentId);
@@ -2095,7 +2148,7 @@ export class MotosaiGame {
     this.countdownValue = 3;
     this.isPaused = true; // Pause game during countdown
 
-    const countdownInterval = setInterval(() => {
+    this.countdownInterval = setInterval(() => {
       if (this.countdownValue > 0) {
         this.showGameMessage(this.countdownValue.toString(), "info");
         if (this.audioManager) {
@@ -2103,7 +2156,8 @@ export class MotosaiGame {
         }
         this.countdownValue--;
       } else {
-        clearInterval(countdownInterval);
+        clearInterval(this.countdownInterval);
+        this.countdownInterval = null;
         this.showGameMessage("GO!", "info");
         if (this.audioManager) {
           this.audioManager.play("revEngine", { clone: true, volume: 0.8 });
@@ -2344,35 +2398,26 @@ export class MotosaiGame {
       const smoothedInputs = this.inputController.smoothedInputs;
 
       controls.throttle = smoothedInputs.throttle || 0;
-      controls.brake = smoothedInputs.frontBrake || 0;
+      // Use the maximum of front and rear brake for the combined brake value
+      controls.brake = Math.max(smoothedInputs.frontBrake || 0, smoothedInputs.rearBrake || 0);
       controls.steer = smoothedInputs.steer || smoothedInputs.lean || 0;
 
-      // Debug log mobile inputs (always show when any input is active)
-      if (controls.throttle > 0 || controls.brake > 0 || Math.abs(controls.steer) > 0.01) {
-        console.log('📱 Mobile controls:', {
-          throttle: controls.throttle.toFixed(3),
-          brake: controls.brake.toFixed(3),
-          steer: controls.steer.toFixed(3),
-          rawInputs: this.inputController.rawInputs
-        });
+      // Debug: Log when steering is applied
+      if (Math.abs(controls.steer) > 0.1 && Math.random() < 0.05) {
+        console.log('🎮 Applying steer:', controls.steer.toFixed(2), 'from smoothed:', (smoothedInputs.steer || 0).toFixed(2), 'lean:', (smoothedInputs.lean || 0).toFixed(2));
       }
     } else {
       // Desktop keyboard controls
-      // Throttle
-      if (this.keys["KeyW"] || this.keys["ArrowUp"]) {
-        controls.throttle = 1;
-        // Debug log (only occasionally to avoid spam)
-        if (Math.random() < 0.02) {
-          console.log('🚀 Throttle applied:', controls.throttle, 'Current speed:', this.physics.getState?.()?.speed || 'N/A');
-        }
-      }
 
-      // Brakes (removed Space since it's now camera toggle)
-      if (this.keys["KeyS"] || this.keys["ArrowDown"]) {
+      // Check throttle and brake - if both pressed, brake wins (safety first)
+      const throttlePressed = this.keys["KeyW"] || this.keys["ArrowUp"];
+      const brakePressed = this.keys["KeyS"] || this.keys["ArrowDown"] || this.keys["ShiftLeft"] || this.keys["ShiftRight"];
+
+      // Brake has priority over throttle (safety first)
+      if (brakePressed) {
         controls.brake = 1;
-      } else if (this.keys["ShiftLeft"] || this.keys["ShiftRight"]) {
-        // Shift keys for front brake
-        controls.brake = 1;
+      } else if (throttlePressed) {
+        controls.throttle = 1;
       }
 
       // Steering (left/right)
@@ -2407,9 +2452,10 @@ export class MotosaiGame {
     }
 
     // Brakes (removed Space since it's now camera toggle, use Shift for front brake)
+    // Match mobile brake values: frontBrake: 0.6, rearBrake: 0.8
     if (this.keys["KeyS"] || this.keys["ArrowDown"]) {
-      rawInputs.frontBrake = 0.8;
-      rawInputs.rearBrake = 0.5;
+      rawInputs.frontBrake = 0.6;
+      rawInputs.rearBrake = 0.8;
     } else if (this.keys["ShiftLeft"] || this.keys["ShiftRight"]) {
       rawInputs.frontBrake = 1;
     }
@@ -3112,12 +3158,18 @@ export class MotosaiGame {
     this.isDead = true;
 
     // Submit final score to leaderboard
+    console.log('🎯 Death triggered - checking submission conditions:');
+    console.log('  multiplayer exists:', !!this.multiplayer);
+    console.log('  socket exists:', !!this.multiplayer?.socket);
+    console.log('  socket connected:', this.multiplayer?.socket?.connected);
+    console.log('  vehiclePassCounter exists:', !!this.vehiclePassCounter);
+
     if (this.multiplayer?.socket && this.vehiclePassCounter) {
       const finalStats = this.vehiclePassCounter.getSessionStats();
+      console.log('✅ Submitting final score:', finalStats);
       this.multiplayer.socket.emit('submit-score', {
         stats: finalStats
       });
-      console.log('Submitting final score:', finalStats);
 
       // Refresh leaderboard after a short delay to show updated rankings
       setTimeout(() => {
@@ -3125,6 +3177,13 @@ export class MotosaiGame {
           this.leaderboardUI.fetchLeaderboard();
         }
       }, 1000);
+    } else {
+      console.error('❌ Score NOT submitted - missing requirements:', {
+        hasMultiplayer: !!this.multiplayer,
+        hasSocket: !!this.multiplayer?.socket,
+        socketConnected: this.multiplayer?.socket?.connected,
+        hasVehicleCounter: !!this.vehiclePassCounter
+      });
     }
 
     // Trigger UFO escape animation
@@ -4037,6 +4096,48 @@ export class MotosaiGame {
     this.isPaused = false;
   }
 
+  performMemoryCleanup() {
+    console.log('🧹 Performing aggressive memory cleanup...');
+
+    // Cleanup old blood tracks
+    if (this.bloodTrackSystem) {
+      const trackCount = this.bloodTrackSystem.bloodTracks.length;
+      if (trackCount > this.bloodTrackSystem.maxTracks * 0.5) {
+        console.log(`Cleaning up ${trackCount} blood tracks`);
+        while (this.bloodTrackSystem.bloodTracks.length > this.bloodTrackSystem.maxTracks * 0.3) {
+          const oldTrack = this.bloodTrackSystem.bloodTracks.shift();
+          if (oldTrack && oldTrack.mesh) {
+            this.scene.remove(oldTrack.mesh);
+            oldTrack.mesh.visible = false;
+            this.bloodTrackSystem.trackPool.push(oldTrack.mesh);
+          }
+        }
+      }
+    }
+
+    // Limit vehicles more aggressively
+    if (this.traffic) {
+      const vehicleCount = this.traffic.vehicles.length;
+      if (vehicleCount > 15) {
+        console.log(`Reducing vehicles from ${vehicleCount} to 15`);
+        while (this.traffic.vehicles.length > 15) {
+          const vehicle = this.traffic.vehicles.pop();
+          if (vehicle && vehicle.mesh) {
+            this.scene.remove(vehicle.mesh);
+            this.traffic.disposeVehicleMesh(vehicle.mesh);
+          }
+        }
+      }
+    }
+
+    // Run stoppa cleanup
+    if (this.stoppa) {
+      this.stoppa.cleanup();
+    }
+
+    console.log('✅ Memory cleanup complete');
+  }
+
   pause() {
     this.isPaused = !this.isPaused;
   }
@@ -4088,6 +4189,16 @@ export class MotosaiGame {
     if (this.statsUpdateInterval) {
       clearInterval(this.statsUpdateInterval);
       this.statsUpdateInterval = null;
+    }
+
+    // Clear countdown intervals
+    if (this.countdownInterval) {
+      clearInterval(this.countdownInterval);
+      this.countdownInterval = null;
+    }
+    if (this.raceCountdownInterval) {
+      clearInterval(this.raceCountdownInterval);
+      this.raceCountdownInterval = null;
     }
 
     // Clear other timer references

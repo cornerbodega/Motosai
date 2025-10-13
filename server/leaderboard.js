@@ -6,6 +6,10 @@ class LeaderboardManager {
     this.leaderboardCache = null;
     this.cacheExpiry = 0;
     this.cacheTimeout = 30000; // Cache for 30 seconds
+    this.sessionTimeout = 30 * 60 * 1000; // 30 minutes in milliseconds
+
+    // Start periodic cleanup to prevent memory leaks from abandoned sessions
+    this.startSessionCleanup();
   }
 
   // Update player stats during session (in memory)
@@ -17,7 +21,8 @@ class LeaderboardManager {
       maxSpeed: 0,
       distanceTraveled: 0,
       sessionStart: Date.now(),
-      sessionId: stats.sessionId
+      sessionId: stats.sessionId,
+      lastActivity: Date.now()
     };
 
     if (stats.vehiclesPassed !== undefined) {
@@ -29,6 +34,9 @@ class LeaderboardManager {
     if (stats.distanceTraveled !== undefined) {
       current.distanceTraveled = stats.distanceTraveled;
     }
+
+    // Update last activity timestamp
+    current.lastActivity = Date.now();
 
     this.sessionStats.set(playerId, current);
     return current;
@@ -86,20 +94,24 @@ class LeaderboardManager {
     }
   }
 
-  // Get player's rank
+  // Get player's rank (based on deduplicated leaderboard)
   async getPlayerRank(playerId, vehiclesPassed) {
     try {
-      const { count, error } = await supabase
-        .from('mo_leaderboard')
-        .select('*', { count: 'exact', head: true })
-        .gt('vehicles_passed', vehiclesPassed);
+      // Get the full deduplicated leaderboard
+      const allScores = await this.getTopScores(1000);
 
-      if (error) {
-        console.error('Error getting player rank:', error);
-        return null;
+      // Find player's position
+      const playerIndex = allScores.findIndex(e =>
+        e.player_id === playerId && e.vehicles_passed === vehiclesPassed
+      );
+
+      if (playerIndex === -1) {
+        // Player not found - count how many unique players are ahead
+        const playersAhead = allScores.filter(e => e.vehicles_passed > vehiclesPassed);
+        return playersAhead.length + 1;
       }
 
-      return (count || 0) + 1;
+      return playerIndex + 1;
     } catch (error) {
       console.error('Error in getPlayerRank:', error);
       return null;
@@ -229,6 +241,44 @@ class LeaderboardManager {
   // Clear session data
   clearSession(playerId) {
     this.sessionStats.delete(playerId);
+  }
+
+  // Start periodic cleanup of stale sessions to prevent memory leaks
+  startSessionCleanup() {
+    // Run cleanup every 5 minutes
+    this.cleanupInterval = setInterval(() => {
+      this.cleanupStaleSessions();
+    }, 5 * 60 * 1000);
+
+    // Ensure cleanup doesn't prevent process from exiting
+    if (this.cleanupInterval.unref) {
+      this.cleanupInterval.unref();
+    }
+  }
+
+  // Remove sessions that haven't had activity in over 30 minutes
+  cleanupStaleSessions() {
+    const now = Date.now();
+    let cleanedCount = 0;
+
+    for (const [playerId, session] of this.sessionStats.entries()) {
+      if (now - session.lastActivity > this.sessionTimeout) {
+        this.sessionStats.delete(playerId);
+        cleanedCount++;
+      }
+    }
+
+    if (cleanedCount > 0) {
+      console.log(`🧹 Cleaned up ${cleanedCount} stale session(s) from memory`);
+    }
+  }
+
+  // Stop cleanup timer (for graceful shutdown)
+  stopSessionCleanup() {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+    }
   }
 }
 

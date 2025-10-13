@@ -26,32 +26,15 @@ export class DeviceDetection {
     // Screen size check
     const isSmallScreen = window.innerWidth <= 768;
 
-    // Debug logging
-    console.log('🔍 DeviceDetection.isMobile() DEBUG:', {
-      isMobileUA,
-      hasFinePointer,
-      hasCoarsePointer,
-      isSmallScreen,
-      screenWidth: window.innerWidth
-    });
-
     // If user agent says mobile, return true
-    if (isMobileUA) {
-      console.log('✅ Detected as MOBILE via user agent');
-      return true;
-    }
+    if (isMobileUA) return true;
 
     // If has fine pointer (mouse/trackpad), it's a desktop - period
     // This catches touchscreen laptops, Macs with Touch Bar, etc.
-    if (hasFinePointer) {
-      console.log('✅ Detected as DESKTOP via fine pointer (mouse/trackpad)');
-      return false;
-    }
+    if (hasFinePointer) return false;
 
     // Only if primary pointer is coarse (touch) AND small screen = mobile
-    const result = (hasCoarsePointer && isSmallScreen);
-    console.log(`✅ Final result: ${result ? 'MOBILE' : 'DESKTOP'} (coarse pointer + small screen check)`);
-    return result;
+    return (hasCoarsePointer && isSmallScreen);
   }
 
   static isTablet() {

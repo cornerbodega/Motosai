@@ -16,7 +16,8 @@ export class GraphicsSettings {
       backgroundQuality: 'high', // low (no photos), medium (cached), high (dynamic)
       fogDistance: 'medium',
       postProcessing: false,
-      autoAdjust: true
+      autoAdjust: true,
+      debugBoundingBoxes: false // Debug: Show vehicle collision boxes
     };
     
     // Preset configurations
@@ -263,6 +264,19 @@ export class GraphicsSettings {
             <option value="far" ${this.customSettings.fogDistance === 'far' ? 'selected' : ''}>Far (2000m)</option>
           </select>
         </div>
+
+        <h3 style="font-size: 16px; margin: 20px 0 15px 0; color: #aaa; border-top: 1px solid #333; padding-top: 15px;">Debug Options</h3>
+
+        <div style="margin-bottom: 15px;">
+          <label style="display: flex; align-items: center; cursor: pointer;">
+            <input type="checkbox" id="debug-boxes-toggle" ${this.customSettings.debugBoundingBoxes ? 'checked' : ''}
+                   style="margin-right: 8px;">
+            Show Vehicle Collision Boxes
+          </label>
+          <div style="font-size: 11px; color: #888; margin-top: 4px; margin-left: 24px;">
+            Shows green wireframe boxes around vehicles to visualize collision detection
+          </div>
+        </div>
       </div>
       
       <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid #444;">
@@ -348,7 +362,13 @@ export class GraphicsSettings {
       this.customSettings.fogDistance = e.target.value;
       this.customSettings.preset = 'custom';
     });
-    
+
+    const debugBoxesToggle = document.getElementById('debug-boxes-toggle');
+    debugBoxesToggle?.addEventListener('change', (e) => {
+      this.customSettings.debugBoundingBoxes = e.target.checked;
+      this.customSettings.preset = 'custom';
+    });
+
     // Apply and Reset buttons
     const applyButton = document.getElementById('apply-settings');
     applyButton?.addEventListener('click', () => {
@@ -403,7 +423,8 @@ export class GraphicsSettings {
       backgroundQuality: 'high',
       fogDistance: 'medium',
       postProcessing: false,
-      autoAdjust: true
+      autoAdjust: true,
+      debugBoundingBoxes: false
     };
     this.performanceManager.enableAutoAdjust(true);
     this.saveSettings();

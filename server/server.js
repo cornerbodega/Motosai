@@ -58,6 +58,65 @@ app.get('/api/hello', (req, res) => {
   });
 });
 
+// Visitor counter - will be loaded from database on startup
+let visitorCount = 0;
+
+// Load visitor count from database on startup
+(async () => {
+  try {
+    const { data, error } = await supabase
+      .from('mo_visitors')
+      .select('count')
+      .order('timestamp', { ascending: false })
+      .limit(1);
+
+    if (!error && data && data.length > 0) {
+      visitorCount = data[0].count || 0;
+      console.log(`✅ Loaded visitor count from database: ${visitorCount}`);
+    } else {
+      console.log('ℹ️ No visitor count in database, starting from 0');
+    }
+  } catch (error) {
+    console.log('ℹ️ Could not load visitor count from database (table may not exist), starting from 0');
+  }
+})();
+
+// Get and increment visitor count
+app.post('/api/visitors/increment', async (req, res) => {
+  try {
+    visitorCount++;
+
+    // Optionally persist to Supabase (create mo_visitors table if needed)
+    try {
+      await supabase
+        .from('mo_visitors')
+        .insert({
+          timestamp: new Date().toISOString(),
+          count: visitorCount
+        });
+    } catch (dbError) {
+      // Silently fail if table doesn't exist - in-memory counter still works
+      console.log('Visitor count not persisted to database (table may not exist)');
+    }
+
+    res.json({
+      success: true,
+      count: visitorCount
+    });
+  } catch (error) {
+    console.error('Error incrementing visitor count:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get current visitor count without incrementing
+app.get('/api/visitors/count', (req, res) => {
+  res.json({
+    success: true,
+    count: visitorCount
+  });
+});
+
 // Debug report endpoint for memory leak tracking
 app.post('/api/save-debug-report', async (req, res) => {
   try {
@@ -118,8 +177,8 @@ sessions.set('global', {
 
 // Create or join session
 app.post('/api/session/join', async (req, res) => {
-  const { username, sessionName = 'global' } = req.body;
-  
+  const { playerId: existingPlayerId, username, sessionName = 'global' } = req.body;
+
   try {
     // Use in-memory storage instead of Supabase
     let session = sessions.get(sessionName);
@@ -134,14 +193,20 @@ app.post('/api/session/join', async (req, res) => {
       sessions.set(sessionName, session);
     }
 
-    // Create player
-    const playerId = uuidv4();
+    // Use existing player ID if provided, otherwise generate new one
+    const playerId = existingPlayerId || uuidv4();
     const player = {
       id: playerId,
       username: username || `Rider_${playerId.substring(0, 6)}`,
       bike_color: `#${Math.floor(Math.random()*16777215).toString(16)}`
     };
     players.set(playerId, player);
+
+    if (existingPlayerId) {
+      console.log(`♻️ Returning player ${player.username} (${playerId})`);
+    } else {
+      console.log(`🆕 New player ${player.username} (${playerId})`);
+    }
 
     // Create player state
     const playerState = {
@@ -252,20 +317,252 @@ app.get('/api/leaderboard/player/:playerId', async (req, res) => {
   }
 });
 
+// Get player position with neighbors (for contextual leaderboard display)
+app.get('/api/leaderboard/context/:playerId', async (req, res) => {
+  const { playerId } = req.params;
+  const isDaily = req.query.daily === 'true';
+
+  try {
+    // Get full leaderboard
+    const allScores = isDaily
+      ? await leaderboardManager.getDailyTopScores(1000)
+      : await leaderboardManager.getTopScores(1000);
+
+    console.log(`🔍 Context request for player: ${playerId}`);
+    console.log(`📊 Total scores in leaderboard: ${allScores.length}`);
+
+    // Find player's index
+    const playerIndex = allScores.findIndex(e => e.player_id === playerId);
+    console.log(`📍 Player found at index: ${playerIndex}`);
+
+    let contextEntries = [];
+    let playerRank = null;
+
+    if (playerIndex !== -1) {
+      // Player found - get their rank
+      playerRank = playerIndex + 1;
+      console.log(`🏆 Player rank: ${playerRank}`);
+
+      // Get one above, player, and one below with their ranks
+      if (playerIndex > 0) {
+        const above = { ...allScores[playerIndex - 1], rank: playerIndex };
+        contextEntries.push(above);
+        console.log(`⬆️  Above: ${above.username} (rank ${above.rank}, score ${above.vehicles_passed})`);
+      }
+
+      const me = { ...allScores[playerIndex], rank: playerIndex + 1 };
+      contextEntries.push(me);
+      console.log(`👤 Me: ${me.username} (rank ${me.rank}, score ${me.vehicles_passed})`);
+
+      if (playerIndex < allScores.length - 1) {
+        const below = { ...allScores[playerIndex + 1], rank: playerIndex + 2 };
+        contextEntries.push(below);
+        console.log(`⬇️  Below: ${below.username} (rank ${below.rank}, score ${below.vehicles_passed})`);
+      }
+    } else {
+      // Player not in leaderboard - return top 3 with ranks
+      console.log(`❌ Player not found in leaderboard - returning top 3`);
+      contextEntries = allScores.slice(0, 3).map((entry, index) => ({
+        ...entry,
+        rank: index + 1
+      }));
+      console.log(`📋 Top 3:`, contextEntries.map(e => `${e.username} (${e.vehicles_passed})`));
+    }
+
+    res.json({
+      success: true,
+      entries: contextEntries,
+      playerRank: playerRank,
+      totalPlayers: allScores.length
+    });
+  } catch (error) {
+    console.error('Error fetching leaderboard context:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Account Management Endpoints
+
+// Helper function to verify Supabase JWT
+async function verifySupabaseToken(authHeader) {
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    throw new Error('No authorization token provided');
+  }
+
+  const token = authHeader.substring(7);
+  const { data, error } = await supabase.auth.getUser(token);
+
+  if (error) throw error;
+  return data.user;
+}
+
+// Store player-to-user mappings in memory
+const playerUserMappings = new Map(); // playerId -> userId
+
+// Link player ID to Supabase user
+app.post('/api/account/link', async (req, res) => {
+  try {
+    const user = await verifySupabaseToken(req.headers.authorization);
+    const { playerId, userId } = req.body;
+
+    if (!playerId || !userId) {
+      return res.status(400).json({
+        success: false,
+        error: 'playerId and userId are required'
+      });
+    }
+
+    // Verify that the user ID matches the authenticated user
+    if (user.id !== userId) {
+      return res.status(403).json({
+        success: false,
+        error: 'Unauthorized: User ID mismatch'
+      });
+    }
+
+    // Store the mapping
+    playerUserMappings.set(playerId, userId);
+
+    console.log(`🔗 Linked player ${playerId} to user ${userId}`);
+
+    res.json({
+      success: true,
+      message: 'Player linked to account successfully'
+    });
+
+  } catch (error) {
+    console.error('Error linking player to user:', error);
+    res.status(401).json({
+      success: false,
+      error: error.message || 'Authentication failed'
+    });
+  }
+});
+
+// Rename player account (requires authentication)
+app.post('/api/account/rename', async (req, res) => {
+  try {
+    const user = await verifySupabaseToken(req.headers.authorization);
+    const { playerId, newUsername } = req.body;
+
+    if (!playerId || !newUsername) {
+      return res.status(400).json({
+        success: false,
+        error: 'playerId and newUsername are required'
+      });
+    }
+
+    // Validate username format
+    if (!/^[a-zA-Z0-9_]{3,20}$/.test(newUsername)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid username format. Use 3-20 characters (letters, numbers, underscores only)'
+      });
+    }
+
+    // Verify that this player ID is linked to the authenticated user
+    const linkedUserId = playerUserMappings.get(playerId);
+    if (!linkedUserId || linkedUserId !== user.id) {
+      return res.status(403).json({
+        success: false,
+        error: 'Unauthorized: This player ID is not linked to your account'
+      });
+    }
+
+    // Check if username is already taken (in leaderboard)
+    const existingScores = await leaderboardManager.getTopScores(1000);
+    const usernameTaken = existingScores.some(score =>
+      score.username.toLowerCase() === newUsername.toLowerCase() &&
+      score.player_id !== playerId
+    );
+
+    if (usernameTaken) {
+      return res.status(409).json({
+        success: false,
+        error: 'Username already taken'
+      });
+    }
+
+    // Update username in all leaderboard entries for this player
+    // Note: This would typically be done with a database query
+    // For now, we'll update it in memory and future submissions will use the new username
+    const player = players.get(playerId);
+    if (player) {
+      player.username = newUsername;
+    }
+
+    // Update all existing leaderboard entries in Supabase
+    try {
+      const { error: updateError } = await supabase
+        .from('mo_leaderboard')
+        .update({ username: newUsername })
+        .eq('player_id', playerId);
+
+      if (updateError) {
+        console.error('Error updating leaderboard entries:', updateError);
+        // Don't fail the request - the update will apply to future scores
+      }
+    } catch (err) {
+      console.error('Error updating leaderboard:', err);
+    }
+
+    console.log(`✏️ Renamed player ${playerId} to ${newUsername}`);
+
+    res.json({
+      success: true,
+      message: 'Username updated successfully',
+      newUsername
+    });
+
+  } catch (error) {
+    console.error('Error renaming account:', error);
+    res.status(401).json({
+      success: false,
+      error: error.message || 'Authentication failed'
+    });
+  }
+});
+
 // WebSocket connection handling
 io.on('connection', (socket) => {
   console.log('New client connected:', socket.id);
-  
-  // Send welcome message
+
+  // Send welcome message with visitor count (don't increment yet - wait for player-join)
   socket.emit('welcome', {
     message: 'Welcome to Motosai Multiplayer!',
     socketId: socket.id,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    visitorCount: visitorCount
   });
 
   // Handle player join
   socket.on('player-join', async (data) => {
-    const { playerId, sessionId, username } = data;
+    const { playerId, sessionId, username, isNewVisitor } = data;
+
+    // Only increment visitor count for NEW visitors (no localStorage record)
+    if (isNewVisitor) {
+      visitorCount++;
+      console.log(`🆕 NEW VISITOR: ${username} - Total visitors: ${visitorCount}`);
+
+      // Broadcast updated visitor count to all clients
+      io.emit('visitor-count-update', { count: visitorCount });
+
+      // Optionally persist to Supabase (create mo_visitors table if needed)
+      try {
+        await supabase
+          .from('mo_visitors')
+          .insert({
+            timestamp: new Date().toISOString(),
+            count: visitorCount,
+            player_id: playerId
+          });
+      } catch (dbError) {
+        // Silently fail if table doesn't exist - in-memory counter still works
+        console.log('Visitor count not persisted to database (table may not exist)');
+      }
+    } else {
+      console.log(`♻️ RETURNING VISITOR: ${username} - Not incrementing count`);
+    }
     
     // Store player info
     activePlayers.set(playerId, {

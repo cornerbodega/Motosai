@@ -370,14 +370,7 @@ export class BackgroundSystem {
       // Position relative to player, fixed direction in sky
       this.sun.position.copy(playerPosition).add(this.sunRelativePosition);
 
-      // Debug: Log actual positions every 60 frames
-      if (!this._debugFrameCount) this._debugFrameCount = 0;
-      this._debugFrameCount++;
-      if (this._debugFrameCount % 60 === 0) {
-        console.log('Sun world position:', this.sun.position, 'visible:', this.sun.visible);
-        console.log('Player position:', playerPosition);
-        console.log('Sun relative offset:', this.sunRelativePosition);
-      }
+      // Sun position updated (debug disabled)
 
       // Update glow view vector
       if (this.sunGlow) {

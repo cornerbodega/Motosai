@@ -43,6 +43,7 @@ export class UFORaceIntro {
     this.ufoTransitionDuration = 2000; // 2 seconds
     this.ufoStartPosition = null;
     this.ufoStartScale = null;
+    this.stopEarthSpinning = false; // Flag to stop Earth rotation when START is clicked
 
     // Loaders
     this.gltfLoader = new GLTFLoader();
@@ -383,14 +384,16 @@ export class UFORaceIntro {
     const elapsed = Date.now() - this.startTime;
     const progress = Math.min(elapsed / this.introDuration, 1);
 
-    // Rotate Earth and atmosphere slowly
-    if (this.earthModel) {
-      this.earthModel.rotation.y += 0.003;
-      this.earthModel.rotation.x += 0.001;
-    }
-    if (this.atmosphereModel) {
-      this.atmosphereModel.rotation.y += 0.003;
-      this.atmosphereModel.rotation.x += 0.001;
+    // Rotate Earth and atmosphere slowly (unless stopped by user)
+    if (!this.stopEarthSpinning) {
+      if (this.earthModel) {
+        this.earthModel.rotation.y += 0.003;
+        this.earthModel.rotation.x += 0.001;
+      }
+      if (this.atmosphereModel) {
+        this.atmosphereModel.rotation.y += 0.003;
+        this.atmosphereModel.rotation.x += 0.001;
+      }
     }
 
     // UFO animation - gentle floating or transitioning to Earth
@@ -595,6 +598,9 @@ export class UFORaceIntro {
   }
 
   handleStartGame() {
+    // Stop Earth from spinning
+    this.stopEarthSpinning = true;
+
     // Remove UI immediately
     if (this.uiContainer) {
       this.uiContainer.remove();

@@ -186,6 +186,9 @@
   <body>
     <div id="gameContainer">
       <div id="loadingScreen">
+        <div id="visitor-counter" style="color: white; font-size: 14px; margin-bottom: 20px; opacity: 0.7;">
+          Visitors: <span id="visitor-count">...</span>
+        </div>
         <h1>🏍️ MOTOSAI</h1>
         <p style="color: white; font-size: 18px; margin-bottom: 20px; opacity: 0.9;">by marvin.technology</p>
         <div id="loadingBar">
@@ -194,6 +197,9 @@
       </div>
 
       <div id="startScreen">
+        <div id="visitor-counter-start" style="color: white; font-size: 14px; margin-bottom: 20px; opacity: 0.7;">
+          Visitors: <span id="visitor-count-start">...</span>
+        </div>
         <h1>🏍️ MOTOSAI</h1>
         <p style="color: white; font-size: 18px; margin-bottom: 10px; opacity: 0.9;">by marvin.technology</p>
         <h2>Death Valley, USA</h2>
@@ -252,6 +258,36 @@
       let game = null;
       let isLoading = true;
 
+      // Fetch visitor count via REST API to avoid duplicate socket connections
+      const serverUrl = window.location.hostname === 'localhost'
+        ? 'http://localhost:8080'
+        : window.location.origin;
+
+      async function fetchVisitorCount() {
+        try {
+          const response = await fetch(`${serverUrl}/api/visitors/count`);
+          const data = await response.json();
+          if (data.success && data.count !== undefined) {
+            updateVisitorCount(data.count);
+          }
+        } catch (error) {
+          console.error('Failed to fetch visitor count:', error);
+        }
+      }
+
+      function updateVisitorCount(count) {
+        const countElement = document.getElementById('visitor-count');
+        const countElementStart = document.getElementById('visitor-count-start');
+        if (countElement) countElement.textContent = count.toLocaleString();
+        if (countElementStart) countElementStart.textContent = count.toLocaleString();
+      }
+
+      // Fetch initial count
+      fetchVisitorCount();
+
+      // Poll for updates every 3 seconds for more responsive updates
+      window.visitorCountInterval = setInterval(fetchVisitorCount, 3000);
+
       // Loading simulation
       function updateLoading() {
         const progress = document.getElementById("loadingProgress");
@@ -281,12 +317,24 @@
         }, 500);
       }
 
+      // Store pause handler to prevent memory leak when restarting game
+      let pauseHandler = null;
+
       window.startGame = function () {
         // Dispose of any existing game first
         if (game && game.dispose) {
           game.dispose();
           game = null;
         }
+
+        // Remove old pause handler if it exists to prevent memory leak
+        if (pauseHandler) {
+          window.removeEventListener("keydown", pauseHandler);
+          pauseHandler = null;
+        }
+
+        // Keep visitor count polling running throughout the game session
+        // Don't clear it - we want to see updates when new players join
 
         // Initialize game with default configuration
         // Color will be set by UFO intro
@@ -298,12 +346,13 @@
         game = new MotosaiGame(container, config);
         game.start();
 
-        // Setup pause
-        window.addEventListener("keydown", (e) => {
+        // Setup pause handler (save reference to remove later)
+        pauseHandler = (e) => {
           if (e.code === "KeyP") {
             togglePause();
           }
-        });
+        };
+        window.addEventListener("keydown", pauseHandler);
       };
 
       function togglePause() {
