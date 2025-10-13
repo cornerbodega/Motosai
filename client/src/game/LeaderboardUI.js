@@ -212,18 +212,6 @@ export class LeaderboardUI {
     header.appendChild(controlsRow1);
     header.appendChild(controlsRow2);
 
-    // Player stats section
-    const playerStats = document.createElement('div');
-    playerStats.id = 'player-stats';
-    playerStats.style.cssText = `
-      background: rgba(50, 100, 150, 0.2);
-      border-radius: 8px;
-      padding: 8px;
-      margin-bottom: 10px;
-      font-size: 12px;
-      display: none;
-    `;
-
     // Leaderboard list
     const listContainer = document.createElement('div');
     listContainer.id = 'leaderboard-list-container';
@@ -335,7 +323,6 @@ export class LeaderboardUI {
 
     // Assemble container
     container.appendChild(header);
-    container.appendChild(playerStats);
     container.appendChild(listContainer);
     container.appendChild(loading);
     container.appendChild(noData);
@@ -347,7 +334,6 @@ export class LeaderboardUI {
     this.listElement = list;
     this.loadingElement = loading;
     this.noDataElement = noData;
-    this.playerStatsElement = playerStats;
     this.allTimeTab = allTimeTab;
     this.dailyTab = dailyTab;
     this.titleElement = document.getElementById('leaderboard-title');
@@ -407,7 +393,6 @@ export class LeaderboardUI {
 
         if (playerData.success) {
           this.playerBest = playerData.bestScore;
-          this.updatePlayerStats();
         }
       } else {
         // No player ID - fetch top 3
@@ -570,27 +555,6 @@ export class LeaderboardUI {
     });
   }
 
-  updatePlayerStats() {
-    if (!this.playerBest) {
-      this.playerStatsElement.style.display = 'none';
-      return;
-    }
-
-    this.playerStatsElement.style.display = 'block';
-    const speedMph = Math.round((this.playerBest.max_speed || 0) * 2.237);
-
-    this.playerStatsElement.innerHTML = `
-      <div style="display: flex; justify-content: space-between; font-size: 11px;">
-        <span>Cars Passed:</span>
-        <span style="color: white; font-weight: bold;">${this.playerBest.vehicles_passed || 0}</span>
-      </div>
-      <div style="display: flex; justify-content: space-between; font-size: 11px;">
-        <span>Max Speed:</span>
-        <span style="color: white; font-weight: bold;">${speedMph} mph</span>
-      </div>
-    `;
-  }
-
   changeLeaderboardType(type) {
     this.leaderboardType = type;
     this.updateDisplay();
@@ -638,16 +602,12 @@ export class LeaderboardUI {
       this.controlsRow1.style.display = 'none';
       this.controlsRow2.style.display = 'none';
       document.getElementById('leaderboard-list-container').style.display = 'none';
-      this.playerStatsElement.style.display = 'none';
       this.minimizeBtn.innerHTML = '+';
     } else {
       this.container.style.height = 'auto';
       this.controlsRow1.style.display = 'flex';
       this.controlsRow2.style.display = 'flex';
       document.getElementById('leaderboard-list-container').style.display = 'block';
-      if (this.playerBest) {
-        this.playerStatsElement.style.display = 'block';
-      }
       this.minimizeBtn.innerHTML = '⎯';
     }
   }
@@ -761,7 +721,6 @@ export class LeaderboardUI {
     this.listElement = null;
     this.loadingElement = null;
     this.noDataElement = null;
-    this.playerStatsElement = null;
     this.allTimeTab = null;
     this.dailyTab = null;
     this.titleElement = null;
