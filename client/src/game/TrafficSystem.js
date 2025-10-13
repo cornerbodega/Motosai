@@ -438,49 +438,53 @@ export class TrafficSystem {
     }
 
     // Calculate bounding box in LOCAL space (before positioning in world)
-    // This gives us the actual dimensions of the scaled mesh
+    // This gives us the actual dimensions AND center of the scaled mesh
     vehicle.mesh.position.set(0, 0, 0); // Temp at origin
     vehicle.mesh.updateMatrixWorld(true);
 
     const localBBox = new THREE.Box3().setFromObject(vehicle.mesh);
     const meshSize = new THREE.Vector3();
+    const meshCenter = new THREE.Vector3();
     localBBox.getSize(meshSize);
-
-    // The bottom of the mesh in local space
-    const meshBottom = localBBox.min.y;
+    localBBox.getCenter(meshCenter);
 
     // Update vehicle dimensions to ACTUAL mesh size
     vehicle.width = meshSize.x;
     vehicle.height = meshSize.y;
     vehicle.length = meshSize.z;
 
-    // Y offset to place bottom at ground (ROAD_Y)
-    vehicle.meshYOffset = -meshBottom;
+    // Calculate offsets to position mesh so its geometry center is at vehicle.position
+    // and its bottom is at ROAD_Y
+    vehicle.meshXOffset = -meshCenter.x;
+    vehicle.meshYOffset = ROAD_CONSTANTS.ROAD_Y - localBBox.min.y; // Bottom at ROAD_Y
+    vehicle.meshZOffset = -meshCenter.z;
 
-    // NOW position the mesh in world space with the offset
+    // NOW position the mesh in world space with ALL offsets
+    // This ensures the mesh's geometry center is exactly at vehicle.position (horizontally)
+    // and the bottom is at ROAD_Y
     vehicle.mesh.position.set(
-      vehicle.position.x,
-      ROAD_CONSTANTS.ROAD_Y + vehicle.meshYOffset,
-      vehicle.position.z
+      vehicle.position.x + vehicle.meshXOffset,
+      vehicle.meshYOffset,
+      vehicle.position.z + vehicle.meshZOffset
     );
 
     // Debug logging for first vehicle of each type
     if (vehicle.type === 'semi' && !this._loggedSemi) {
       console.log('🚛 SEMI DEBUG:');
       console.log('  meshSize:', `${meshSize.x.toFixed(2)} x ${meshSize.y.toFixed(2)} x ${meshSize.z.toFixed(2)}`);
-      console.log('  vehicle dimensions:', `${vehicle.width.toFixed(2)} x ${vehicle.height.toFixed(2)} x ${vehicle.length.toFixed(2)}`);
-      console.log('  meshBottom:', meshBottom);
-      console.log('  meshYOffset:', vehicle.meshYOffset);
-      console.log('  finalY:', vehicle.mesh.position.y);
+      console.log('  meshCenter:', `${meshCenter.x.toFixed(2)}, ${meshCenter.y.toFixed(2)}, ${meshCenter.z.toFixed(2)}`);
+      console.log('  bboxMin:', `${localBBox.min.x.toFixed(2)}, ${localBBox.min.y.toFixed(2)}, ${localBBox.min.z.toFixed(2)}`);
+      console.log('  bboxMax:', `${localBBox.max.x.toFixed(2)}, ${localBBox.max.y.toFixed(2)}, ${localBBox.max.z.toFixed(2)}`);
+      console.log('  offsets (X,Y,Z):', `${vehicle.meshXOffset.toFixed(2)}, ${vehicle.meshYOffset.toFixed(2)}, ${vehicle.meshZOffset.toFixed(2)}`);
       this._loggedSemi = true;
     }
     if (!this._loggedCar) {
       console.log('🚗 CAR DEBUG:');
       console.log('  meshSize:', `${meshSize.x.toFixed(2)} x ${meshSize.y.toFixed(2)} x ${meshSize.z.toFixed(2)}`);
-      console.log('  vehicle dimensions:', `${vehicle.width.toFixed(2)} x ${vehicle.height.toFixed(2)} x ${vehicle.length.toFixed(2)}`);
-      console.log('  meshBottom:', meshBottom);
-      console.log('  meshYOffset:', vehicle.meshYOffset);
-      console.log('  finalY:', vehicle.mesh.position.y);
+      console.log('  meshCenter:', `${meshCenter.x.toFixed(2)}, ${meshCenter.y.toFixed(2)}, ${meshCenter.z.toFixed(2)}`);
+      console.log('  bboxMin:', `${localBBox.min.x.toFixed(2)}, ${localBBox.min.y.toFixed(2)}, ${localBBox.min.z.toFixed(2)}`);
+      console.log('  bboxMax:', `${localBBox.max.x.toFixed(2)}, ${localBBox.max.y.toFixed(2)}, ${localBBox.max.z.toFixed(2)}`);
+      console.log('  offsets (X,Y,Z):', `${vehicle.meshXOffset.toFixed(2)}, ${vehicle.meshYOffset.toFixed(2)}, ${vehicle.meshZOffset.toFixed(2)}`);
       this._loggedCar = true;
     }
 
@@ -1029,9 +1033,12 @@ export class TrafficSystem {
       }
     }
     
-    // Update mesh position using pre-calculated Y offset
-    vehicle.mesh.position.copy(vehicle.position);
-    vehicle.mesh.position.y = ROAD_CONSTANTS.ROAD_Y + (vehicle.meshYOffset || 0);
+    // Update mesh position using pre-calculated X, Y, Z offsets
+    vehicle.mesh.position.set(
+      vehicle.position.x + (vehicle.meshXOffset || 0),
+      vehicle.meshYOffset || ROAD_CONSTANTS.ROAD_Y,
+      vehicle.position.z + (vehicle.meshZOffset || 0)
+    );
     
     // Update brake lights with emissive glow
     if (vehicle.mesh.userData.brake1 && vehicle.mesh.userData.brake1.material) {
@@ -1519,9 +1526,12 @@ export class TrafficSystem {
         vehicle.speed = update.speed;
         vehicle.isBraking = update.isBraking;
 
-        // Update mesh position using pre-calculated Y offset
-        vehicle.mesh.position.copy(vehicle.position);
-        vehicle.mesh.position.y = ROAD_CONSTANTS.ROAD_Y + (vehicle.meshYOffset || 0);
+        // Update mesh position using pre-calculated X, Y, Z offsets
+        vehicle.mesh.position.set(
+          vehicle.position.x + (vehicle.meshXOffset || 0),
+          vehicle.meshYOffset || ROAD_CONSTANTS.ROAD_Y,
+          vehicle.position.z + (vehicle.meshZOffset || 0)
+        );
       }
     });
   }

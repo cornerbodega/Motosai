@@ -64,6 +64,24 @@
         transition: opacity 0.5s;
       }
 
+      #loadingScreen img.logo {
+        width: 200px;
+        height: auto;
+        margin-bottom: 30px;
+        animation: fadeIn 1s ease-in-out;
+      }
+
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(-20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
       #loadingScreen h1 {
         color: white;
         font-size: 48px;
@@ -97,6 +115,13 @@
         justify-content: center;
         align-items: center;
         z-index: 999;
+      }
+
+      #startScreen img.logo {
+        width: 250px;
+        height: auto;
+        margin-bottom: 30px;
+        animation: fadeIn 1s ease-in-out;
       }
 
       #startScreen h1 {
@@ -190,6 +215,7 @@
           <div>Visitors: <span id="visitor-count">...</span></div>
           <div>Visits: <span id="visit-count">...</span></div>
         </div>
+        <img src="/mt logo-brown-green.png" alt="Motosai Logo" class="logo" />
         <h1>🏍️ MOTOSAI</h1>
         <p style="color: white; font-size: 18px; margin-bottom: 20px; opacity: 0.9;">by marvin.technology</p>
         <div id="loadingBar">
@@ -202,6 +228,7 @@
           <div>Visitors: <span id="visitor-count-start">...</span></div>
           <div>Visits: <span id="visit-count-start">...</span></div>
         </div>
+        <img src="/mt logo-brown-green.png" alt="Motosai Logo" class="logo" />
         <h1>🏍️ MOTOSAI</h1>
         <p style="color: white; font-size: 18px; margin-bottom: 10px; opacity: 0.9;">by marvin.technology</p>
         <h2>Death Valley, USA</h2>
