@@ -234,6 +234,10 @@ export class MotosaiGame {
     this.initDevMenu();
     this.initLights();
 
+    // Initialize traffic system early so it's running during player selection
+    this.initBloodTrackSystem();
+    this.initTraffic();
+
     // Show intro FIRST, then show selection with desert background
     this.showIntroAndSelection(() => {
       // After selection, initialize player-specific components
@@ -290,17 +294,12 @@ export class MotosaiGame {
       this.initHUD();
       this.initDeathAnimation();
       this.initAudio();
-      this.initBloodTrackSystem();
       this.initMinimap();
       // Powerup system removed
 
-      // Initialize multiplayer first, then traffic (for synchronization)
+      // Initialize multiplayer (traffic already initialized before player selection)
       if (this.isMultiplayerEnabled) {
-        this.initMultiplayer().then(() => {
-          this.initTraffic();
-        });
-      } else {
-        this.initTraffic();
+        this.initMultiplayer();
       }
 
       this.gameStarted = true;
