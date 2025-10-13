@@ -674,17 +674,18 @@ io.on('connection', (socket) => {
     } else {
       console.log(`♻️ RETURNING VISIT: ${username} - Visitors: ${visitorCount}, Visits: ${visitCount}`);
 
-      // Persist returning visit
+      // Persist returning visit - preserve visitor count!
       try {
         await supabase
           .from('mo_visitors')
           .insert({
             timestamp: new Date().toISOString(),
-            visitors: visitorCount,
-            visits: visitCount,
+            visitors: visitorCount,  // Keep the same visitor count
+            visits: visitCount,       // Increment visit count
             player_id: playerId,
             event_type: 'returning_visit'
           });
+        console.log(`✅ Persisted returning visit to database`);
       } catch (dbError) {
         console.log('⚠️ Could not persist to database:', dbError.message);
       }

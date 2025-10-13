@@ -111,9 +111,10 @@ export class PlayerSelection {
 
   static BUTTON_OPACITY_DISABLED = '1';
 
-  constructor(scene, camera, audioManager = null, ufoController = null) {
+  constructor(scene, camera, renderer = null, audioManager = null, ufoController = null) {
     this.scene = scene;
     this.camera = camera;
+    this.renderer = renderer;
     this.audioManager = audioManager;
     this.ufoController = ufoController;
     this.selectedBike = null;
@@ -968,6 +969,9 @@ export class PlayerSelection {
     // Store original camera position and rotation
     this.originalCameraPosition = this.camera.position.clone();
     this.originalCameraRotation = this.camera.rotation.clone();
+
+    // Sky color and fog are handled by BackgroundSystem with day/night cycle
+    // No need to manually set them here - they update automatically
 
     // Position camera to the side of the bike for side view
     // Bike center will be calculated based on bounding box

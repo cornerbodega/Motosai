@@ -196,10 +196,10 @@ export class MotosaiGame {
     this.raceCountdownInterval = null; // Track race countdown intervals
 
     // Day/night cycle system (120-second full cycle)
-    this.dayCycleEnabled = true;
-    this.manualSunControl = false; // When true, use exact preset sun positions instead of automatic
+    this.dayCycleEnabled = true; // Start ENABLED - automatic day/night cycle
+    this.manualSunControl = false; // Automatic control by default - sun moves through cycle
     this.dayCycleDuration = 120.0; // 120 seconds for full day
-    this.dayCycleTime = 0; // Current time in the cycle (0-120)
+    this.dayCycleTime = 15; // Current time in the cycle (0-120) - start at mid-dawn (15s)
     this.dayCycleTimeOfDay = 'day'; // Current time of day
     this.currentTimeOfDay = 'day'; // Current calculated time of day (for billboard lights, etc.)
     this.timesOfDay = ['dawn', 'day', 'dusk', 'night']; // Cycle order
@@ -734,13 +734,13 @@ export class MotosaiGame {
     // this.memoryProfiler = new MemoryProfiler(this.renderer, this.scene, this.camera, profilerConfig);
     console.log("%c📡 Real-time monitoring enabled", "color: #00ff00");
 
-    // Softer ambient light with warm tint
-    this.ambientLight = new THREE.AmbientLight(0xfff5e6, 0.35);
+    // Ambient light (color will be set by natural lighting calculation)
+    this.ambientLight = new THREE.AmbientLight(0xffffff, 0.35);
     this.scene.add(this.ambientLight);
 
-    // Main sun light - softer and warmer
-    this.sunLight = new THREE.DirectionalLight(0xfff5dd, 2.2);
-    this.sunLight.position.set(100, 150, 80);
+    // Main sun light - HIGH NOON position for blue sky start
+    this.sunLight = new THREE.DirectionalLight(0xffffff, 2.2);
+    this.sunLight.position.set(0, 200, 100);  // High overhead for beautiful blue sky
     this.sunLight.castShadow = true;
 
     // Enhanced shadow settings for better quality
@@ -797,7 +797,7 @@ export class MotosaiGame {
     this.scene.fog.color.setHex(naturalLighting.sky);
     this.renderer.setClearColor(naturalLighting.sky);
 
-    console.log('Initial lighting set naturally from sun position:', initialSunPosition);
+    console.log('Initial lighting set naturally from sun position');
   }
 
   initPhysics() {
@@ -818,7 +818,7 @@ export class MotosaiGame {
     this.createMotorcycle();
   }
 
-  // Calculate natural atmospheric lighting based on sun position
+  // Calculate CINEMATIC atmospheric lighting based on sun position
   calculateNaturalLighting(sunPosition) {
     const sunX = sunPosition[0];
     const sunY = sunPosition[1];
@@ -831,62 +831,96 @@ export class MotosaiGame {
     // Normalize elevation: -90 to 90 -> 0 to 1 (0 = below horizon, 0.5 = horizon, 1 = zenith)
     const elevationNorm = (elevationAngle + 90) / 180;
 
-    // Sun below horizon = night (moonlight)
+    // CINEMATIC Night - properly DARK with subtle moonlight
     const isNight = elevationAngle < -5;
-    const isDusk = elevationAngle >= -5 && elevationAngle < 5;
-    const isDawn = elevationAngle >= 5 && elevationAngle < 15;
 
     if (isNight) {
-      // Night - moonlight
       return {
-        sky: 0x0C1445,
-        ambientColor: 0x556688,
-        ambientIntensity: 0.18,
-        sunColor: 0xAABBDD,
-        sunIntensity: 0.35,
-        hemiSky: 0x1E2A4A,
-        hemiGround: 0x0A0D15,
-        hemiIntensity: 0.25,
-        fillColor: 0x445577,
-        fillIntensity: 0.12,
+        sky: 0x050A1C,  // Much darker midnight blue
+        ambientColor: 0x1A2040,  // Very dark blue ambient
+        ambientIntensity: 0.04,  // VERY LOW - properly dark night
+        sunColor: 0x6B7FA8,  // Dim cool moonlight
+        sunIntensity: 0.15,  // Very subtle moonlight
+        hemiSky: 0x0D1528,  // Dark night sky
+        hemiGround: 0x020408,  // Nearly black ground
+        hemiIntensity: 0.08,  // Minimal hemisphere light
+        fillColor: 0x1A2545,  // Dark blue fill
+        fillIntensity: 0.03,  // Barely visible fill
         starfieldVisible: true
       };
     }
 
-    // Calculate atmospheric scattering based on elevation
-    // Low angle = more atmosphere = warmer colors
-    // High angle = less atmosphere = cooler/whiter colors
-    const atmosphericThickness = 1.0 - Math.pow(elevationNorm, 0.5); // More scattering at low angles
+    // CINEMATIC GOLDEN HOUR detection (low sun = epic orange/gold)
+    const isGoldenHour = elevationAngle >= -5 && elevationAngle < 25;
 
-    // Interpolate sun color: low = orange/red, high = white/yellow
-    const sunR = Math.round(255);
-    const sunG = Math.round(255 - atmosphericThickness * 80); // Less green at horizon
-    const sunB = Math.round(255 - atmosphericThickness * 165); // Much less blue at horizon
+    // Calculate atmospheric scattering - more dramatic curve for cinematic look
+    const atmosphericThickness = 1.0 - Math.pow(elevationNorm, 0.4); // Steeper curve = more dramatic
+
+    if (isGoldenHour) {
+      // EPIC GOLDEN HOUR - saturated oranges and golds
+      const goldenHourStrength = 1.0 - (elevationAngle + 5) / 30; // 1.0 at horizon, 0.0 at 25°
+
+      // Intense golden sun color
+      const sunR = 255;
+      const sunG = Math.round(140 + goldenHourStrength * 30); // Deep orange at horizon
+      const sunB = Math.round(30 + goldenHourStrength * 10); // Very little blue
+      const sunColor = (sunR << 16) | (sunG << 8) | sunB;
+
+      // Epic orange/pink sky
+      const skyR = Math.round(255 - goldenHourStrength * 30);
+      const skyG = Math.round(120 + goldenHourStrength * 40); // Peachy at low angle
+      const skyB = Math.round(60 + goldenHourStrength * 50); // Purple tints
+      const skyColor = (skyR << 16) | (skyG << 8) | skyB;
+
+      // Warm ambient glow
+      const ambR = 255;
+      const ambG = Math.round(180 + goldenHourStrength * 20);
+      const ambB = Math.round(100 + goldenHourStrength * 30);
+      const ambientColor = (ambR << 16) | (ambG << 8) | ambB;
+
+      // Dramatic sun intensity during golden hour
+      const sunIntensity = 1.8 + goldenHourStrength * 0.8;
+      const ambientIntensity = 0.15 + goldenHourStrength * 0.15;
+
+      return {
+        sky: skyColor,
+        ambientColor: ambientColor,
+        ambientIntensity: ambientIntensity,
+        sunColor: sunColor,
+        sunIntensity: sunIntensity,
+        hemiSky: skyColor,
+        hemiGround: 0x4A3520,  // Warm brown ground
+        hemiIntensity: 0.35 + goldenHourStrength * 0.25,
+        fillColor: ambientColor,
+        fillIntensity: 0.25 + goldenHourStrength * 0.15,
+        starfieldVisible: false
+      };
+    }
+
+    // HIGH NOON - bright, high contrast, cooler colors
+    // Interpolate sun color: becomes whiter/cooler at high angles
+    const sunR = 255;
+    const sunG = Math.round(250 - atmosphericThickness * 20); // Slight yellow
+    const sunB = Math.round(245 - atmosphericThickness * 30); // Nearly white at zenith
     const sunColor = (sunR << 16) | (sunG << 8) | sunB;
 
-    // Sky color: low sun = orange/salmon, high sun = blue
-    const skyR = Math.round(135 + atmosphericThickness * 120); // More red at horizon
-    const skyG = Math.round(206 - atmosphericThickness * 80); // Less green at horizon
-    const skyB = Math.round(235 - atmosphericThickness * 145); // Much less blue at horizon
+    // Sky color: deep blue at high angles
+    const skyR = Math.round(80 + atmosphericThickness * 60);
+    const skyG = Math.round(160 + atmosphericThickness * 60);
+    const skyB = Math.round(245 - atmosphericThickness * 30); // Rich blue
     const skyColor = (skyR << 16) | (skyG << 8) | skyB;
 
-    // Ambient color follows sun warmth
-    const ambR = Math.round(255);
-    const ambG = Math.round(255 - atmosphericThickness * 45);
-    const ambB = Math.round(255 - atmosphericThickness * 85);
+    // Ambient color - cooler at high sun
+    const ambR = Math.round(240 + atmosphericThickness * 15);
+    const ambG = Math.round(245 - atmosphericThickness * 10);
+    const ambB = Math.round(255);
     const ambientColor = (ambR << 16) | (ambG << 8) | ambB;
 
-    // Hemisphere sky color
-    const hemiR = Math.round(176 + atmosphericThickness * 80);
-    const hemiG = Math.round(216 - atmosphericThickness * 50);
-    const hemiB = Math.round(240 - atmosphericThickness * 140);
-    const hemiSky = (hemiR << 16) | (hemiG << 8) | hemiB;
+    // DRAMATIC sun intensity - much stronger at zenith
+    const sunIntensity = 1.5 + elevationNorm * 3.5; // Range: 1.5 to 5.0 (cinematic!)
 
-    // Sun intensity: peaks at mid-high elevation
-    const sunIntensity = 0.8 + elevationNorm * 2.2;
-
-    // Ambient intensity: higher during day
-    const ambientIntensity = 0.25 + elevationNorm * 0.3;
+    // Ambient intensity - significant variation for drama
+    const ambientIntensity = 0.12 + elevationNorm * 0.45; // Range: 0.12 to 0.57
 
     return {
       sky: skyColor,
@@ -894,44 +928,101 @@ export class MotosaiGame {
       ambientIntensity: ambientIntensity,
       sunColor: sunColor,
       sunIntensity: sunIntensity,
-      hemiSky: hemiSky,
-      hemiGround: 0x6B5D4F,
-      hemiIntensity: 0.4 + elevationNorm * 0.35,
+      hemiSky: skyColor,
+      hemiGround: 0x7A6A55,  // Natural earth tone
+      hemiIntensity: 0.3 + elevationNorm * 0.5,
       fillColor: ambientColor,
-      fillIntensity: 0.2 + elevationNorm * 0.3,
-      starfieldVisible: isNight
+      fillIntensity: 0.15 + elevationNorm * 0.35,
+      starfieldVisible: false
     };
   }
 
   setTimeOfDay(timeOfDay) {
-    // Sun position presets - lighting colors calculated naturally from position
-    const presets = {
+    // Get current sun position (don't change it!)
+    const currentSunPosition = this.sunLight ?
+      [this.sunLight.position.x, this.sunLight.position.y, this.sunLight.position.z] :
+      [0, 200, 100];
+
+    // Calculate natural lighting from actual sun position
+    const naturalLighting = this.calculateNaturalLighting(currentSunPosition);
+
+    // EPIC STYLIZED COLOR OVERLAYS - blend with natural lighting
+    const stylePresets = {
       dawn: {
-        sunPosition: [-100, 30, 100],  // East - low on horizon, to the left
+        // GOLDEN SUNRISE - saturate warm tones
+        skyTint: 1.4,  // Boost saturation
+        warmShift: 80,  // Add warm orange
+        coolShift: -60,  // Remove blue
+        intensityMult: 1.0
       },
       day: {
-        sunPosition: [0, 180, 100],  // High overhead, centered
+        // BRILLIANT BLUE - saturate cool tones
+        skyTint: 1.3,  // Boost saturation
+        warmShift: -20,  // Slight cool
+        coolShift: 40,  // Add blue
+        intensityMult: 1.3  // BRIGHTER!
       },
       dusk: {
-        sunPosition: [100, 30, 100],  // West - low on horizon, to the right
+        // EPIC SUNSET - deep orange and purple
+        skyTint: 1.5,  // Max saturation
+        warmShift: 100,  // Heavy orange
+        coolShift: -80,  // Remove blue, add purple
+        intensityMult: 0.95
       },
       night: {
-        sunPosition: [80, 130, -90],  // Moon high in sky
+        // DRAMATIC DARKNESS - keep natural dark
+        skyTint: 0.8,  // Desaturate
+        warmShift: -40,  // Cool tones
+        coolShift: 20,  // Slight blue
+        intensityMult: 0.5  // Much darker
       }
     };
 
-    const preset = presets[timeOfDay];
-    if (!preset) {
+    const style = stylePresets[timeOfDay];
+    if (!style) {
       console.error('Unknown time of day:', timeOfDay);
       return;
     }
 
-    // Calculate natural lighting from sun position
-    const naturalLighting = this.calculateNaturalLighting(preset.sunPosition);
+    // Blend natural lighting with stylized overlay
+    const blendColor = (naturalColor, warmShift, coolShift, saturation) => {
+      let r = (naturalColor >> 16) & 0xFF;
+      let g = (naturalColor >> 8) & 0xFF;
+      let b = naturalColor & 0xFF;
 
-    // Merge sun position with calculated lighting (reuse object to avoid allocations)
-    const fullPreset = naturalLighting;
-    fullPreset.sunPosition = preset.sunPosition;
+      // Apply warm/cool shift
+      r = Math.min(255, Math.max(0, r + warmShift));
+      g = Math.min(255, Math.max(0, g + Math.round(warmShift * 0.6)));
+      b = Math.min(255, Math.max(0, b + coolShift));
+
+      // Apply saturation boost
+      const gray = (r + g + b) / 3;
+      r = Math.round(gray + (r - gray) * saturation);
+      g = Math.round(gray + (g - gray) * saturation);
+      b = Math.round(gray + (b - gray) * saturation);
+
+      r = Math.min(255, Math.max(0, r));
+      g = Math.min(255, Math.max(0, g));
+      b = Math.min(255, Math.max(0, b));
+
+      return (r << 16) | (g << 8) | b;
+    };
+
+    // Apply stylization to natural lighting
+    const fullPreset = {
+      sky: blendColor(naturalLighting.sky, style.warmShift, style.coolShift, style.skyTint),
+      ambientColor: blendColor(naturalLighting.ambientColor, style.warmShift, style.coolShift, style.skyTint),
+      ambientIntensity: naturalLighting.ambientIntensity * style.intensityMult,
+      sunColor: blendColor(naturalLighting.sunColor, style.warmShift, style.coolShift, style.skyTint),
+      sunIntensity: naturalLighting.sunIntensity * style.intensityMult,
+      hemiSky: blendColor(naturalLighting.hemiSky, style.warmShift, style.coolShift, style.skyTint),
+      hemiGround: naturalLighting.hemiGround,
+      hemiIntensity: naturalLighting.hemiIntensity * style.intensityMult,
+      fillColor: blendColor(naturalLighting.fillColor, style.warmShift, style.coolShift, style.skyTint),
+      fillIntensity: naturalLighting.fillIntensity * style.intensityMult,
+      starfieldVisible: naturalLighting.starfieldVisible,
+      sunPosition: currentSunPosition  // Keep sun where it is!
+    };
 
     // Initialize transition state if not exists
     if (!this.timeOfDayTransition) {
@@ -1249,21 +1340,10 @@ export class MotosaiGame {
       this.backgrounds = new BackgroundSystem(this.scene, this.camera);
       console.log("[INIT] BackgroundSystem created successfully");
 
-      // Calculate natural lighting from current sun position
-      const currentSunPosition = [this.sunLight.position.x, this.sunLight.position.y, this.sunLight.position.z];
-      const naturalLighting = this.calculateNaturalLighting(currentSunPosition);
+      // Update celestial positions based on current day cycle time (15s = mid-dawn)
+      this.updateContinuousCelestialPositions();
 
-      // Set initial sky color to match naturally calculated lighting
-      if (this.backgrounds.setSkyColor) {
-        this.backgrounds.setSkyColor(naturalLighting.sky);
-        console.log("[INIT] Initial sky color set naturally:", naturalLighting.sky.toString(16));
-      }
-
-      // Set initial sun/moon positions
-      if (this.backgrounds.setSunMoonPosition) {
-        this.backgrounds.setSunMoonPosition(currentSunPosition, 'day');
-        console.log("[INIT] Initial sun/moon positions set");
-      }
+      console.log("[INIT] Sky color and sun position set from day cycle time:", this.dayCycleTime);
 
       // Test with initial location (Death Valley) - this should trigger segment 0
       console.log("[INIT] Setting initial location to segment 0...");
@@ -1518,6 +1598,7 @@ export class MotosaiGame {
     this.playerSelection = new PlayerSelection(
       this.scene,
       this.camera,
+      this.renderer,
       this.audioManager,
       null // ufoController will be set after it's created
     );
