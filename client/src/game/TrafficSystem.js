@@ -1,11 +1,17 @@
-import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { ROAD_CONSTANTS } from './RoadConstants.js';
-import { TrafficIDM } from './TrafficSystemIDM.js';
-import { getMaterialManager } from '../utils/MaterialManager.js';
+import * as THREE from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { ROAD_CONSTANTS } from "./RoadConstants.js";
+import { TrafficIDM } from "./TrafficSystemIDM.js";
+import { getMaterialManager } from "../utils/MaterialManager.js";
 
 export class TrafficSystem {
-  constructor(scene, highway, camera, bloodTrackSystem = null, multiplayerManager = null) {
+  constructor(
+    scene,
+    highway,
+    camera,
+    bloodTrackSystem = null,
+    multiplayerManager = null
+  ) {
     this.scene = scene;
     this.highway = highway;
     this.camera = camera;
@@ -17,7 +23,7 @@ export class TrafficSystem {
 
     // Reusable vectors to prevent memory allocation in update loops
     this._tempVector = new THREE.Vector3();
-    this._tempVector2 = new THREE.Vector3()
+    this._tempVector2 = new THREE.Vector3();
 
     // Use centralized material manager
     this.materialManager = getMaterialManager();
@@ -52,7 +58,7 @@ export class TrafficSystem {
       0x000000, // Black
       0x660000, // Dark red
       0x006600, // Dark green
-      0x000066  // Dark blue
+      0x000066, // Dark blue
     ];
 
     // Shared materials cache for sedan vehicles - one set per color
@@ -68,31 +74,71 @@ export class TrafficSystem {
       cabin: new THREE.BoxGeometry(1, 1, 1),
       window: new THREE.BoxGeometry(1, 1, 1),
       wheel: new THREE.BoxGeometry(1, 1, 1),
-      light: new THREE.BoxGeometry(1, 1, 1)
+      light: new THREE.BoxGeometry(1, 1, 1),
     };
-    
+
     // Synchronized traffic state
     this.isMaster = false; // Whether this client controls traffic
     this.syncedVehicles = new Map(); // vehicleId -> vehicle data
     this.lastTrafficUpdate = 0;
-    
+
     // Frustum culling
     this.frustum = new THREE.Frustum();
     this.cameraMatrix = new THREE.Matrix4();
-    
+
     // Vehicle types (realistic highway speeds in m/s)
     this.vehicleTypes = [
-      { type: 'car', probability: 0.5, length: 4.5, width: 1.8, height: 1.4, speed: 31, preferredLane: null }, // ~70 mph
-      { type: 'suv', probability: 0.2, length: 5, width: 2, height: 1.8, speed: 29, preferredLane: null }, // ~65 mph
-      { type: 'semi', probability: 0.15, length: 16, width: 2.5, height: 4, speed: 27, preferredLane: 0 }, // ~60 mph, 18-wheeler, prefers right lane
-      { type: 'van', probability: 0.1, length: 5.5, width: 2, height: 2, speed: 29, preferredLane: null }, // ~65 mph
-      { type: 'sports', probability: 0.05, length: 4.2, width: 1.8, height: 1.2, speed: 36, preferredLane: null } // ~80 mph (sports cars faster)
+      {
+        type: "car",
+        probability: 0.5,
+        length: 4.5,
+        width: 1.8,
+        height: 1.4,
+        speed: 31,
+        preferredLane: null,
+      }, // ~70 mph
+      {
+        type: "suv",
+        probability: 0.2,
+        length: 5,
+        width: 2,
+        height: 1.8,
+        speed: 29,
+        preferredLane: null,
+      }, // ~65 mph
+      {
+        type: "semi",
+        probability: 0.15,
+        length: 16,
+        width: 2.5,
+        height: 4,
+        speed: 27,
+        preferredLane: 0,
+      }, // ~60 mph, 18-wheeler, prefers right lane
+      {
+        type: "van",
+        probability: 0.1,
+        length: 5.5,
+        width: 2,
+        height: 2,
+        speed: 29,
+        preferredLane: null,
+      }, // ~65 mph
+      {
+        type: "sports",
+        probability: 0.05,
+        length: 4.2,
+        width: 1.8,
+        height: 1.2,
+        speed: 36,
+        preferredLane: null,
+      }, // ~80 mph (sports cars faster)
     ];
-    
+
     // Materials are now managed by MaterialManager - no need to create them here
     this.initMaterials();
   }
-  
+
   setMaxVehicles(count) {
     this.maxVehicles = count;
     // Remove excess vehicles if needed
@@ -102,13 +148,13 @@ export class TrafficSystem {
       this.disposeVehicleMesh(vehicle.mesh);
     }
   }
-  
+
   // Helper methods for advanced AI
   isLaneClearAhead(vehicle, lane, distance) {
     for (const other of this.vehicles) {
       if (other === vehicle) continue;
       if (other.lane !== lane) continue;
-      
+
       const gap = other.position.z - vehicle.position.z;
       if (gap > 0 && gap < distance) {
         return false; // Lane blocked ahead
@@ -116,12 +162,12 @@ export class TrafficSystem {
     }
     return true;
   }
-  
+
   isLaneClearBehind(vehicle, lane, distance) {
     for (const other of this.vehicles) {
       if (other === vehicle) continue;
       if (other.lane !== lane) continue;
-      
+
       const gap = vehicle.position.z - other.position.z;
       if (gap > 0 && gap < distance) {
         return false; // Lane blocked behind
@@ -129,25 +175,25 @@ export class TrafficSystem {
     }
     return true;
   }
-  
+
   getAdjacentCar(vehicle, targetLane) {
     let closestCar = null;
     let minDistance = Infinity;
-    
+
     for (const other of this.vehicles) {
       if (other === vehicle) continue;
       if (other.lane !== targetLane) continue;
-      
+
       const distance = Math.abs(other.position.z - vehicle.position.z);
       if (distance < minDistance) {
         minDistance = distance;
         closestCar = other;
       }
     }
-    
+
     return closestCar;
   }
-  
+
   disposeVehicleMesh(mesh) {
     if (!mesh) return;
 
@@ -156,7 +202,7 @@ export class TrafficSystem {
 
     // For old sedan vehicles with materialsToDispose (shouldn't exist anymore but handle legacy)
     if (mesh.userData.materialsToDispose) {
-      mesh.userData.materialsToDispose.forEach(material => {
+      mesh.userData.materialsToDispose.forEach((material) => {
         if (material && material.dispose) {
           material.dispose();
         }
@@ -165,15 +211,17 @@ export class TrafficSystem {
     }
 
     // For fallback geometry vehicles, dispose of any cloned materials
-    mesh.traverse(child => {
+    mesh.traverse((child) => {
       if (child.isMesh && child.material) {
         // Check if this material is not from the shared pool
-        const isSharedMaterial = this.vehicleMaterials && Object.values(this.vehicleMaterials).some(matArray => {
-          if (Array.isArray(matArray)) {
-            return matArray.includes(child.material);
-          }
-          return matArray === child.material;
-        });
+        const isSharedMaterial =
+          this.vehicleMaterials &&
+          Object.values(this.vehicleMaterials).some((matArray) => {
+            if (Array.isArray(matArray)) {
+              return matArray.includes(child.material);
+            }
+            return matArray === child.material;
+          });
 
         // Only dispose if it's not a shared material
         if (!isSharedMaterial && child.material.dispose) {
@@ -187,11 +235,11 @@ export class TrafficSystem {
       mesh.remove(mesh.children[0]);
     }
   }
-  
+
   setSpawnDistance(distance) {
     this.spawnDistance = distance;
   }
-  
+
   // Calculate dynamic spawn distance based on player speed
   getDynamicSpawnDistance(playerSpeed) {
     // More reasonable spawn distance that doesn't scale too aggressively
@@ -200,15 +248,15 @@ export class TrafficSystem {
     const baseDistance = 200;
     const speedBonus = Math.min(200, playerSpeed * 0.9); // Max 200m extra at high speeds
     const dynamicDistance = baseDistance + speedBonus;
-    
+
     // Cap at reasonable distance to keep cars visible
     return Math.min(dynamicDistance, 400);
   }
-  
+
   loadSedanModel() {
     const loader = new GLTFLoader();
     loader.load(
-      '/models/sedan.glb',
+      "/models/sedan.glb",
       (gltf) => {
         this.sedanModel = gltf.scene;
         this.sedanModelLoaded = true;
@@ -223,16 +271,11 @@ export class TrafficSystem {
         this.sedanModelDimensions = {
           width: size.x,
           height: size.y,
-          length: size.z
+          length: size.z,
         };
 
         // Calculate Y offset from model origin to bottom (for ground placement)
         this.sedanYOffset = center.y - size.y / 2;
-
-        console.log('Sedan model loaded successfully');
-        console.log('Detected sedan dimensions:', this.sedanModelDimensions);
-        console.log('Sedan bbox center:', center);
-        console.log('Sedan Y offset (origin to bottom):', this.sedanYOffset);
 
         // Log the model structure for debugging
         const meshes = [];
@@ -240,8 +283,13 @@ export class TrafficSystem {
           if (child.isMesh) {
             meshes.push({
               name: child.name,
-              material: child.material ? child.material.name || 'unnamed' : 'none',
-              materialColor: child.material && child.material.color ? child.material.color.getHexString() : 'none'
+              material: child.material
+                ? child.material.name || "unnamed"
+                : "none",
+              materialColor:
+                child.material && child.material.color
+                  ? child.material.color.getHexString()
+                  : "none",
             });
           }
         });
@@ -251,7 +299,10 @@ export class TrafficSystem {
       },
       undefined,
       (error) => {
-        console.error('Failed to load sedan model, using fallback geometry:', error);
+        console.error(
+          "Failed to load sedan model, using fallback geometry:",
+          error
+        );
         this.sedanModelLoaded = false;
       }
     );
@@ -260,7 +311,7 @@ export class TrafficSystem {
   loadSemiModel() {
     const loader = new GLTFLoader();
     loader.load(
-      '/models/semi.glb',
+      "/models/semi.glb",
       (gltf) => {
         this.semiModel = gltf.scene;
         this.semiModelLoaded = true;
@@ -275,20 +326,18 @@ export class TrafficSystem {
         this.semiModelDimensions = {
           width: size.x,
           height: size.y,
-          length: size.z
+          length: size.z,
         };
 
         // Calculate Y offset from model origin to bottom (for ground placement)
         this.semiYOffset = center.y - size.y / 2;
-
-        console.log('Semi model loaded successfully');
-        console.log('Detected semi dimensions:', this.semiModelDimensions);
-        console.log('Semi bbox center:', center);
-        console.log('Semi Y offset (origin to bottom):', this.semiYOffset);
       },
       undefined,
       (error) => {
-        console.error('Failed to load semi model, using fallback geometry:', error);
+        console.error(
+          "Failed to load semi model, using fallback geometry:",
+          error
+        );
         this.semiModelLoaded = false;
       }
     );
@@ -304,57 +353,78 @@ export class TrafficSystem {
       0x00ff00, // Green
       0xff8800, // Orange
       0x8888ff, // Light blue
-      0xcccccc  // Silver
+      0xcccccc, // Silver
     ];
 
     // Reference to material manager's pooled materials
     this.vehicleMaterials = {
-      car: vehicleColors.map(color =>
-        this.materialManager.getVehicleMaterial(color, 'body')
+      car: vehicleColors.map((color) =>
+        this.materialManager.getVehicleMaterial(color, "body")
       ),
-      glass: this.materialManager.getVehicleMaterial(0x222244, 'window'),
-      wheel: this.materialManager.getVehicleMaterial(0x1a1a1a, 'wheel'),
-      lights: this.materialManager.getMaterial('standard', {
+      glass: this.materialManager.getVehicleMaterial(0x222244, "window"),
+      wheel: this.materialManager.getVehicleMaterial(0x1a1a1a, "wheel"),
+      lights: this.materialManager.getMaterial("standard", {
         color: 0xffffee,
         emissive: 0xffffee,
-        emissiveIntensity: 1.5
+        emissiveIntensity: 1.5,
       }),
-      brake: this.materialManager.getMaterial('standard', {
+      brake: this.materialManager.getMaterial("standard", {
         color: 0xff0000,
         emissive: 0xff0000,
-        emissiveIntensity: 0.8
-      })
+        emissiveIntensity: 0.8,
+      }),
     };
   }
-  
+
   spawn(count) {
     // Don't exceed max vehicles
-    const actualCount = Math.min(count, this.maxVehicles - this.vehicles.length);
+    const actualCount = Math.min(
+      count,
+      this.maxVehicles - this.vehicles.length
+    );
     for (let i = 0; i < actualCount; i++) {
       this.spawnVehicle();
     }
   }
-  
+
   spawnVehicle(playerZ = 0, dynamicSpawnDistance = null, vehicleData = null) {
     if (this.vehicles.length >= this.maxVehicles) return;
-    
+
     let vehicle;
-    
+
     if (vehicleData) {
       // Spawning from synchronized data
-      const type = this.vehicleTypes.find(t => t.type === vehicleData.type) || this.vehicleTypes[0];
+      const type =
+        this.vehicleTypes.find((t) => t.type === vehicleData.type) ||
+        this.vehicleTypes[0];
       vehicle = {
         id: vehicleData.id,
         type: vehicleData.type,
         mesh: this.createVehicleMesh(type),
         lane: vehicleData.lane,
-        subLane: vehicleData.subLane !== undefined ? vehicleData.subLane : Math.floor(Math.random() * 3), // Random default if not specified
+        subLane:
+          vehicleData.subLane !== undefined
+            ? vehicleData.subLane
+            : Math.floor(Math.random() * 3), // Random default if not specified
         targetLane: vehicleData.targetLane,
-        targetSubLane: vehicleData.targetSubLane !== undefined ? vehicleData.targetSubLane : (vehicleData.subLane !== undefined ? vehicleData.subLane : Math.floor(Math.random() * 3)),
+        targetSubLane:
+          vehicleData.targetSubLane !== undefined
+            ? vehicleData.targetSubLane
+            : vehicleData.subLane !== undefined
+            ? vehicleData.subLane
+            : Math.floor(Math.random() * 3),
         laneChangeProgress: vehicleData.laneChangeProgress || 0,
         laneChangeSpeed: 2.0 + Math.random() * 1.0, // Smoother lane changes (2-3 seconds)
-        position: new THREE.Vector3(vehicleData.position.x, vehicleData.position.y, vehicleData.position.z),
-        velocity: new THREE.Vector3(vehicleData.velocity.x, vehicleData.velocity.y, vehicleData.velocity.z),
+        position: new THREE.Vector3(
+          vehicleData.position.x,
+          vehicleData.position.y,
+          vehicleData.position.z
+        ),
+        velocity: new THREE.Vector3(
+          vehicleData.velocity.x,
+          vehicleData.velocity.y,
+          vehicleData.velocity.z
+        ),
         speed: vehicleData.speed,
         baseSpeed: vehicleData.baseSpeed,
         length: type.length,
@@ -363,7 +433,8 @@ export class TrafficSystem {
         isOncoming: false,
         isBraking: vehicleData.isBraking || false,
         frontVehicle: null,
-        behavior: vehicleData.behavior || TrafficIDM.generateBehavior(vehicleData.lane)
+        behavior:
+          vehicleData.behavior || TrafficIDM.generateBehavior(vehicleData.lane),
       };
     } else {
       // Generate new vehicle (master client only, or no multiplayer)
@@ -371,8 +442,11 @@ export class TrafficSystem {
 
       const type = this.selectVehicleType();
       // Use preferred lane if specified, otherwise random
-      const lane = type.preferredLane !== null ? type.preferredLane : Math.floor(Math.random() * 3);
-      
+      const lane =
+        type.preferredLane !== null
+          ? type.preferredLane
+          : Math.floor(Math.random() * 3);
+
       // Randomly select sublane for more variety
       let subLane;
       if (lane === 0) {
@@ -385,7 +459,7 @@ export class TrafficSystem {
         // Middle lane: equal distribution across all sublanes
         subLane = Math.floor(Math.random() * 3); // 0, 1, or 2 equally
       }
-      
+
       vehicle = {
         id: `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         type: type.type,
@@ -406,14 +480,17 @@ export class TrafficSystem {
         isOncoming: false,
         isBraking: false,
         frontVehicle: null,
-        behavior: TrafficIDM.generateBehavior(lane)
+        behavior: TrafficIDM.generateBehavior(lane),
       };
     }
-    
+
     // Set initial position
     if (!vehicleData) {
       // New vehicle - calculate spawn position with sub-lane
-      const laneX = ROAD_CONSTANTS.getExactPosition(vehicle.lane, vehicle.subLane);
+      const laneX = ROAD_CONSTANTS.getExactPosition(
+        vehicle.lane,
+        vehicle.subLane
+      );
       // Use dynamic spawn distance if provided, otherwise fall back to base distance
       const effectiveSpawnDistance = dynamicSpawnDistance || this.spawnDistance;
 
@@ -424,11 +501,17 @@ export class TrafficSystem {
       let spawnOffset;
       if (spawnAhead) {
         // Spawn ahead but not too close - ensure minimum safe distance
-        const minAheadDistance = Math.max(MIN_SAFE_DISTANCE, effectiveSpawnDistance - 100);
+        const minAheadDistance = Math.max(
+          MIN_SAFE_DISTANCE,
+          effectiveSpawnDistance - 100
+        );
         spawnOffset = minAheadDistance + Math.random() * 100;
       } else {
         // Spawn behind player but also maintain safe distance
-        const maxBehindDistance = Math.min(-effectiveSpawnDistance/3, -MIN_SAFE_DISTANCE - 50);
+        const maxBehindDistance = Math.min(
+          -effectiveSpawnDistance / 3,
+          -MIN_SAFE_DISTANCE - 50
+        );
         spawnOffset = maxBehindDistance - Math.random() * 50;
       }
       const spawnZ = playerZ + spawnOffset;
@@ -469,54 +552,42 @@ export class TrafficSystem {
     );
 
     // Debug logging for first vehicle of each type
-    if (vehicle.type === 'semi' && !this._loggedSemi) {
-      console.log('🚛 SEMI DEBUG:');
-      console.log('  meshSize:', `${meshSize.x.toFixed(2)} x ${meshSize.y.toFixed(2)} x ${meshSize.z.toFixed(2)}`);
-      console.log('  meshCenter:', `${meshCenter.x.toFixed(2)}, ${meshCenter.y.toFixed(2)}, ${meshCenter.z.toFixed(2)}`);
-      console.log('  bboxMin:', `${localBBox.min.x.toFixed(2)}, ${localBBox.min.y.toFixed(2)}, ${localBBox.min.z.toFixed(2)}`);
-      console.log('  bboxMax:', `${localBBox.max.x.toFixed(2)}, ${localBBox.max.y.toFixed(2)}, ${localBBox.max.z.toFixed(2)}`);
-      console.log('  offsets (X,Y,Z):', `${vehicle.meshXOffset.toFixed(2)}, ${vehicle.meshYOffset.toFixed(2)}, ${vehicle.meshZOffset.toFixed(2)}`);
+    if (vehicle.type === "semi" && !this._loggedSemi) {
       this._loggedSemi = true;
     }
     if (!this._loggedCar) {
-      console.log('🚗 CAR DEBUG:');
-      console.log('  meshSize:', `${meshSize.x.toFixed(2)} x ${meshSize.y.toFixed(2)} x ${meshSize.z.toFixed(2)}`);
-      console.log('  meshCenter:', `${meshCenter.x.toFixed(2)}, ${meshCenter.y.toFixed(2)}, ${meshCenter.z.toFixed(2)}`);
-      console.log('  bboxMin:', `${localBBox.min.x.toFixed(2)}, ${localBBox.min.y.toFixed(2)}, ${localBBox.min.z.toFixed(2)}`);
-      console.log('  bboxMax:', `${localBBox.max.x.toFixed(2)}, ${localBBox.max.y.toFixed(2)}, ${localBBox.max.z.toFixed(2)}`);
-      console.log('  offsets (X,Y,Z):', `${vehicle.meshXOffset.toFixed(2)}, ${vehicle.meshYOffset.toFixed(2)}, ${vehicle.meshZOffset.toFixed(2)}`);
       this._loggedCar = true;
     }
 
     this.vehicles.push(vehicle);
     this.scene.add(vehicle.mesh);
-    
+
     // Broadcast new vehicle spawn if master
     if (this.isMaster && this.multiplayerManager && !vehicleData) {
       this.broadcastVehicleSpawn(vehicle);
     }
   }
-  
+
   selectVehicleType() {
     const random = Math.random();
     let cumulative = 0;
-    
+
     for (const type of this.vehicleTypes) {
       cumulative += type.probability;
       if (random <= cumulative) {
         return type;
       }
     }
-    
+
     return this.vehicleTypes[0];
   }
-  
+
   // Deprecated - moved to TrafficIDM.generateBehavior
   // Kept for backwards compatibility if needed
-  
+
   createVehicleMesh(type) {
     // Use appropriate model based on vehicle type
-    if (type.type === 'semi' && this.semiModelLoaded && this.semiModel) {
+    if (type.type === "semi" && this.semiModelLoaded && this.semiModel) {
       return this.createSemiVehicle(type);
     } else if (this.sedanModelLoaded && this.sedanModel) {
       return this.createSedanVehicle(type);
@@ -543,12 +614,21 @@ export class TrafficSystem {
 
       // Clone all unique materials from the model once for this color
       this.sedanModel.traverse((child) => {
-        if (child.isMesh && child.material && !colorMaterials.has(child.material)) {
+        if (
+          child.isMesh &&
+          child.material &&
+          !colorMaterials.has(child.material)
+        ) {
           const clonedMat = child.material.clone();
 
           // Apply color only to body color materials (not black trim, windows, lights, wheels)
-          const materialName = child.material.name ? child.material.name.toLowerCase() : '';
-          if (materialName.includes('body grey') || materialName.includes('body white')) {
+          const materialName = child.material.name
+            ? child.material.name.toLowerCase()
+            : "";
+          if (
+            materialName.includes("body grey") ||
+            materialName.includes("body white")
+          ) {
             clonedMat.color.copy(randomColor);
           }
           // Keep other materials (windows, headlights, rear lights, body black, wheels, tires) as original
@@ -570,7 +650,7 @@ export class TrafficSystem {
       const childName = child.name.toLowerCase();
 
       // Track wheel groups/objects (not just meshes)
-      if (childName.includes('wheel')) {
+      if (childName.includes("wheel")) {
         wheels.push(child);
       }
 
@@ -584,12 +664,20 @@ export class TrafficSystem {
         }
 
         const meshName = child.name.toLowerCase();
-        const matName = child.material && child.material.name ? child.material.name.toLowerCase() : '';
+        const matName =
+          child.material && child.material.name
+            ? child.material.name.toLowerCase()
+            : "";
 
         // Track brake lights (check both mesh name and material name)
-        if (meshName.includes('brake') || meshName.includes('tail') ||
-            (meshName.includes('light') && meshName.includes('rear')) ||
-            matName.includes('rear lights') || matName.includes('brake') || matName.includes('tail')) {
+        if (
+          meshName.includes("brake") ||
+          meshName.includes("tail") ||
+          (meshName.includes("light") && meshName.includes("rear")) ||
+          matName.includes("rear lights") ||
+          matName.includes("brake") ||
+          matName.includes("tail")
+        ) {
           // Replace with shared brake light material
           child.material = this.vehicleMaterials.brake;
           if (!brakeLight1) {
@@ -600,9 +688,13 @@ export class TrafficSystem {
         }
 
         // Make headlights emissive
-        if (meshName.includes('headlight') || meshName.includes('front light') ||
-            (meshName.includes('light') && meshName.includes('front')) ||
-            matName.includes('headlights') || matName.includes('front lights')) {
+        if (
+          meshName.includes("headlight") ||
+          meshName.includes("front light") ||
+          (meshName.includes("light") && meshName.includes("front")) ||
+          matName.includes("headlights") ||
+          matName.includes("front lights")
+        ) {
           // Replace with shared headlight material
           child.material = this.vehicleMaterials.lights;
         }
@@ -623,9 +715,8 @@ export class TrafficSystem {
       colorValue: colorValue, // Store color for reference
       brake1: brakeLight1,
       brake2: brakeLight2,
-      wheels: wheels
+      wheels: wheels,
     };
-
 
     return vehicle;
   }
@@ -647,14 +738,22 @@ export class TrafficSystem {
 
       // Clone all unique materials from the model once for this color
       this.semiModel.traverse((child) => {
-        if (child.isMesh && child.material && !colorMaterials.has(child.material)) {
+        if (
+          child.isMesh &&
+          child.material &&
+          !colorMaterials.has(child.material)
+        ) {
           const clonedMat = child.material.clone();
 
           // Apply color to semi body materials
-          const materialName = child.material.name ? child.material.name.toLowerCase() : '';
-          if (materialName.includes('body dark blue') ||
-              materialName.includes('body white') ||
-              materialName.includes('body dark yellow')) {
+          const materialName = child.material.name
+            ? child.material.name.toLowerCase()
+            : "";
+          if (
+            materialName.includes("body dark blue") ||
+            materialName.includes("body white") ||
+            materialName.includes("body dark yellow")
+          ) {
             clonedMat.color.copy(randomColor);
           }
           // Keep other materials (windows, headlights, rear lights, body black, wheels, tires) as original
@@ -676,7 +775,7 @@ export class TrafficSystem {
       const childName = child.name.toLowerCase();
 
       // Track wheel groups/objects (not just meshes)
-      if (childName.includes('wheel')) {
+      if (childName.includes("wheel")) {
         wheels.push(child);
       }
 
@@ -690,12 +789,20 @@ export class TrafficSystem {
         }
 
         const meshName = child.name.toLowerCase();
-        const matName = child.material && child.material.name ? child.material.name.toLowerCase() : '';
+        const matName =
+          child.material && child.material.name
+            ? child.material.name.toLowerCase()
+            : "";
 
         // Track brake lights (check both mesh name and material name)
-        if (meshName.includes('brake') || meshName.includes('tail') ||
-            (meshName.includes('light') && meshName.includes('rear')) ||
-            matName.includes('rear lights') || matName.includes('brake') || matName.includes('tail')) {
+        if (
+          meshName.includes("brake") ||
+          meshName.includes("tail") ||
+          (meshName.includes("light") && meshName.includes("rear")) ||
+          matName.includes("rear lights") ||
+          matName.includes("brake") ||
+          matName.includes("tail")
+        ) {
           // Replace with shared brake light material
           child.material = this.vehicleMaterials.brake;
           if (!brakeLight1) {
@@ -706,9 +813,13 @@ export class TrafficSystem {
         }
 
         // Make headlights emissive
-        if (meshName.includes('headlight') || meshName.includes('front light') ||
-            (meshName.includes('light') && meshName.includes('front')) ||
-            matName.includes('headlights') || matName.includes('front lights')) {
+        if (
+          meshName.includes("headlight") ||
+          meshName.includes("front light") ||
+          (meshName.includes("light") && meshName.includes("front")) ||
+          matName.includes("headlights") ||
+          matName.includes("front lights")
+        ) {
           // Replace with shared headlight material
           child.material = this.vehicleMaterials.lights;
         }
@@ -729,7 +840,7 @@ export class TrafficSystem {
       colorValue: colorValue,
       brake1: brakeLight1,
       brake2: brakeLight2,
-      wheels: wheels
+      wheels: wheels,
     };
 
     return vehicle;
@@ -739,9 +850,10 @@ export class TrafficSystem {
     const vehicle = new THREE.Group();
 
     // Random color - reuse existing materials instead of creating new ones
-    const bodyMat = this.vehicleMaterials.car[
-      Math.floor(Math.random() * this.vehicleMaterials.car.length)
-    ];
+    const bodyMat =
+      this.vehicleMaterials.car[
+        Math.floor(Math.random() * this.vehicleMaterials.car.length)
+      ];
 
     // Main body - REUSE shared geometry and scale to vehicle type
     const body = new THREE.Mesh(this.sharedGeometry.body, bodyMat);
@@ -757,8 +869,15 @@ export class TrafficSystem {
     vehicle.add(cabin);
 
     // Windows - REUSE shared geometry and scale to vehicle type
-    const windows = new THREE.Mesh(this.sharedGeometry.window, this.vehicleMaterials.glass);
-    windows.scale.set(type.width * 0.85, type.height * 0.35, type.length * 0.38);
+    const windows = new THREE.Mesh(
+      this.sharedGeometry.window,
+      this.vehicleMaterials.glass
+    );
+    windows.scale.set(
+      type.width * 0.85,
+      type.height * 0.35,
+      type.length * 0.38
+    );
     windows.position.set(0, type.height * 0.72, type.length * 0.1);
     vehicle.add(windows);
 
@@ -767,75 +886,116 @@ export class TrafficSystem {
       { x: type.width * 0.4, z: type.length * 0.3 },
       { x: -type.width * 0.4, z: type.length * 0.3 },
       { x: type.width * 0.4, z: -type.length * 0.3 },
-      { x: -type.width * 0.4, z: -type.length * 0.3 }
+      { x: -type.width * 0.4, z: -type.length * 0.3 },
     ];
 
-    wheelPositions.forEach(pos => {
-      const wheel = new THREE.Mesh(this.sharedGeometry.wheel, this.vehicleMaterials.wheel);
+    wheelPositions.forEach((pos) => {
+      const wheel = new THREE.Mesh(
+        this.sharedGeometry.wheel,
+        this.vehicleMaterials.wheel
+      );
       wheel.scale.set(0.2, 0.4, 0.4);
       wheel.position.set(pos.x, 0.2, pos.z);
       vehicle.add(wheel);
     });
 
     // Headlights - REUSE shared geometry with scaling
-    const headlight1 = new THREE.Mesh(this.sharedGeometry.light, this.vehicleMaterials.lights);
+    const headlight1 = new THREE.Mesh(
+      this.sharedGeometry.light,
+      this.vehicleMaterials.lights
+    );
     headlight1.scale.set(0.2, 0.2, 0.1);
-    headlight1.position.set(type.width * 0.3, type.height * 0.3, type.length * 0.5);
+    headlight1.position.set(
+      type.width * 0.3,
+      type.height * 0.3,
+      type.length * 0.5
+    );
     vehicle.add(headlight1);
 
-    const headlight2 = new THREE.Mesh(this.sharedGeometry.light, this.vehicleMaterials.lights);
+    const headlight2 = new THREE.Mesh(
+      this.sharedGeometry.light,
+      this.vehicleMaterials.lights
+    );
     headlight2.scale.set(0.2, 0.2, 0.1);
-    headlight2.position.set(-type.width * 0.3, type.height * 0.3, type.length * 0.5);
+    headlight2.position.set(
+      -type.width * 0.3,
+      type.height * 0.3,
+      type.length * 0.5
+    );
     vehicle.add(headlight2);
 
     // Brake lights - REUSE shared geometry with scaling, positioned closer to body
-    const brakeLight1 = new THREE.Mesh(this.sharedGeometry.light, this.vehicleMaterials.brake);
+    const brakeLight1 = new THREE.Mesh(
+      this.sharedGeometry.light,
+      this.vehicleMaterials.brake
+    );
     brakeLight1.scale.set(0.2, 0.2, 0.1);
-    brakeLight1.position.set(type.width * 0.3, type.height * 0.3, -type.length * 0.35); // Moved from 0.5 to 0.35
+    brakeLight1.position.set(
+      type.width * 0.3,
+      type.height * 0.3,
+      -type.length * 0.35
+    ); // Moved from 0.5 to 0.35
     vehicle.add(brakeLight1);
 
-    const brakeLight2 = new THREE.Mesh(this.sharedGeometry.light, this.vehicleMaterials.brake);
+    const brakeLight2 = new THREE.Mesh(
+      this.sharedGeometry.light,
+      this.vehicleMaterials.brake
+    );
     brakeLight2.scale.set(0.2, 0.2, 0.1);
-    brakeLight2.position.set(-type.width * 0.3, type.height * 0.3, -type.length * 0.35); // Moved from 0.5 to 0.35
+    brakeLight2.position.set(
+      -type.width * 0.3,
+      type.height * 0.3,
+      -type.length * 0.35
+    ); // Moved from 0.5 to 0.35
     vehicle.add(brakeLight2);
 
-    vehicle.userData = { type: type.type, brake1: brakeLight1, brake2: brakeLight2 };
+    vehicle.userData = {
+      type: type.type,
+      brake1: brakeLight1,
+      brake2: brakeLight2,
+    };
 
     return vehicle;
   }
-  
+
   update(deltaTime, playerPosition, playerVelocity = { z: 0 }) {
     // Calculate dynamic spawn distance first (needed for removal distance)
     const playerSpeed = Math.abs(playerVelocity.z);
     const dynamicSpawnDistance = this.getDynamicSpawnDistance(playerSpeed);
-    
+
     // Update frustum for culling
     this.updateFrustum();
-    
+
     // Broadcast traffic updates if master
     if (this.isMaster && this.multiplayerManager) {
       this.lastTrafficUpdate += deltaTime * 1000;
-      if (this.lastTrafficUpdate >= 100) { // 10Hz traffic updates
+      if (this.lastTrafficUpdate >= 100) {
+        // 10Hz traffic updates
         this.broadcastTrafficUpdate();
         this.lastTrafficUpdate = 0;
       }
     }
-    
+
     // Auto-become master if no traffic and multiplayer is enabled
-    if (this.multiplayerManager && !this.isMaster && this.vehicles.length === 0) {
+    if (
+      this.multiplayerManager &&
+      !this.isMaster &&
+      this.vehicles.length === 0
+    ) {
       // Wait a bit to see if we receive traffic from master
       this.noTrafficTimer = (this.noTrafficTimer || 0) + deltaTime;
-      if (this.noTrafficTimer > 3) { // After 3 seconds with no traffic
-        console.log('No traffic received, becoming master');
+      if (this.noTrafficTimer > 3) {
+        // After 3 seconds with no traffic
+
         this.setMaster(true);
         this.noTrafficTimer = 0;
       }
     } else {
       this.noTrafficTimer = 0;
     }
-    
+
     // Update each vehicle with frustum culling
-    this.vehicles.forEach(vehicle => {
+    this.vehicles.forEach((vehicle) => {
       // Check if vehicle is in frustum or close to player
       const distance = Math.abs(vehicle.position.z - playerPosition.z);
 
@@ -849,7 +1009,7 @@ export class TrafficSystem {
         let inFrustum = true;
         if (vehicle.mesh.children && vehicle.mesh.children.length > 0) {
           // Check if any child is in frustum
-          inFrustum = vehicle.mesh.children.some(child => {
+          inFrustum = vehicle.mesh.children.some((child) => {
             if (child.geometry) {
               if (!child.geometry.boundingSphere) {
                 child.geometry.computeBoundingSphere();
@@ -871,10 +1031,10 @@ export class TrafficSystem {
         this.updateDebugBox(vehicle);
       }
     });
-    
+
     // Check for vehicles to remove (too far away) - use dynamic distance
     const removalDistance = Math.max(300, dynamicSpawnDistance + 100); // At least 300m, or spawn distance + 100m
-    this.vehicles = this.vehicles.filter(vehicle => {
+    this.vehicles = this.vehicles.filter((vehicle) => {
       const distance = Math.abs(vehicle.position.z - playerPosition.z);
       if (distance > removalDistance) {
         this.scene.remove(vehicle.mesh);
@@ -893,69 +1053,96 @@ export class TrafficSystem {
       }
       return true;
     });
-    
+
     // Calculate distance-based traffic density
     const distanceTraveled = Math.abs(playerPosition.z);
     const distanceFactor = Math.min(3.0, 1.0 + distanceTraveled / 1000); // Up to 3x at 2km
-    
+
     // Dynamic max vehicles based on distance
-    const currentMaxVehicles = Math.min(60, Math.floor(this.maxVehicles * distanceFactor));
-    
+    const currentMaxVehicles = Math.min(
+      60,
+      Math.floor(this.maxVehicles * distanceFactor)
+    );
+
     // Spawn new vehicles if needed (master only, or no multiplayer)
-    if (this.vehicles.length < currentMaxVehicles && (!this.multiplayerManager || this.isMaster)) {
+    if (
+      this.vehicles.length < currentMaxVehicles &&
+      (!this.multiplayerManager || this.isMaster)
+    ) {
       // Increase spawn rate at high speeds and distances
       const baseSpawnChance = playerSpeed > 50 ? 0.15 : 0.08;
-      const spawnChance = Math.min(0.3, baseSpawnChance * Math.sqrt(distanceFactor));
-      
+      const spawnChance = Math.min(
+        0.3,
+        baseSpawnChance * Math.sqrt(distanceFactor)
+      );
+
       if (Math.random() < spawnChance) {
         this.spawnVehicle(playerPosition.z, dynamicSpawnDistance);
       }
     }
-    
+
     // Also ensure minimum traffic near player
     const minNearbyVehicles = Math.min(20, Math.floor(10 * distanceFactor)); // More cars nearby at distance
-    const nearbyVehicles = this.vehicles.filter(v => 
-      Math.abs(v.position.z - playerPosition.z) < 150 // Increased range
+    const nearbyVehicles = this.vehicles.filter(
+      (v) => Math.abs(v.position.z - playerPosition.z) < 150 // Increased range
     ).length;
-    
-    if (nearbyVehicles < minNearbyVehicles && this.vehicles.length < currentMaxVehicles && (!this.multiplayerManager || this.isMaster)) {
+
+    if (
+      nearbyVehicles < minNearbyVehicles &&
+      this.vehicles.length < currentMaxVehicles &&
+      (!this.multiplayerManager || this.isMaster)
+    ) {
       // Force spawn if too few vehicles nearby
       this.spawnVehicle(playerPosition.z, dynamicSpawnDistance);
     }
-    
+
     // Update vehicle interactions
     this.updateInteractions();
   }
-  
+
   updateVehicle(vehicle, deltaTime, playerPosition) {
     // AI behavior
     this.updateAI(vehicle, playerPosition, deltaTime);
-    
+
     // Lane and sub-lane changing with proper time-based animation
-    const isChangingPosition = (vehicle.targetLane !== vehicle.lane) || (vehicle.targetSubLane !== vehicle.subLane);
-    
+    const isChangingPosition =
+      vehicle.targetLane !== vehicle.lane ||
+      vehicle.targetSubLane !== vehicle.subLane;
+
     if (isChangingPosition) {
       // Progress based on time (laneChangeSpeed is duration in seconds)
       vehicle.laneChangeProgress += deltaTime / vehicle.laneChangeSpeed;
-      
+
       if (vehicle.laneChangeProgress >= 1) {
         // Complete the change
         vehicle.laneChangeProgress = 0;
         vehicle.lane = vehicle.targetLane;
         vehicle.subLane = vehicle.targetSubLane;
-        const finalX = ROAD_CONSTANTS.getExactPosition(vehicle.lane, vehicle.subLane);
+        const finalX = ROAD_CONSTANTS.getExactPosition(
+          vehicle.lane,
+          vehicle.subLane
+        );
         vehicle.position.x = finalX;
         vehicle.hasStablePosition = true;
       } else {
         // Smooth interpolation for both lane and sub-lane changes
-        const currentX = ROAD_CONSTANTS.getExactPosition(vehicle.lane, vehicle.subLane);
-        const targetX = ROAD_CONSTANTS.getExactPosition(vehicle.targetLane, vehicle.targetSubLane);
+        const currentX = ROAD_CONSTANTS.getExactPosition(
+          vehicle.lane,
+          vehicle.subLane
+        );
+        const targetX = ROAD_CONSTANTS.getExactPosition(
+          vehicle.targetLane,
+          vehicle.targetSubLane
+        );
         const t = this.smoothStep(vehicle.laneChangeProgress);
         vehicle.position.x = currentX + (targetX - currentX) * t;
-        
+
         // Add rotation during change for realism
         const changeDirection = targetX > currentX ? 1 : -1;
-        const rotationAmount = Math.sin(vehicle.laneChangeProgress * Math.PI) * 0.05 * changeDirection;
+        const rotationAmount =
+          Math.sin(vehicle.laneChangeProgress * Math.PI) *
+          0.05 *
+          changeDirection;
         vehicle.mesh.rotation.y = rotationAmount;
       }
     } else {
@@ -967,45 +1154,62 @@ export class TrafficSystem {
           primaryPhase: Math.random() * Math.PI * 2, // Primary wave phase
           secondaryPhase: Math.random() * Math.PI * 2, // Secondary wave phase
           amplitude: 0.15 + Math.random() * 0.15, // 0.15-0.3m amplitude
-          frequency: 0.15 + Math.random() * 0.1 // Vary frequency per vehicle
+          frequency: 0.15 + Math.random() * 0.1, // Vary frequency per vehicle
         };
       }
 
       // Update phases for smooth, natural movement
-      vehicle.lateralDrift.primaryPhase += deltaTime * vehicle.lateralDrift.frequency;
-      vehicle.lateralDrift.secondaryPhase += deltaTime * vehicle.lateralDrift.frequency * 1.7; // Different frequency
+      vehicle.lateralDrift.primaryPhase +=
+        deltaTime * vehicle.lateralDrift.frequency;
+      vehicle.lateralDrift.secondaryPhase +=
+        deltaTime * vehicle.lateralDrift.frequency * 1.7; // Different frequency
 
       // Combine two sine waves for more natural movement
-      const primaryWave = Math.sin(vehicle.lateralDrift.primaryPhase) * vehicle.lateralDrift.amplitude;
-      const secondaryWave = Math.sin(vehicle.lateralDrift.secondaryPhase) * vehicle.lateralDrift.amplitude * 0.3;
+      const primaryWave =
+        Math.sin(vehicle.lateralDrift.primaryPhase) *
+        vehicle.lateralDrift.amplitude;
+      const secondaryWave =
+        Math.sin(vehicle.lateralDrift.secondaryPhase) *
+        vehicle.lateralDrift.amplitude *
+        0.3;
 
       // Smooth natural drift
       const totalDrift = primaryWave + secondaryWave;
       const clampedDrift = Math.max(-0.4, Math.min(0.4, totalDrift)); // Stay within sublane
 
       // Apply position with drift
-      const baseX = ROAD_CONSTANTS.getExactPosition(vehicle.lane, vehicle.subLane);
+      const baseX = ROAD_CONSTANTS.getExactPosition(
+        vehicle.lane,
+        vehicle.subLane
+      );
       vehicle.position.x = baseX + clampedDrift;
 
       // Add subtle rotation based on drift direction for realism
-      const driftVelocity = Math.cos(vehicle.lateralDrift.primaryPhase) * vehicle.lateralDrift.amplitude * vehicle.lateralDrift.frequency;
+      const driftVelocity =
+        Math.cos(vehicle.lateralDrift.primaryPhase) *
+        vehicle.lateralDrift.amplitude *
+        vehicle.lateralDrift.frequency;
       vehicle.mesh.rotation.y = driftVelocity * 0.08; // Very subtle rotation
 
       vehicle.position.y = ROAD_CONSTANTS.ROAD_Y; // Force correct height
     }
-    
+
     // Update position
     vehicle.position.z += vehicle.velocity.z * deltaTime;
 
     // Rotate wheels based on speed (for sedan models)
-    if (vehicle.mesh.userData.wheels && vehicle.mesh.userData.wheels.length > 0) {
+    if (
+      vehicle.mesh.userData.wheels &&
+      vehicle.mesh.userData.wheels.length > 0
+    ) {
       // Calculate wheel rotation based on distance traveled
       // Assuming average wheel diameter of 0.65m (circumference = 2.04m)
       const wheelCircumference = 2.04;
       const distanceTraveled = vehicle.velocity.z * deltaTime;
-      const rotationAngle = (distanceTraveled / wheelCircumference) * Math.PI * 2;
+      const rotationAngle =
+        (distanceTraveled / wheelCircumference) * Math.PI * 2;
 
-      vehicle.mesh.userData.wheels.forEach(wheel => {
+      vehicle.mesh.userData.wheels.forEach((wheel) => {
         // Rotate around X axis for forward rolling motion
         wheel.rotation.x += rotationAngle;
       });
@@ -1013,33 +1217,40 @@ export class TrafficSystem {
 
     // Check for blood contact and create continuous tire tracks
     if (this.bloodTrackSystem) {
-      const bloodContact = this.bloodTrackSystem.checkVehicleBloodContact(vehicle.position, vehicle.width);
+      const bloodContact = this.bloodTrackSystem.checkVehicleBloodContact(
+        vehicle.position,
+        vehicle.width
+      );
 
       if (bloodContact) {
         // Start or continue blood trail
         if (!vehicle.isCreatingBloodTrail) {
           // Vehicle just entered blood - start new trail
-          this.bloodTrackSystem.startVehicleBloodTrail(vehicle.id, bloodContact);
+          this.bloodTrackSystem.startVehicleBloodTrail(
+            vehicle.id,
+            bloodContact
+          );
           vehicle.isCreatingBloodTrail = true;
         }
       }
 
       // Update blood trail if vehicle is creating one
       if (vehicle.isCreatingBloodTrail) {
-        const stillTrailing = this.bloodTrackSystem.updateVehicleBloodTrail(vehicle);
+        const stillTrailing =
+          this.bloodTrackSystem.updateVehicleBloodTrail(vehicle);
         if (!stillTrailing) {
           vehicle.isCreatingBloodTrail = false;
         }
       }
     }
-    
+
     // Update mesh position using pre-calculated X, Y, Z offsets
     vehicle.mesh.position.set(
       vehicle.position.x + (vehicle.meshXOffset || 0),
       vehicle.meshYOffset || ROAD_CONSTANTS.ROAD_Y,
       vehicle.position.z + (vehicle.meshZOffset || 0)
     );
-    
+
     // Update brake lights with emissive glow
     if (vehicle.mesh.userData.brake1 && vehicle.mesh.userData.brake1.material) {
       const mat1 = vehicle.mesh.userData.brake1.material;
@@ -1060,14 +1271,17 @@ export class TrafficSystem {
       }
     }
   }
-  
+
   updateAI(vehicle, playerPosition, deltaTime = 0.016) {
     vehicle.behavior.lastLaneChange += deltaTime;
 
     // Calculate distance-based aggression (more lane changes as you go farther)
     const distanceTraveled = Math.abs(playerPosition.z);
     // 1 mile = 1609 meters, scale aggression up to 5x at 5 miles
-    const aggressionFactor = Math.min(5.0, 1.0 + (distanceTraveled / 1609) * 0.8); // +0.8x per mile, max 5x
+    const aggressionFactor = Math.min(
+      5.0,
+      1.0 + (distanceTraveled / 1609) * 0.8
+    ); // +0.8x per mile, max 5x
 
     // Check if vehicle should pass slower traffic
     if (vehicle.frontVehicle) {
@@ -1080,16 +1294,26 @@ export class TrafficSystem {
 
       // Pass if vehicle is moderately slower - threshold decreases with distance
       const speedThreshold = Math.max(1.5, 3 - (aggressionFactor - 1) * 0.5); // 3 m/s down to 1.5 m/s
-      if (speedDiff > speedThreshold && distance < passingThreshold && distance > minPassingGap) {
+      if (
+        speedDiff > speedThreshold &&
+        distance < passingThreshold &&
+        distance > minPassingGap
+      ) {
         // Try to pass if haven't changed lanes recently - gets faster with aggression
         const laneChangeDelay = Math.max(1.5, 3.5 / aggressionFactor); // 3.5s down to 0.7s
-        if (vehicle.behavior.lastLaneChange > laneChangeDelay && vehicle.targetLane === vehicle.lane) {
+        if (
+          vehicle.behavior.lastLaneChange > laneChangeDelay &&
+          vehicle.targetLane === vehicle.lane
+        ) {
           // Prefer passing on the left (lane 0 is leftmost)
           let passingLane = vehicle.lane - 1;
           // Required gap decreases with aggression - more risky passes at distance
           const requiredGap = Math.max(8, 15 / aggressionFactor); // 15m down to 3m
 
-          if (passingLane < 0 || !this.isLaneChangeSafe(vehicle, passingLane, 1, requiredGap)) {
+          if (
+            passingLane < 0 ||
+            !this.isLaneChangeSafe(vehicle, passingLane, 1, requiredGap)
+          ) {
             // Can't pass on left, try right
             passingLane = vehicle.lane + 1;
           }
@@ -1104,30 +1328,45 @@ export class TrafficSystem {
         }
       }
     }
-    
+
     // Return to original lane after passing
     if (vehicle.behavior.isPassing && !vehicle.frontVehicle) {
       const returnDelay = 2.0; // Wait 2 seconds after passing
       if (vehicle.behavior.lastLaneChange > returnDelay) {
         const returnGap = 10; // Smaller gap for returning
-        if (this.isLaneChangeSafe(vehicle, vehicle.behavior.originalLane, 1, returnGap)) {
-          if (this.attemptLaneChange(vehicle, vehicle.behavior.originalLane, returnGap)) {
+        if (
+          this.isLaneChangeSafe(
+            vehicle,
+            vehicle.behavior.originalLane,
+            1,
+            returnGap
+          )
+        ) {
+          if (
+            this.attemptLaneChange(
+              vehicle,
+              vehicle.behavior.originalLane,
+              returnGap
+            )
+          ) {
             vehicle.behavior.isPassing = false;
             vehicle.behavior.lastLaneChange = 0;
           }
         }
       }
     }
-    
+
     // Natural random lane changes - gets more aggressive with distance
     const baseLaneChangeWait = 12.0 + Math.random() * 8.0; // Base: 12-20 seconds
     const laneChangeWait = baseLaneChangeWait / aggressionFactor; // Decreases with distance
     const laneChangeProbability = 0.004 * aggressionFactor; // Increases with distance
 
-    if (!vehicle.behavior.isPassing &&
-        vehicle.targetLane === vehicle.lane &&
-        vehicle.behavior.lastLaneChange > laneChangeWait &&
-        Math.random() < laneChangeProbability) {
+    if (
+      !vehicle.behavior.isPassing &&
+      vehicle.targetLane === vehicle.lane &&
+      vehicle.behavior.lastLaneChange > laneChangeWait &&
+      Math.random() < laneChangeProbability
+    ) {
       this.attemptLaneChange(vehicle);
       vehicle.behavior.lastLaneChange = 0;
     }
@@ -1143,23 +1382,30 @@ export class TrafficSystem {
     }
     vehicle.behavior.lastSubLaneChange += deltaTime;
 
-    if (vehicle.targetSubLane === vehicle.subLane && // Not already changing
-        vehicle.behavior.lastSubLaneChange > subLaneChangeWait &&
-        Math.random() < subLaneChangeProbability) {
+    if (
+      vehicle.targetSubLane === vehicle.subLane && // Not already changing
+      vehicle.behavior.lastSubLaneChange > subLaneChangeWait &&
+      Math.random() < subLaneChangeProbability
+    ) {
       this.attemptSubLaneChange(vehicle);
       vehicle.behavior.lastSubLaneChange = 0;
     }
-    
+
     // Speed adjustment based on front vehicle
     if (vehicle.frontVehicle) {
       const distance = vehicle.frontVehicle.position.z - vehicle.position.z;
-      const minSafeDistance = (vehicle.length + vehicle.frontVehicle.length) * 0.5 + 2; // Absolute minimum
-      const preferredDistance = vehicle.behavior.followDistance * vehicle.speed / 2.237;
+      const minSafeDistance =
+        (vehicle.length + vehicle.frontVehicle.length) * 0.5 + 2; // Absolute minimum
+      const preferredDistance =
+        (vehicle.behavior.followDistance * vehicle.speed) / 2.237;
       const safeDistance = Math.max(minSafeDistance, preferredDistance);
-      
+
       if (distance < minSafeDistance) {
         // Emergency brake - too close!
-        vehicle.speed = Math.min(vehicle.frontVehicle.speed * 0.8, vehicle.speed * 0.5);
+        vehicle.speed = Math.min(
+          vehicle.frontVehicle.speed * 0.8,
+          vehicle.speed * 0.5
+        );
         vehicle.isBraking = true;
       } else if (distance < safeDistance) {
         // Slow down smoothly
@@ -1181,35 +1427,37 @@ export class TrafficSystem {
       vehicle.speed = vehicle.baseSpeed;
       vehicle.isBraking = false;
     }
-    
+
     // Update velocity based on speed (all same direction)
     vehicle.velocity.z = vehicle.speed; // Already in m/s
   }
-  
+
   attemptLaneChange(vehicle, targetLane = null, requiredGap = null) {
     // If target lane specified, use it; otherwise pick randomly
     if (targetLane === null) {
       // Determine possible lanes (0-2)
       const possibleLanes = [];
-      
+
       if (vehicle.lane === 0) possibleLanes.push(1); // Can move right
       if (vehicle.lane === 1) {
         possibleLanes.push(0); // Can move left
         possibleLanes.push(2); // Can move right
       }
       if (vehicle.lane === 2) possibleLanes.push(1); // Can move left
-      
+
       if (possibleLanes.length === 0) return false;
-      targetLane = possibleLanes[Math.floor(Math.random() * possibleLanes.length)];
+      targetLane =
+        possibleLanes[Math.floor(Math.random() * possibleLanes.length)];
     }
-    
+
     // Check if lane change is safe
     if (targetLane >= 0 && targetLane <= 2 && targetLane !== vehicle.lane) {
-      
       // Pick a random sublane when changing lanes for more variety
       let targetSubLane = Math.floor(Math.random() * 3); // Random sublane 0, 1, or 2
 
-      if (this.isLaneChangeSafe(vehicle, targetLane, targetSubLane, requiredGap)) {
+      if (
+        this.isLaneChangeSafe(vehicle, targetLane, targetSubLane, requiredGap)
+      ) {
         vehicle.targetLane = targetLane;
         vehicle.targetSubLane = targetSubLane;
         return true; // Lane change started
@@ -1217,15 +1465,16 @@ export class TrafficSystem {
     }
     return false; // No lane change
   }
-  
+
   attemptSubLaneChange(vehicle) {
     // Change sub-lane within current lane
     const currentSubLane = vehicle.subLane;
-    const possibleSubLanes = [0, 1, 2].filter(sl => sl !== currentSubLane);
-    
+    const possibleSubLanes = [0, 1, 2].filter((sl) => sl !== currentSubLane);
+
     if (possibleSubLanes.length > 0) {
-      const targetSubLane = possibleSubLanes[Math.floor(Math.random() * possibleSubLanes.length)];
-      
+      const targetSubLane =
+        possibleSubLanes[Math.floor(Math.random() * possibleSubLanes.length)];
+
       // Check if sub-lane change is safe (smaller safety margin)
       if (this.isSubLaneChangeSafe(vehicle, vehicle.lane, targetSubLane)) {
         vehicle.targetSubLane = targetSubLane;
@@ -1235,29 +1484,34 @@ export class TrafficSystem {
     }
     return false;
   }
-  
+
   isLaneChangeSafe(vehicle, targetLane, targetSubLane, customGap = null) {
     // Prevent invalid lanes (stay within 0-2)
     if (targetLane < 0 || targetLane > 2) return false;
-    
+
     const safeDistance = customGap || 8; // meters - slightly more aggressive
-    
+
     for (const other of this.vehicles) {
       if (other === vehicle) continue;
-      
+
       // Check if other vehicle is in or moving to the target position
-      const otherInTargetLane = (other.lane === targetLane) || (other.targetLane === targetLane);
+      const otherInTargetLane =
+        other.lane === targetLane || other.targetLane === targetLane;
       if (!otherInTargetLane) continue;
-      
+
       // Consider sub-lane proximity
-      const otherSubLane = other.targetLane === targetLane ? other.targetSubLane : other.subLane;
+      const otherSubLane =
+        other.targetLane === targetLane ? other.targetSubLane : other.subLane;
       const subLaneDiff = Math.abs(otherSubLane - targetSubLane);
-      
+
       // If vehicles would be in exact same sub-lane, need more space
       if (subLaneDiff === 0) {
         const distance = Math.abs(other.position.z - vehicle.position.z);
         // Need at least combined vehicle lengths plus buffer
-        const minSafeDistance = Math.max(safeDistance, (vehicle.length + other.length) * 0.5 + 3);
+        const minSafeDistance = Math.max(
+          safeDistance,
+          (vehicle.length + other.length) * 0.5 + 3
+        );
         if (distance < minSafeDistance) {
           return false; // Would collide or be too close
         }
@@ -1271,50 +1525,50 @@ export class TrafficSystem {
       }
       // Sub-lanes 2 apart are generally safe
     }
-    
+
     return true;
   }
-  
+
   isSubLaneChangeSafe(vehicle, lane, targetSubLane) {
     const safeDistance = 5; // Smaller safe distance for sub-lane changes
-    
+
     for (const other of this.vehicles) {
       if (other === vehicle) continue;
       if (other.lane !== lane) continue;
-      
+
       // Check sub-lane proximity
       const otherSubLane = other.targetSubLane || other.subLane;
       if (Math.abs(otherSubLane - targetSubLane) > 1) continue; // Not adjacent sub-lanes
-      
+
       const distance = Math.abs(other.position.z - vehicle.position.z);
       if (distance < safeDistance) {
         return false;
       }
     }
-    
+
     return true;
   }
-  
+
   updateInteractions() {
     // Find front vehicle for each vehicle (considering sub-lanes)
-    this.vehicles.forEach(vehicle => {
+    this.vehicles.forEach((vehicle) => {
       vehicle.frontVehicle = null;
       let minDistance = Infinity;
-      
-      this.vehicles.forEach(other => {
+
+      this.vehicles.forEach((other) => {
         if (other === vehicle) return;
         if (other.lane !== vehicle.lane) return;
-        
+
         // Consider sub-lane - only care about vehicles in same or adjacent sub-lanes
         const subLaneDiff = Math.abs(other.subLane - vehicle.subLane);
         if (subLaneDiff > 1) return; // Ignore vehicles 2 sub-lanes away
-        
+
         // Check if other is in front (all vehicles go same direction)
         const distance = other.position.z - vehicle.position.z;
-        
+
         // Adjust perceived distance based on sub-lane difference
         const effectiveDistance = subLaneDiff === 0 ? distance : distance * 1.5;
-        
+
         // For same direction, "front" is positive z
         if (distance > 0 && effectiveDistance < minDistance) {
           minDistance = effectiveDistance;
@@ -1323,30 +1577,34 @@ export class TrafficSystem {
       });
     });
   }
-  
+
   checkCollision(position, radius) {
     // Check if position collides with any vehicle using tight bounding boxes
     for (const vehicle of this.vehicles) {
       // Get vehicle's bounding box - make it smaller so player needs to actually hit vehicle
-      const vehicleHalfLength = vehicle.length / 2 * 0.75; // 75% of actual size - tighter collision
-      const vehicleHalfWidth = vehicle.width / 2 * 0.70; // 70% of actual width - easier lane splitting
-      
+      const vehicleHalfLength = (vehicle.length / 2) * 0.75; // 75% of actual size - tighter collision
+      const vehicleHalfWidth = (vehicle.width / 2) * 0.7; // 70% of actual width - easier lane splitting
+
       // Check if bike position is within vehicle's rectangular bounds
       const xDist = Math.abs(position.x - vehicle.position.x);
       const zDist = Math.abs(position.z - vehicle.position.z);
-      
+
       // Use rectangular collision detection for more accuracy
-      const xCollision = xDist < (radius + vehicleHalfWidth);
-      const zCollision = zDist < (radius + vehicleHalfLength);
-      
+      const xCollision = xDist < radius + vehicleHalfWidth;
+      const zCollision = zDist < radius + vehicleHalfLength;
+
       if (xCollision && zCollision) {
         // More precise corner check for lane splitting
         // Check if we're actually hitting the corner or side
         if (xDist > vehicleHalfWidth * 0.8 && zDist > vehicleHalfLength * 0.8) {
           // We're near a corner, use circle collision for smoother lane splitting
           const actualDistance = Math.sqrt(xDist * xDist + zDist * zDist);
-          const cornerRadius = Math.sqrt(vehicleHalfWidth * vehicleHalfWidth + vehicleHalfLength * vehicleHalfLength) * 0.6;
-          
+          const cornerRadius =
+            Math.sqrt(
+              vehicleHalfWidth * vehicleHalfWidth +
+                vehicleHalfLength * vehicleHalfLength
+            ) * 0.6;
+
           if (actualDistance < radius + cornerRadius) {
             return vehicle;
           }
@@ -1356,10 +1614,10 @@ export class TrafficSystem {
         }
       }
     }
-    
+
     return null;
   }
-  
+
   smoothStep(t) {
     // Smoother S-curve interpolation for more natural lane changes
     // This is smootherstep - even smoother than smoothstep
@@ -1386,14 +1644,18 @@ export class TrafficSystem {
 
     if (!debugMesh) {
       // Create new debug box with ACTUAL collision dimensions (reduced size)
-      const collisionWidth = vehicle.width * 0.70; // Match checkCollision reduction
+      const collisionWidth = vehicle.width * 0.7; // Match checkCollision reduction
       const collisionLength = vehicle.length * 0.75; // Match checkCollision reduction
-      const geometry = new THREE.BoxGeometry(collisionWidth, vehicle.height, collisionLength);
+      const geometry = new THREE.BoxGeometry(
+        collisionWidth,
+        vehicle.height,
+        collisionLength
+      );
       const material = new THREE.MeshBasicMaterial({
         color: 0x00ff00,
         wireframe: true,
         transparent: true,
-        opacity: 0.5
+        opacity: 0.5,
       });
       debugMesh = new THREE.Mesh(geometry, material);
       this.debugBoxMeshes.set(vehicle.id, debugMesh);
@@ -1415,7 +1677,7 @@ export class TrafficSystem {
       this.debugBoxMeshes.delete(vehicleId);
     }
   }
-  
+
   updateFrustum() {
     if (this.camera) {
       this.cameraMatrix.multiplyMatrices(
@@ -1425,10 +1687,10 @@ export class TrafficSystem {
       this.frustum.setFromProjectionMatrix(this.cameraMatrix);
     }
   }
-  
+
   reset() {
     // Remove all vehicles and clear their blood trail status
-    this.vehicles.forEach(vehicle => {
+    this.vehicles.forEach((vehicle) => {
       this.scene.remove(vehicle.mesh);
       // Clear blood trail status
       if (vehicle.isCreatingBloodTrail && this.bloodTrackSystem) {
@@ -1450,56 +1712,71 @@ export class TrafficSystem {
     // Spawn initial traffic
     this.spawn(20);
   }
-  
+
   // Traffic synchronization methods
   setMaster(isMaster) {
     this.isMaster = isMaster;
-    console.log(`Traffic system ${isMaster ? 'is now master' : 'is now slave'}`);
   }
 
   broadcastVehicleSpawn(vehicle) {
     if (!this.multiplayerManager || !this.multiplayerManager.socket) return;
-    
+
     const vehicleData = {
       id: vehicle.id,
       type: vehicle.type,
       lane: vehicle.lane,
       targetLane: vehicle.targetLane,
-      position: { x: vehicle.position.x, y: vehicle.position.y, z: vehicle.position.z },
-      velocity: { x: vehicle.velocity.x, y: vehicle.velocity.y, z: vehicle.velocity.z },
+      position: {
+        x: vehicle.position.x,
+        y: vehicle.position.y,
+        z: vehicle.position.z,
+      },
+      velocity: {
+        x: vehicle.velocity.x,
+        y: vehicle.velocity.y,
+        z: vehicle.velocity.z,
+      },
       speed: vehicle.speed,
       baseSpeed: vehicle.baseSpeed,
       behavior: vehicle.behavior,
-      isBraking: vehicle.isBraking
+      isBraking: vehicle.isBraking,
     };
-    
-    this.multiplayerManager.socket.emit('traffic-vehicle-spawn', vehicleData);
+
+    this.multiplayerManager.socket.emit("traffic-vehicle-spawn", vehicleData);
   }
 
   broadcastTrafficUpdate() {
     if (!this.multiplayerManager || !this.multiplayerManager.socket) return;
-    
-    const trafficData = this.vehicles.map(vehicle => ({
+
+    const trafficData = this.vehicles.map((vehicle) => ({
       id: vehicle.id,
-      position: { x: vehicle.position.x, y: vehicle.position.y, z: vehicle.position.z },
-      velocity: { x: vehicle.velocity.x, y: vehicle.velocity.y, z: vehicle.velocity.z },
+      position: {
+        x: vehicle.position.x,
+        y: vehicle.position.y,
+        z: vehicle.position.z,
+      },
+      velocity: {
+        x: vehicle.velocity.x,
+        y: vehicle.velocity.y,
+        z: vehicle.velocity.z,
+      },
       lane: vehicle.lane,
       targetLane: vehicle.targetLane,
       laneChangeProgress: vehicle.laneChangeProgress,
       speed: vehicle.speed,
-      isBraking: vehicle.isBraking
+      isBraking: vehicle.isBraking,
     }));
-    
-    this.multiplayerManager.socket.emit('traffic-update', trafficData);
+
+    this.multiplayerManager.socket.emit("traffic-update", trafficData);
   }
 
   onVehicleSpawn(vehicleData) {
     // Only non-master clients should spawn vehicles from network
     if (this.isMaster) return;
-    
+
     // Check if vehicle already exists
-    if (this.vehicles.find(v => v.id === vehicleData.id)) return;
-    
+    if (this.vehicles.find((v) => v.id === vehicleData.id)) return;
+
     // Spawn the synced vehicle
     this.spawnVehicle(vehicleData.position?.z || 0, null, vehicleData);
   }
@@ -1511,16 +1788,20 @@ export class TrafficSystem {
     // Create temp vector ONCE and reuse it
     const tempPos = new THREE.Vector3();
 
-    trafficData.forEach(update => {
-      const vehicle = this.vehicles.find(v => v.id === update.id);
+    trafficData.forEach((update) => {
+      const vehicle = this.vehicles.find((v) => v.id === update.id);
       if (vehicle) {
         // Interpolate position - REUSE temp vector instead of creating new one
         tempPos.set(update.position.x, update.position.y, update.position.z);
         vehicle.position.lerp(tempPos, 0.3);
 
         // Update velocity
-        vehicle.velocity.set(update.velocity.x, update.velocity.y, update.velocity.z);
-        
+        vehicle.velocity.set(
+          update.velocity.x,
+          update.velocity.y,
+          update.velocity.z
+        );
+
         // Update lane info
         vehicle.lane = update.lane;
         vehicle.targetLane = update.targetLane;
@@ -1540,7 +1821,7 @@ export class TrafficSystem {
 
   onVehicleRemove(vehicleId) {
     // Remove vehicle from all clients
-    const vehicleIndex = this.vehicles.findIndex(v => v.id === vehicleId);
+    const vehicleIndex = this.vehicles.findIndex((v) => v.id === vehicleId);
     if (vehicleIndex >= 0) {
       const vehicle = this.vehicles[vehicleIndex];
       this.scene.remove(vehicle.mesh);
@@ -1557,7 +1838,7 @@ export class TrafficSystem {
 
   dispose() {
     // Remove all vehicles from scene and properly dispose
-    this.vehicles.forEach(vehicle => {
+    this.vehicles.forEach((vehicle) => {
       if (vehicle.mesh) {
         this.scene.remove(vehicle.mesh);
         this.disposeVehicleMesh(vehicle.mesh);
@@ -1581,8 +1862,8 @@ export class TrafficSystem {
 
     // Dispose sedan material cache
     if (this.sedanMaterialCache) {
-      this.sedanMaterialCache.forEach(colorMaterials => {
-        colorMaterials.forEach(material => {
+      this.sedanMaterialCache.forEach((colorMaterials) => {
+        colorMaterials.forEach((material) => {
           if (material && material.dispose) {
             material.dispose();
           }
@@ -1593,8 +1874,8 @@ export class TrafficSystem {
 
     // Dispose semi material cache
     if (this.semiMaterialCache) {
-      this.semiMaterialCache.forEach(colorMaterials => {
-        colorMaterials.forEach(material => {
+      this.semiMaterialCache.forEach((colorMaterials) => {
+        colorMaterials.forEach((material) => {
           if (material && material.dispose) {
             material.dispose();
           }
@@ -1605,12 +1886,12 @@ export class TrafficSystem {
 
     // Dispose sedan model and its materials
     if (this.sedanModel) {
-      this.sedanModel.traverse(child => {
+      this.sedanModel.traverse((child) => {
         if (child.isMesh) {
           if (child.geometry) child.geometry.dispose();
           if (child.material) {
             if (Array.isArray(child.material)) {
-              child.material.forEach(mat => mat.dispose());
+              child.material.forEach((mat) => mat.dispose());
             } else {
               child.material.dispose();
             }
@@ -1622,12 +1903,12 @@ export class TrafficSystem {
 
     // Dispose semi model and its materials
     if (this.semiModel) {
-      this.semiModel.traverse(child => {
+      this.semiModel.traverse((child) => {
         if (child.isMesh) {
           if (child.geometry) child.geometry.dispose();
           if (child.material) {
             if (Array.isArray(child.material)) {
-              child.material.forEach(mat => mat.dispose());
+              child.material.forEach((mat) => mat.dispose());
             } else {
               child.material.dispose();
             }
@@ -1639,7 +1920,7 @@ export class TrafficSystem {
 
     // Dispose shared geometries (they were created in constructor)
     if (this.sharedGeometry) {
-      Object.values(this.sharedGeometry).forEach(geometry => {
+      Object.values(this.sharedGeometry).forEach((geometry) => {
         if (geometry && geometry.dispose) {
           geometry.dispose();
         }
@@ -1658,11 +1939,11 @@ export class TrafficSystem {
     this.multiplayerManager = null;
     this.bloodTrackSystem = null;
   }
-  
+
   // MEMORY LEAK FIX: Clean up any debris or crash-related objects
   cleanupDebris() {
     // Remove any crashed vehicle parts that might be lingering
-    this.vehicles.forEach(vehicle => {
+    this.vehicles.forEach((vehicle) => {
       if (vehicle.isCrashed || vehicle.isDead) {
         // Remove from scene
         if (vehicle.group && vehicle.group.parent) {
@@ -1670,13 +1951,13 @@ export class TrafficSystem {
         }
       }
     });
-    
+
     // Filter out crashed vehicles
-    this.vehicles = this.vehicles.filter(vehicle => {
+    this.vehicles = this.vehicles.filter((vehicle) => {
       if (vehicle.isCrashed || vehicle.isDead) {
         // Dispose of vehicle resources
         if (vehicle.group) {
-          vehicle.group.traverse(child => {
+          vehicle.group.traverse((child) => {
             // Don't dispose shared geometry
             // Only remove from scene
             if (child.parent) {
@@ -1688,7 +1969,5 @@ export class TrafficSystem {
       }
       return true; // Keep active vehicles
     });
-    
-    console.log(`Cleaned up debris, ${this.vehicles.length} vehicles remaining`);
   }
 }

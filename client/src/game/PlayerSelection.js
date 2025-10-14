@@ -36,21 +36,21 @@ export class PlayerSelection {
   static PREVIEW_ROTATION_Y = (3 * Math.PI) / 4; // 135 degrees
 
   // === GAS STATION ===
-  static GAS_STATION_MODEL_PATH = '/models/gas-station/gas-station.glb';
+  static GAS_STATION_MODEL_PATH = "/models/gas-station/gas-station.glb";
   static GAS_STATION_SCALE = 1;
   static GAS_STATION_X_POSITION = -28.5;
   static GAS_STATION_Y_POSITION = 0;
   static GAS_STATION_Z_POSITION = -3;
 
   // Gas Station Colors - Realistic scheme
-  static GAS_STATION_CANOPY_COLOR = 0xFFFFFF; // White canopy/roof
-  static GAS_STATION_CANOPY_TRIM_COLOR = 0xFF0000; // Red trim on canopy
-  static GAS_STATION_WALLS_COLOR = 0xE8E8E8; // Off-white walls
-  static GAS_STATION_PUMPS_COLOR = 0xFF4444; // Bright red pumps
-  static GAS_STATION_COLUMNS_COLOR = 0xC0C0C0; // Silver/metallic columns
-  static GAS_STATION_WINDOWS_COLOR = 0x4A90A4; // Tinted blue windows
+  static GAS_STATION_CANOPY_COLOR = 0xffffff; // White canopy/roof
+  static GAS_STATION_CANOPY_TRIM_COLOR = 0xff0000; // Red trim on canopy
+  static GAS_STATION_WALLS_COLOR = 0xe8e8e8; // Off-white walls
+  static GAS_STATION_PUMPS_COLOR = 0xff4444; // Bright red pumps
+  static GAS_STATION_COLUMNS_COLOR = 0xc0c0c0; // Silver/metallic columns
+  static GAS_STATION_WINDOWS_COLOR = 0x4a90a4; // Tinted blue windows
   static GAS_STATION_BASE_COLOR = 0x606060; // Dark gray base/ground
-  static GAS_STATION_ACCENTS_COLOR = 0xFFD700; // Gold/yellow accents
+  static GAS_STATION_ACCENTS_COLOR = 0xffd700; // Gold/yellow accents
 
   // === PAVEMENT ===
   static PAVEMENT_WIDTH = 80;
@@ -61,16 +61,16 @@ export class PlayerSelection {
   static PAVEMENT_Z_POSITION = -3;
 
   // === FRIES ===
-  static FRIES_MODEL_PATH = '/models/fries/fries.glb';
+  static FRIES_MODEL_PATH = "/models/fries/fries.glb";
   static FRIES_SCALE = 1;
   static FRIES_X_POSITION = -19.7;
   static FRIES_Y_POSITION = -0.25;
   static FRIES_Z_POSITION = -3;
 
   // Fries colors based on UV coordinates
-  static FRIES_TOP_COLOR = 0xFFD700; // Golden yellow for top (crispy)
-  static FRIES_MIDDLE_COLOR = 0xFFA500; // Orange for middle
-  static FRIES_BOTTOM_COLOR = 0xD2691E; // Brown for bottom
+  static FRIES_TOP_COLOR = 0xffd700; // Golden yellow for top (crispy)
+  static FRIES_MIDDLE_COLOR = 0xffa500; // Orange for middle
+  static FRIES_BOTTOM_COLOR = 0xd2691e; // Brown for bottom
 
   // === CAMERA POSITIONING ===
   static CAMERA_X_POSITION = -19;
@@ -81,37 +81,44 @@ export class PlayerSelection {
   static CAMERA_LOOK_AT_Z = -3;
 
   // === UI STYLING ===
-  static UI_BOTTOM_OFFSET = '40px';
-  static UI_BORDER_RADIUS = '16px';
-  static UI_PADDING = '24px 32px';
+  static UI_BOTTOM_OFFSET = "40px";
+  static UI_BORDER_RADIUS = "16px";
+  static UI_PADDING = "24px 32px";
   static UI_Z_INDEX = 1000;
-  static UI_GAP = '24px';
-  static UI_BACKGROUND_GRADIENT = 'linear-gradient(180deg, rgba(12,18,28,0.95), rgba(24,36,56,0.92))';
-  static UI_BORDER_COLOR = 'rgba(255,255,255,0.12)';
+  static UI_GAP = "24px";
+  static UI_BACKGROUND_GRADIENT =
+    "linear-gradient(180deg, rgba(12,18,28,0.95), rgba(24,36,56,0.92))";
+  static UI_BORDER_COLOR = "rgba(255,255,255,0.12)";
 
-  static ARROW_BUTTON_SIZE = '48px';
-  static ARROW_BUTTON_BORDER_RADIUS = '12px';
-  static ARROW_BUTTON_BG = 'rgba(255,255,255,0.1)';
-  static ARROW_BUTTON_BG_HOVER = 'rgba(255,255,255,0.2)';
-  static ARROW_BUTTON_BORDER = '1px solid rgba(255,255,255,0.2)';
-  static ARROW_BUTTON_FONT_SIZE = '24px';
+  static ARROW_BUTTON_SIZE = "48px";
+  static ARROW_BUTTON_BORDER_RADIUS = "12px";
+  static ARROW_BUTTON_BG = "rgba(255,255,255,0.1)";
+  static ARROW_BUTTON_BG_HOVER = "rgba(255,255,255,0.2)";
+  static ARROW_BUTTON_BORDER = "1px solid rgba(255,255,255,0.2)";
+  static ARROW_BUTTON_FONT_SIZE = "24px";
 
-  static INFO_PANEL_MIN_WIDTH = '300px';
-  static INFO_NAME_FONT_SIZE = '24px';
-  static INFO_NAME_MARGIN_BOTTOM = '8px';
-  static INFO_STATS_FONT_SIZE = '14px';
-  static INFO_STATS_COLOR = '#bbb';
-  static INFO_STATS_MARGIN_BOTTOM = '16px';
+  static INFO_PANEL_MIN_WIDTH = "300px";
+  static INFO_NAME_FONT_SIZE = "24px";
+  static INFO_NAME_MARGIN_BOTTOM = "8px";
+  static INFO_STATS_FONT_SIZE = "14px";
+  static INFO_STATS_COLOR = "#bbb";
+  static INFO_STATS_MARGIN_BOTTOM = "16px";
 
-  static START_BUTTON_PADDING = '12px 32px';
-  static START_BUTTON_FONT_SIZE = '16px';
-  static START_BUTTON_BG = '#4CAF50';
-  static START_BUTTON_BG_HOVER = '#45a049';
-  static START_BUTTON_BORDER_RADIUS = '10px';
+  static START_BUTTON_PADDING = "12px 32px";
+  static START_BUTTON_FONT_SIZE = "16px";
+  static START_BUTTON_BG = "#4CAF50";
+  static START_BUTTON_BG_HOVER = "#45a049";
+  static START_BUTTON_BORDER_RADIUS = "10px";
 
-  static BUTTON_OPACITY_DISABLED = '1';
+  static BUTTON_OPACITY_DISABLED = "1";
 
-  constructor(scene, camera, renderer = null, audioManager = null, ufoController = null) {
+  constructor(
+    scene,
+    camera,
+    renderer = null,
+    audioManager = null,
+    ufoController = null
+  ) {
     this.scene = scene;
     this.camera = camera;
     this.renderer = renderer;
@@ -335,7 +342,9 @@ export class PlayerSelection {
       PlayerSelection.WHEEL_WIDTH,
       PlayerSelection.WHEEL_SEGMENTS
     );
-    const wheelMaterial = new THREE.MeshPhongMaterial({ color: PlayerSelection.WHEEL_COLOR });
+    const wheelMaterial = new THREE.MeshPhongMaterial({
+      color: PlayerSelection.WHEEL_COLOR,
+    });
 
     const frontWheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
     frontWheel.rotation.z = PlayerSelection.WHEEL_ROTATION;
@@ -354,7 +363,9 @@ export class PlayerSelection {
       PlayerSelection.HANDLEBAR_LENGTH,
       PlayerSelection.HANDLEBAR_SEGMENTS
     );
-    const handlebarMaterial = new THREE.MeshPhongMaterial({ color: PlayerSelection.HANDLEBAR_COLOR });
+    const handlebarMaterial = new THREE.MeshPhongMaterial({
+      color: PlayerSelection.HANDLEBAR_COLOR,
+    });
     const handlebar = new THREE.Mesh(handlebarGeometry, handlebarMaterial);
     handlebar.rotation.z = PlayerSelection.WHEEL_ROTATION;
     handlebar.position.set(
@@ -414,8 +425,7 @@ export class PlayerSelection {
     infoPanel.style.cssText = `text-align: center; min-width: ${PlayerSelection.INFO_PANEL_MIN_WIDTH};`;
 
     const infoName = document.createElement("div");
-    infoName.style.cssText =
-      `font-weight: bold; font-size: ${PlayerSelection.INFO_NAME_FONT_SIZE}; margin-bottom: ${PlayerSelection.INFO_NAME_MARGIN_BOTTOM};`;
+    infoName.style.cssText = `font-weight: bold; font-size: ${PlayerSelection.INFO_NAME_FONT_SIZE}; margin-bottom: ${PlayerSelection.INFO_NAME_MARGIN_BOTTOM};`;
     const infoStats = document.createElement("div");
     infoStats.style.cssText = `font-size: ${PlayerSelection.INFO_STATS_FONT_SIZE}; color: ${PlayerSelection.INFO_STATS_COLOR}; margin-bottom: ${PlayerSelection.INFO_STATS_MARGIN_BOTTOM};`;
 
@@ -440,9 +450,9 @@ export class PlayerSelection {
 
         // Disable and grey out the start button
         startButton.disabled = true;
-        startButton.style.opacity = '0.5';
-        startButton.style.cursor = 'not-allowed';
-        startButton.style.background = '#666';
+        startButton.style.opacity = "0.5";
+        startButton.style.cursor = "not-allowed";
+        startButton.style.background = "#666";
 
         // Hide the selection menu UI
         this.hideUIOnly();
@@ -470,16 +480,21 @@ export class PlayerSelection {
               // Ease-out curve for smooth deceleration
               const eased = 1 - Math.pow(1 - progress, 3);
 
-              this.camera.rotation.y = startRotationY + (targetRotationY - startRotationY) * eased;
+              this.camera.rotation.y =
+                startRotationY + (targetRotationY - startRotationY) * eased;
 
               if (progress < 1) {
-                this.cameraRotationAnimationId = requestAnimationFrame(animateCameraRotation);
+                this.cameraRotationAnimationId = requestAnimationFrame(
+                  animateCameraRotation
+                );
               } else {
                 this.cameraRotationAnimationId = null;
               }
             };
 
-            this.cameraRotationAnimationId = requestAnimationFrame(animateCameraRotation);
+            this.cameraRotationAnimationId = requestAnimationFrame(
+              animateCameraRotation
+            );
 
             // Start floating animation
             this.startUFOFloating();
@@ -569,7 +584,6 @@ export class PlayerSelection {
     this._updateInfoUI();
   }
 
-
   updateBikePreview(bike) {
     // bump load token so in-flight loads become stale
     this._previewLoadId += 1;
@@ -639,7 +653,11 @@ export class PlayerSelection {
       const groundOffset = -wheelBottom; // Lift bike so wheelBottom is at Y=0
 
       // Position the bike in the right lane with wheels on ground
-      pivot.position.set(PlayerSelection.PREVIEW_X_POSITION, groundOffset, PlayerSelection.PREVIEW_Z_POSITION);
+      pivot.position.set(
+        PlayerSelection.PREVIEW_X_POSITION,
+        groundOffset,
+        PlayerSelection.PREVIEW_Z_POSITION
+      );
 
       // Apply preserved rotation to the pivot so swapping keeps the spin
       pivot.rotation.y = preservedRotationY;
@@ -647,19 +665,21 @@ export class PlayerSelection {
       // Apply bike color using shared function from MotosaiGame
       if (this.selectedBike) {
         // Import MotosaiGame dynamically to avoid circular dependency
-        import('./MotosaiGame.js').then(({ MotosaiGame }) => {
-          MotosaiGame.applyBikeColor(model, this.selectedBike, false);
-        }).catch(e => {
-          console.warn('Could not apply advanced bike coloring:', e);
-          // Fallback to simple coloring
-          model.traverse((c) => {
-            if (c.isMesh && c.material && c.material.color) {
-              try {
-                c.material.color.setHex(this.selectedBike.color);
-              } catch (e) {}
-            }
+        import("./MotosaiGame.js")
+          .then(({ MotosaiGame }) => {
+            MotosaiGame.applyBikeColor(model, this.selectedBike, false);
+          })
+          .catch((e) => {
+            console.warn("Could not apply advanced bike coloring:", e);
+            // Fallback to simple coloring
+            model.traverse((c) => {
+              if (c.isMesh && c.material && c.material.color) {
+                try {
+                  c.material.color.setHex(this.selectedBike.color);
+                } catch (e) {}
+              }
+            });
           });
-        });
       } else {
         // Just set shadows if no bike selected
         model.traverse((c) => {
@@ -711,7 +731,11 @@ export class PlayerSelection {
           const groundOffset = -wheelBottom; // Lift bike so wheelBottom is at Y=0
 
           // Position the bike in the right lane with wheels on ground
-          pivot.position.set(PlayerSelection.PREVIEW_X_POSITION, groundOffset, PlayerSelection.PREVIEW_Z_POSITION);
+          pivot.position.set(
+            PlayerSelection.PREVIEW_X_POSITION,
+            groundOffset,
+            PlayerSelection.PREVIEW_Z_POSITION
+          );
 
           // Apply preserved rotation to the pivot so swapping keeps the spin
           pivot.rotation.y = preservedRotationY;
@@ -719,19 +743,21 @@ export class PlayerSelection {
           // Apply bike color using shared function from MotosaiGame
           if (this.selectedBike) {
             // Import MotosaiGame dynamically to avoid circular dependency
-            import('./MotosaiGame.js').then(({ MotosaiGame }) => {
-              MotosaiGame.applyBikeColor(model, this.selectedBike, false);
-            }).catch(e => {
-              console.warn('Could not apply advanced bike coloring:', e);
-              // Fallback to simple coloring
-              model.traverse((c) => {
-                if (c.isMesh && c.material && c.material.color) {
-                  try {
-                    c.material.color.setHex(this.selectedBike.color);
-                  } catch (e) {}
-                }
+            import("./MotosaiGame.js")
+              .then(({ MotosaiGame }) => {
+                MotosaiGame.applyBikeColor(model, this.selectedBike, false);
+              })
+              .catch((e) => {
+                console.warn("Could not apply advanced bike coloring:", e);
+                // Fallback to simple coloring
+                model.traverse((c) => {
+                  if (c.isMesh && c.material && c.material.color) {
+                    try {
+                      c.material.color.setHex(this.selectedBike.color);
+                    } catch (e) {}
+                  }
+                });
               });
-            });
           } else {
             // Just set shadows if no bike selected
             model.traverse((c) => {
@@ -779,7 +805,6 @@ export class PlayerSelection {
     }
   }
 
-
   createPavement() {
     // Create pavement plane
     const geometry = new THREE.PlaneGeometry(
@@ -789,7 +814,7 @@ export class PlayerSelection {
     const material = new THREE.MeshStandardMaterial({
       color: PlayerSelection.PAVEMENT_COLOR,
       roughness: 0.8,
-      metalness: 0.2
+      metalness: 0.2,
     });
 
     const pavement = new THREE.Mesh(geometry, material);
@@ -823,10 +848,9 @@ export class PlayerSelection {
         );
 
         // Log all mesh names for coloring reference
-        console.log('=== Gas Station Mesh Names ===');
+
         model.traverse((child) => {
           if (child.isMesh) {
-            console.log(`- ${child.name}`);
             child.castShadow = true;
             child.receiveShadow = true;
 
@@ -835,27 +859,30 @@ export class PlayerSelection {
               const name = child.name.toLowerCase();
               let targetColor = null;
 
-              if (name === 'canopy') {
+              if (name === "canopy") {
                 targetColor = PlayerSelection.GAS_STATION_CANOPY_COLOR;
-              } else if (name === 'canopy_outer' || name === 'canopy outer') {
+              } else if (name === "canopy_outer" || name === "canopy outer") {
                 targetColor = PlayerSelection.GAS_STATION_CANOPY_COLOR;
-              } else if (name === 'pump_stands' || name === 'canopy_roof_holder') {
+              } else if (
+                name === "pump_stands" ||
+                name === "canopy_roof_holder"
+              ) {
                 targetColor = PlayerSelection.GAS_STATION_COLUMNS_COLOR;
-              } else if (name === 'pump1' || name === 'pump2') {
+              } else if (name === "pump1" || name === "pump2") {
                 targetColor = PlayerSelection.GAS_STATION_PUMPS_COLOR;
-              } else if (name === 'pump_stands_ads') {
+              } else if (name === "pump_stands_ads") {
                 targetColor = PlayerSelection.GAS_STATION_ACCENTS_COLOR;
-              } else if (name === 'canopyparrt') {
+              } else if (name === "canopyparrt") {
                 targetColor = PlayerSelection.GAS_STATION_CANOPY_COLOR;
-              } else if (name === 'store_roof') {
+              } else if (name === "store_roof") {
                 targetColor = PlayerSelection.GAS_STATION_CANOPY_TRIM_COLOR;
-              } else if (name === 'trash_can') {
+              } else if (name === "trash_can") {
                 targetColor = PlayerSelection.GAS_STATION_BASE_COLOR;
-              } else if (name === 'ice_machine') {
+              } else if (name === "ice_machine") {
                 targetColor = PlayerSelection.GAS_STATION_COLUMNS_COLOR;
-              } else if (name === 'window' || name === 'windows') {
+              } else if (name === "window" || name === "windows") {
                 targetColor = PlayerSelection.GAS_STATION_WINDOWS_COLOR;
-              } else if (name === 'store') {
+              } else if (name === "store") {
                 targetColor = PlayerSelection.GAS_STATION_ACCENTS_COLOR;
               }
 
@@ -865,7 +892,7 @@ export class PlayerSelection {
                 child.material = new THREE.MeshStandardMaterial({
                   color: targetColor,
                   roughness: 0.7,
-                  metalness: 0.2
+                  metalness: 0.2,
                 });
               }
             }
@@ -881,7 +908,6 @@ export class PlayerSelection {
       }
     );
   }
-
 
   loadFries() {
     // Load fries model using GLTFLoader
@@ -914,8 +940,12 @@ export class PlayerSelection {
 
               // Define colors once (memory efficient - reused for all vertices)
               const topColor = new THREE.Color(PlayerSelection.FRIES_TOP_COLOR);
-              const middleColor = new THREE.Color(PlayerSelection.FRIES_MIDDLE_COLOR);
-              const bottomColor = new THREE.Color(PlayerSelection.FRIES_BOTTOM_COLOR);
+              const middleColor = new THREE.Color(
+                PlayerSelection.FRIES_MIDDLE_COLOR
+              );
+              const bottomColor = new THREE.Color(
+                PlayerSelection.FRIES_BOTTOM_COLOR
+              );
 
               // Pre-allocate color array for better performance
               const colors = new Array(uvAttribute.count * 3);
@@ -942,21 +972,23 @@ export class PlayerSelection {
                 colors[colorIndex++] = color.b;
               }
 
-              geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+              geometry.setAttribute(
+                "color",
+                new THREE.Float32BufferAttribute(colors, 3)
+              );
             }
 
             // Create material that uses vertex colors
             child.material = new THREE.MeshStandardMaterial({
               vertexColors: true,
               roughness: 0.7,
-              metalness: 0.1
+              metalness: 0.1,
             });
           }
         });
 
         this.friesModel = model;
         this.scene.add(model);
-        console.log('Fries model loaded with UV-based colors');
       },
       undefined,
       (err) => {
@@ -1034,7 +1066,11 @@ export class PlayerSelection {
 
       // Show beam after 0.5 seconds
       const elapsedSinceStart = (currentTime - this.ufoBeamStartTime) / 1000;
-      if (elapsedSinceStart >= 0.5 && this.friesModel && this.ufoController.ufo) {
+      if (
+        elapsedSinceStart >= 0.5 &&
+        this.friesModel &&
+        this.ufoController.ufo
+      ) {
         if (!this.ufoBeamLine) {
           // Create the beam line
           this.createUFOBeam();
@@ -1076,7 +1112,6 @@ export class PlayerSelection {
 
         // Stop floating and fly to starting position
         this.ufoController.stopFloating();
-        console.log('UFO flying to game start position');
 
         // Fly UFO to where it will be at game start (ahead of the bike)
         const startTime = Date.now();
@@ -1091,14 +1126,18 @@ export class PlayerSelection {
           const progress = Math.min(elapsed / flyDuration, 1);
 
           // Smooth easing
-          const eased = progress < 0.5
-            ? 2 * progress * progress
-            : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+          const eased =
+            progress < 0.5
+              ? 2 * progress * progress
+              : 1 - Math.pow(-2 * progress + 2, 2) / 2;
 
           // Move UFO to starting position
-          this.ufoController.ufo.position.x = startPos.x + (targetPos.x - startPos.x) * eased;
-          this.ufoController.ufo.position.y = startPos.y + (targetPos.y - startPos.y) * eased;
-          this.ufoController.ufo.position.z = startPos.z + (targetPos.z - startPos.z) * eased;
+          this.ufoController.ufo.position.x =
+            startPos.x + (targetPos.x - startPos.x) * eased;
+          this.ufoController.ufo.position.y =
+            startPos.y + (targetPos.y - startPos.y) * eased;
+          this.ufoController.ufo.position.z =
+            startPos.z + (targetPos.z - startPos.z) * eased;
 
           // Keep rotating
           this.ufoController.ufo.rotation.y += 0.05;
@@ -1111,7 +1150,6 @@ export class PlayerSelection {
             this.ufoFlyAwayAnimationId = requestAnimationFrame(animate);
           } else {
             this.ufoFlyAwayAnimationId = null;
-            console.log('UFO reached game start position');
           }
         };
 
@@ -1132,10 +1170,18 @@ export class PlayerSelection {
     const ufoBottomY = ufoWorldPos.y - 1.5;
 
     // Create end point (same calculation as the beam endpoint)
-    const endPoint = new THREE.Vector3(ufoWorldPos.x, ufoBottomY, ufoWorldPos.z);
+    const endPoint = new THREE.Vector3(
+      ufoWorldPos.x,
+      ufoBottomY,
+      ufoWorldPos.z
+    );
 
     // Interpolate position along the path from start to UFO
-    const newPosition = new THREE.Vector3().lerpVectors(this.friesStartPosition, endPoint, eased);
+    const newPosition = new THREE.Vector3().lerpVectors(
+      this.friesStartPosition,
+      endPoint,
+      eased
+    );
 
     // Update fries position
     this.friesModel.position.copy(newPosition);
@@ -1169,20 +1215,30 @@ export class PlayerSelection {
 
     // Find the actual top of the visible fries geometry
     const friesHeight = friesBBox.max.y - friesBBox.min.y;
-    const friesTopY = friesBBox.min.y + (friesHeight * 0.85); // 85% up from bottom
+    const friesTopY = friesBBox.min.y + friesHeight * 0.85; // 85% up from bottom
 
     // Create start and end points
-    const startPoint = new THREE.Vector3(ufoWorldPos.x, ufoBottomY, ufoWorldPos.z);
-    const endPoint = new THREE.Vector3(friesWorldPos.x, friesTopY, friesWorldPos.z);
+    const startPoint = new THREE.Vector3(
+      ufoWorldPos.x,
+      ufoBottomY,
+      ufoWorldPos.z
+    );
+    const endPoint = new THREE.Vector3(
+      friesWorldPos.x,
+      friesTopY,
+      friesWorldPos.z
+    );
 
     // Calculate distance between points
     const distance = startPoint.distanceTo(endPoint);
 
     // Calculate midpoint
-    const midPoint = new THREE.Vector3().addVectors(startPoint, endPoint).multiplyScalar(0.5);
+    const midPoint = new THREE.Vector3()
+      .addVectors(startPoint, endPoint)
+      .multiplyScalar(0.5);
 
     // Create cone geometry for tractor beam
-    const topRadius = 0.3;  // Narrow at UFO
+    const topRadius = 0.3; // Narrow at UFO
     const bottomRadius = 1.2; // Wide at fries
     const radialSegments = 16;
 
@@ -1201,7 +1257,7 @@ export class PlayerSelection {
       transparent: true,
       opacity: 0.3,
       side: THREE.DoubleSide,
-      blending: THREE.AdditiveBlending
+      blending: THREE.AdditiveBlending,
     });
 
     this.ufoBeamLine = new THREE.Mesh(coneGeometry, beamMaterial);
@@ -1211,13 +1267,18 @@ export class PlayerSelection {
 
     // Rotate the cone to point from UFO to fries
     // Create a direction vector from start to end
-    const direction = new THREE.Vector3().subVectors(endPoint, startPoint).normalize();
+    const direction = new THREE.Vector3()
+      .subVectors(endPoint, startPoint)
+      .normalize();
 
     // The cylinder's default orientation is along Y axis (0, 1, 0)
     const upVector = new THREE.Vector3(0, 1, 0);
 
     // Create a quaternion to rotate from up to direction
-    const quaternion = new THREE.Quaternion().setFromUnitVectors(upVector, direction);
+    const quaternion = new THREE.Quaternion().setFromUnitVectors(
+      upVector,
+      direction
+    );
     this.ufoBeamLine.setRotationFromQuaternion(quaternion);
 
     // Disable frustum culling
@@ -1225,10 +1286,10 @@ export class PlayerSelection {
 
     this.scene.add(this.ufoBeamLine);
 
-    console.log('Tractor beam created:', {
+    console.log("Tractor beam created:", {
       ufoBottom: startPoint,
       friesTop: endPoint,
-      distance: distance
+      distance: distance,
     });
   }
 
@@ -1249,25 +1310,40 @@ export class PlayerSelection {
     // Get fries bounding box to find the top
     const friesBBox = new THREE.Box3().setFromObject(this.friesModel);
     const friesHeight = friesBBox.max.y - friesBBox.min.y;
-    const friesTopY = friesBBox.min.y + (friesHeight * 0.85);
+    const friesTopY = friesBBox.min.y + friesHeight * 0.85;
 
     // Create start and end points
-    const startPoint = new THREE.Vector3(ufoWorldPos.x, ufoBottomY, ufoWorldPos.z);
-    const endPoint = new THREE.Vector3(friesWorldPos.x, friesTopY, friesWorldPos.z);
+    const startPoint = new THREE.Vector3(
+      ufoWorldPos.x,
+      ufoBottomY,
+      ufoWorldPos.z
+    );
+    const endPoint = new THREE.Vector3(
+      friesWorldPos.x,
+      friesTopY,
+      friesWorldPos.z
+    );
 
     // Calculate distance between points
     const distance = startPoint.distanceTo(endPoint);
 
     // Calculate midpoint
-    const midPoint = new THREE.Vector3().addVectors(startPoint, endPoint).multiplyScalar(0.5);
+    const midPoint = new THREE.Vector3()
+      .addVectors(startPoint, endPoint)
+      .multiplyScalar(0.5);
 
     // Update beam position
     this.ufoBeamLine.position.copy(midPoint);
 
     // Rotate the cone to point from UFO to fries
-    const direction = new THREE.Vector3().subVectors(endPoint, startPoint).normalize();
+    const direction = new THREE.Vector3()
+      .subVectors(endPoint, startPoint)
+      .normalize();
     const upVector = new THREE.Vector3(0, 1, 0);
-    const quaternion = new THREE.Quaternion().setFromUnitVectors(upVector, direction);
+    const quaternion = new THREE.Quaternion().setFromUnitVectors(
+      upVector,
+      direction
+    );
     this.ufoBeamLine.setRotationFromQuaternion(quaternion);
 
     // Recreate geometry if distance changed significantly
@@ -1378,8 +1454,6 @@ export class PlayerSelection {
   }
 
   cleanup() {
-    console.log('PlayerSelection: Starting cleanup');
-
     // Stop all animations
     this.stopUFOFloating();
     if (this.previewAnimationId) {
@@ -1439,8 +1513,9 @@ export class PlayerSelection {
     if (this.previewModel) {
       this.scene.remove(this.previewModel);
       // Only dispose if it was a fallback model (not cloned from preload)
-      const isPreloadedClone = window.__PRELOADED_BIKE_MODELS__ &&
-                               window.__PRELOADED_BIKE_MODELS__["motor1"];
+      const isPreloadedClone =
+        window.__PRELOADED_BIKE_MODELS__ &&
+        window.__PRELOADED_BIKE_MODELS__["motor1"];
       if (!isPreloadedClone) {
         disposeObject(this.previewModel);
       }
@@ -1456,7 +1531,8 @@ export class PlayerSelection {
     // Clean up pavement
     if (this.pavementMesh) {
       if (this.pavementMesh.geometry) this.pavementMesh.geometry.dispose();
-      if (this.pavementMesh.material) this.disposeMaterial(this.pavementMesh.material);
+      if (this.pavementMesh.material)
+        this.disposeMaterial(this.pavementMesh.material);
       this.scene.remove(this.pavementMesh);
       this.pavementMesh = null;
     }
@@ -1470,7 +1546,8 @@ export class PlayerSelection {
     // Clean up tractor beam
     if (this.ufoBeamLine) {
       if (this.ufoBeamLine.geometry) this.ufoBeamLine.geometry.dispose();
-      if (this.ufoBeamLine.material) this.disposeMaterial(this.ufoBeamLine.material);
+      if (this.ufoBeamLine.material)
+        this.disposeMaterial(this.ufoBeamLine.material);
       this.scene.remove(this.ufoBeamLine);
       this.ufoBeamLine = null;
     }
@@ -1490,8 +1567,6 @@ export class PlayerSelection {
 
     // Restore camera if needed
     this.restoreCamera();
-
-    console.log('PlayerSelection: Cleanup complete');
   }
 
   disposeMaterial(material) {

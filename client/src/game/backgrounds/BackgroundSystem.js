@@ -1,6 +1,6 @@
 // Simple blue sky background with beautiful night starfield
 
-import * as THREE from 'three';
+import * as THREE from "three";
 
 export class BackgroundSystem {
   constructor(scene, camera) {
@@ -20,17 +20,17 @@ export class BackgroundSystem {
     // Create simple blue sky sphere
     const skyGeo = new THREE.SphereGeometry(2000, 64, 32);
     const skyMat = new THREE.MeshBasicMaterial({
-      color: 0x87CEEB,  // Sky blue
+      color: 0x87ceeb, // Sky blue
       fog: false,
-      side: THREE.BackSide,  // Render inside of sphere
+      side: THREE.BackSide, // Render inside of sphere
       depthWrite: false,
-      transparent: false
+      transparent: false,
     });
 
     this.skyDome = new THREE.Mesh(skyGeo, skyMat);
-    this.skyDome.name = 'sky';
-    this.skyDome.renderOrder = -1000;  // Render behind everything
-    this.skyDome.frustumCulled = false;  // Always render
+    this.skyDome.name = "sky";
+    this.skyDome.renderOrder = -1000; // Render behind everything
+    this.skyDome.frustumCulled = false; // Always render
     this.scene.add(this.skyDome);
 
     // Create beautiful starfield
@@ -66,7 +66,7 @@ export class BackgroundSystem {
       const sizeRoll = Math.random();
       if (sizeRoll > 0.98) {
         sizes[i] = 4.0 + Math.random() * 3.0; // Bright stars
-      } else if (sizeRoll > 0.90) {
+      } else if (sizeRoll > 0.9) {
         sizes[i] = 2.5 + Math.random() * 1.5; // Medium stars
       } else {
         sizes[i] = 1.0 + Math.random() * 1.5; // Small stars
@@ -97,17 +97,26 @@ export class BackgroundSystem {
     }
 
     const starGeometry = new THREE.BufferGeometry();
-    starGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    starGeometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
-    starGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-    starGeometry.setAttribute('twinkleOffset', new THREE.BufferAttribute(twinkleOffsets, 1));
-    starGeometry.setAttribute('twinkleSpeed', new THREE.BufferAttribute(twinkleSpeeds, 1));
+    starGeometry.setAttribute(
+      "position",
+      new THREE.BufferAttribute(positions, 3)
+    );
+    starGeometry.setAttribute("size", new THREE.BufferAttribute(sizes, 1));
+    starGeometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+    starGeometry.setAttribute(
+      "twinkleOffset",
+      new THREE.BufferAttribute(twinkleOffsets, 1)
+    );
+    starGeometry.setAttribute(
+      "twinkleSpeed",
+      new THREE.BufferAttribute(twinkleSpeeds, 1)
+    );
 
     // Custom shader for beautiful twinkling stars
     const starMaterial = new THREE.ShaderMaterial({
       uniforms: {
         time: { value: 0 },
-        opacity: { value: 1.0 }
+        opacity: { value: 1.0 },
       },
       vertexShader: `
         attribute float size;
@@ -161,11 +170,11 @@ export class BackgroundSystem {
       transparent: true,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
-      fog: false
+      fog: false,
     });
 
     this.starfield = new THREE.Points(starGeometry, starMaterial);
-    this.starfield.name = 'starfield';
+    this.starfield.name = "starfield";
     this.starfield.renderOrder = -999;
     this.starfield.frustumCulled = false;
     this.starfield.visible = false; // Hidden by default, shown at night
@@ -177,17 +186,17 @@ export class BackgroundSystem {
     const milkyWayGeo = new THREE.PlaneGeometry(3000, 1000);
 
     // Create a gradient texture for the Milky Way
-    const canvas = document.createElement('canvas');
+    const canvas = document.createElement("canvas");
     canvas.width = 512;
     canvas.height = 512;
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext("2d");
 
     // Create radial gradient from center
     const gradient = ctx.createRadialGradient(256, 256, 0, 256, 256, 256);
-    gradient.addColorStop(0, 'rgba(200, 220, 255, 0.4)');
-    gradient.addColorStop(0.3, 'rgba(150, 180, 255, 0.2)');
-    gradient.addColorStop(0.6, 'rgba(100, 140, 200, 0.1)');
-    gradient.addColorStop(1, 'rgba(50, 80, 150, 0)');
+    gradient.addColorStop(0, "rgba(200, 220, 255, 0.4)");
+    gradient.addColorStop(0.3, "rgba(150, 180, 255, 0.2)");
+    gradient.addColorStop(0.6, "rgba(100, 140, 200, 0.1)");
+    gradient.addColorStop(1, "rgba(50, 80, 150, 0)");
 
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, 512, 512);
@@ -201,11 +210,11 @@ export class BackgroundSystem {
       blending: THREE.AdditiveBlending,
       side: THREE.DoubleSide,
       depthWrite: false,
-      fog: false
+      fog: false,
     });
 
     this.milkyWay = new THREE.Mesh(milkyWayGeo, milkyWayMat);
-    this.milkyWay.name = 'milkyWay';
+    this.milkyWay.name = "milkyWay";
     this.milkyWay.renderOrder = -998;
     this.milkyWay.rotation.x = Math.PI / 2;
     this.milkyWay.rotation.z = Math.PI / 4; // Angle the Milky Way
@@ -216,15 +225,13 @@ export class BackgroundSystem {
   }
 
   createSunAndMoon() {
-    console.log('Creating sun and moon...');
-
     // Create the Sun - bright glowing sphere
     const sunGeo = new THREE.SphereGeometry(7.5, 32, 32);
 
     // Sun shader for realistic glow
     const sunMaterial = new THREE.ShaderMaterial({
       uniforms: {
-        glowColor: { value: new THREE.Color(0xFFFAF0) }
+        glowColor: { value: new THREE.Color(0xfffaf0) },
       },
       vertexShader: `
         varying vec3 vNormal;
@@ -251,11 +258,11 @@ export class BackgroundSystem {
       `,
       transparent: false,
       depthWrite: false,
-      fog: false
+      fog: false,
     });
 
     this.sun = new THREE.Mesh(sunGeo, sunMaterial);
-    this.sun.name = 'sun';
+    this.sun.name = "sun";
     this.sun.renderOrder = -997; // Behind starfield
     this.sun.frustumCulled = false;
 
@@ -263,8 +270,8 @@ export class BackgroundSystem {
     const sunGlowGeo = new THREE.SphereGeometry(12.5, 32, 32);
     const sunGlowMaterial = new THREE.ShaderMaterial({
       uniforms: {
-        glowColor: { value: new THREE.Color(0xFFDD88) },
-        viewVector: { value: new THREE.Vector3() }
+        glowColor: { value: new THREE.Color(0xffdd88) },
+        viewVector: { value: new THREE.Vector3() },
       },
       vertexShader: `
         uniform vec3 viewVector;
@@ -290,7 +297,7 @@ export class BackgroundSystem {
       transparent: true,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
-      fog: false
+      fog: false,
     });
 
     this.sunGlow = new THREE.Mesh(sunGlowGeo, sunGlowMaterial);
@@ -302,8 +309,6 @@ export class BackgroundSystem {
 
     // Initially position sun (will be updated by setSunMoonPosition)
     this.sun.visible = true;
-
-    console.log('Sun created successfully! Sun visible:', this.sun.visible);
   }
 
   // Update sun position based on continuous orbit
@@ -311,14 +316,18 @@ export class BackgroundSystem {
     if (!this.sun) return;
 
     // Update sun position directly (already calculated in circular orbit)
-    this.sunRelativePosition = new THREE.Vector3(sunPosition[0], sunPosition[1], sunPosition[2]);
+    this.sunRelativePosition = new THREE.Vector3(
+      sunPosition[0],
+      sunPosition[1],
+      sunPosition[2]
+    );
 
     // Show/hide sun based on whether it's above horizon
     if (moonData) {
       this.sun.visible = moonData.sunAboveHorizon;
     } else {
       // Fallback: sun visible during day, hidden at night
-      this.sun.visible = timeOfDay !== 'night';
+      this.sun.visible = timeOfDay !== "night";
     }
   }
 
@@ -380,7 +389,6 @@ export class BackgroundSystem {
         );
       }
     }
-
   }
 
   dispose() {

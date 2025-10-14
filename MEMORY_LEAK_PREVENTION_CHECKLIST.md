@@ -1,6 +1,7 @@
 # Memory Leak Prevention Checklist for Motosai
 
 ## Overview
+
 This checklist ensures all classes in the Motosai game properly clean up resources to prevent memory leaks. Use this when creating new classes or reviewing existing ones.
 
 ---
@@ -8,17 +9,20 @@ This checklist ensures all classes in the Motosai game properly clean up resourc
 ## ✅ Animation Frames
 
 ### Rules:
+
 - **ALWAYS** store `requestAnimationFrame` IDs
 - **ALWAYS** cancel with `cancelAnimationFrame()` in cleanup
 - **NEVER** use `requestAnimationFrame` without tracking the ID
 
 ### Checklist:
+
 - [ ] All `requestAnimationFrame` calls store their ID in an instance variable
 - [ ] IDs are nulled after cancellation: `this.animationId = null`
 - [ ] Cleanup/destroy method cancels ALL animation frames
 - [ ] Animation loops check for cancellation flags before continuing
 
 ### Example:
+
 ```javascript
 // Constructor
 this.myAnimationId = null;
@@ -38,11 +42,13 @@ if (this.myAnimationId) {
 ## ✅ Event Listeners
 
 ### Rules:
+
 - **ALWAYS** store bound event handlers as instance variables
 - **NEVER** use `.bind()` directly in `addEventListener` (creates new function each time)
 - **ALWAYS** remove listeners in cleanup with the EXACT same bound function
 
 ### Checklist:
+
 - [ ] All event handlers are bound once in constructor
 - [ ] Bound handlers are stored as instance variables (e.g., `this.boundOnResize`)
 - [ ] `addEventListener` uses the stored bound handler
@@ -50,17 +56,19 @@ if (this.myAnimationId) {
 - [ ] All bound handlers are nulled after removal
 
 ### Example:
+
 ```javascript
 // Constructor
 this.boundOnResize = this.onResize.bind(this);
-window.addEventListener('resize', this.boundOnResize);
+window.addEventListener("resize", this.boundOnResize);
 
 // Cleanup
-window.removeEventListener('resize', this.boundOnResize);
+window.removeEventListener("resize", this.boundOnResize);
 this.boundOnResize = null;
 ```
 
 ### Common Event Sources:
+
 - [ ] `window` (resize, beforeunload, etc.)
 - [ ] `document` (keydown, keyup, click, etc.)
 - [ ] DOM elements (click, touchstart, mousedown, etc.)
@@ -71,11 +79,13 @@ this.boundOnResize = null;
 ## ✅ Timers
 
 ### Rules:
+
 - **ALWAYS** track timer IDs (setTimeout, setInterval)
 - **ALWAYS** clear timers in cleanup
 - **CONSIDER** using a Set to track multiple timers
 
 ### Checklist:
+
 - [ ] All `setTimeout` IDs are stored
 - [ ] All `setInterval` IDs are stored
 - [ ] Timers are cleared in cleanup: `clearTimeout()` / `clearInterval()`
@@ -83,19 +93,24 @@ this.boundOnResize = null;
 - [ ] Collections of timers (Sets/Arrays) are cleared
 
 ### Example:
+
 ```javascript
 // Constructor
 this.activeTimers = new Set();
 this.myInterval = null;
 
 // Usage
-const timer = setTimeout(() => { /*...*/ }, 1000);
+const timer = setTimeout(() => {
+  /*...*/
+}, 1000);
 this.activeTimers.add(timer);
 
-this.myInterval = setInterval(() => { /*...*/ }, 5000);
+this.myInterval = setInterval(() => {
+  /*...*/
+}, 5000);
 
 // Cleanup
-this.activeTimers.forEach(timer => clearTimeout(timer));
+this.activeTimers.forEach((timer) => clearTimeout(timer));
 this.activeTimers.clear();
 
 if (this.myInterval) {
@@ -109,11 +124,13 @@ if (this.myInterval) {
 ## ✅ Three.js Resources
 
 ### Rules:
+
 - **ALWAYS** call `.dispose()` on geometries, materials, and textures
 - **BE CAREFUL** with shared/preloaded resources (don't dispose if shared)
 - **ALWAYS** remove objects from scene before disposing
 
 ### Checklist:
+
 - [ ] All geometries have `.dispose()` called
 - [ ] All materials have `.dispose()` called
 - [ ] All textures have `.dispose()` called
@@ -122,6 +139,7 @@ if (this.myInterval) {
 - [ ] Large object references are nulled: `this.myModel = null`
 
 ### Example:
+
 ```javascript
 // Cleanup
 if (this.myMesh) {
@@ -134,7 +152,7 @@ if (this.myMesh) {
   if (this.myMesh.material) {
     // Handle array of materials
     if (Array.isArray(this.myMesh.material)) {
-      this.myMesh.material.forEach(m => {
+      this.myMesh.material.forEach((m) => {
         if (m.map) m.map.dispose();
         m.dispose();
       });
@@ -155,10 +173,12 @@ if (this.myMesh) {
 ## ✅ Canvas & Context
 
 ### Rules:
+
 - **ALWAYS** null out canvas contexts explicitly
 - **ALWAYS** remove canvas from DOM
 
 ### Checklist:
+
 - [ ] Canvas 2D/WebGL context is nulled: `this.ctx = null`
 - [ ] Canvas element is removed from DOM: `this.canvas.remove()`
 - [ ] Canvas reference is nulled: `this.canvas = null`
@@ -168,10 +188,12 @@ if (this.myMesh) {
 ## ✅ WebSocket Connections
 
 ### Rules:
+
 - **ALWAYS** close WebSocket connections in cleanup
 - **ALWAYS** remove WebSocket event listeners
 
 ### Checklist:
+
 - [ ] Socket is closed: `this.socket.close()`
 - [ ] Socket event listeners are removed or socket is nulled
 - [ ] Socket reference is nulled: `this.socket = null`
@@ -181,10 +203,12 @@ if (this.myMesh) {
 ## ✅ DOM Elements
 
 ### Rules:
+
 - **ALWAYS** remove event listeners before removing elements
 - **ALWAYS** null out references after removal
 
 ### Checklist:
+
 - [ ] All event listeners removed from elements
 - [ ] Elements removed from DOM: `element.remove()` or `parent.removeChild(element)`
 - [ ] Element references nulled: `this.myElement = null`
@@ -194,6 +218,7 @@ if (this.myMesh) {
 ## ✅ Class Cleanup Pattern
 
 ### Every class should have:
+
 ```javascript
 class MyClass {
   constructor() {
@@ -206,8 +231,8 @@ class MyClass {
 
   // ... class methods ...
 
-  cleanup() {  // or destroy()
-    console.log('MyClass: Starting cleanup');
+  cleanup() {
+    // or destroy()
 
     // 1. Cancel animation frames
     if (this.animationId) {
@@ -222,11 +247,11 @@ class MyClass {
     });
 
     // 3. Clear timers
-    this.activeTimers.forEach(timer => clearTimeout(timer));
+    this.activeTimers.forEach((timer) => clearTimeout(timer));
     this.activeTimers.clear();
 
     // 4. Dispose Three.js resources
-    this.resources.forEach(resource => {
+    this.resources.forEach((resource) => {
       if (resource && resource.dispose) {
         resource.dispose();
       }
@@ -249,8 +274,6 @@ class MyClass {
     this.scene = null;
     this.camera = null;
     this.renderer = null;
-
-    console.log('MyClass: Cleanup complete');
   }
 }
 ```
@@ -260,6 +283,7 @@ class MyClass {
 ## ✅ Testing Checklist
 
 ### Manual Testing:
+
 - [ ] Open Chrome DevTools → Performance → Memory
 - [ ] Record heap snapshot before starting
 - [ ] Play game for 5 minutes
@@ -269,6 +293,7 @@ class MyClass {
 - [ ] Check for "Detached DOM tree" warnings
 
 ### Automated Testing:
+
 - [ ] Test that `cleanup()` is called when game restarts
 - [ ] Test that `cleanup()` is called when page unloads
 - [ ] Verify no "Detached DOM tree" errors in console
@@ -279,6 +304,7 @@ class MyClass {
 ## ✅ Code Review Checklist
 
 When reviewing code, ask:
+
 - [ ] Does this class have a `cleanup()` or `destroy()` method?
 - [ ] Is the cleanup method called when the object is no longer needed?
 - [ ] Are all `requestAnimationFrame` calls tracked and cancelled?
@@ -295,30 +321,34 @@ When reviewing code, ask:
 ## 🔍 Common Memory Leak Patterns to Avoid
 
 ### ❌ BAD: Binding in addEventListener
+
 ```javascript
-window.addEventListener('resize', this.onResize.bind(this));  // Creates new function
-window.removeEventListener('resize', this.onResize.bind(this));  // Won't work! Different function
+window.addEventListener("resize", this.onResize.bind(this)); // Creates new function
+window.removeEventListener("resize", this.onResize.bind(this)); // Won't work! Different function
 ```
 
 ### ✅ GOOD: Store bound handler
+
 ```javascript
 this.boundOnResize = this.onResize.bind(this);
-window.addEventListener('resize', this.boundOnResize);
-window.removeEventListener('resize', this.boundOnResize);  // Works!
+window.addEventListener("resize", this.boundOnResize);
+window.removeEventListener("resize", this.boundOnResize); // Works!
 ```
 
 ---
 
 ### ❌ BAD: Untracked animation frame
+
 ```javascript
 const animate = () => {
   // Do stuff
-  requestAnimationFrame(animate);  // Can't cancel this!
+  requestAnimationFrame(animate); // Can't cancel this!
 };
 animate();
 ```
 
 ### ✅ GOOD: Tracked animation frame
+
 ```javascript
 this.animationId = null;
 
@@ -337,11 +367,15 @@ if (this.animationId) {
 ---
 
 ### ❌ BAD: Untracked timers
+
 ```javascript
-setTimeout(() => { /*...*/ }, 5000);  // Can't clear this if cleanup is called!
+setTimeout(() => {
+  /*...*/
+}, 5000); // Can't clear this if cleanup is called!
 ```
 
 ### ✅ GOOD: Tracked timers
+
 ```javascript
 const timerId = setTimeout(() => {
   this.activeTimers.delete(timerId);
@@ -350,7 +384,7 @@ const timerId = setTimeout(() => {
 this.activeTimers.add(timerId);
 
 // In cleanup:
-this.activeTimers.forEach(timer => clearTimeout(timer));
+this.activeTimers.forEach((timer) => clearTimeout(timer));
 ```
 
 ---
@@ -358,12 +392,14 @@ this.activeTimers.forEach(timer => clearTimeout(timer));
 ## 📋 Summary
 
 **Key Principles:**
+
 1. **If you create it, you must destroy it**
 2. **If you add it, you must remove it**
 3. **If you open it, you must close it**
 4. **If you allocate it, you must free it**
 
 **When in doubt:**
+
 - Store the reference/ID
 - Track it in a collection
 - Clean it up in the cleanup method
@@ -387,6 +423,7 @@ If you suspect a memory leak:
 7. Use the "Retainers" view to see what's holding references
 
 Common culprits:
+
 - Event listeners not removed
 - Animation frames not cancelled
 - Timers not cleared

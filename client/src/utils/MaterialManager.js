@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import * as THREE from "three";
 
 /**
  * MaterialManager - Centralized material management to prevent memory leaks
@@ -26,7 +26,7 @@ export class MaterialManager {
       shared: 0,
       cloned: 0,
       disposed: 0,
-      reused: 0
+      reused: 0,
     };
 
     this.initializeCommonMaterials();
@@ -41,46 +41,46 @@ export class MaterialManager {
       asphalt: new THREE.MeshStandardMaterial({
         color: 0x333333,
         roughness: 0.8,
-        metalness: 0.1
+        metalness: 0.1,
       }),
       line: new THREE.MeshBasicMaterial({
-        color: 0xffff00
+        color: 0xffff00,
       }),
       whiteLine: new THREE.MeshBasicMaterial({
-        color: 0xffffff
+        color: 0xffffff,
       }),
       shoulder: new THREE.MeshStandardMaterial({
         color: 0x555555,
-        roughness: 0.9
-      })
+        roughness: 0.9,
+      }),
     };
 
     // Track current time of day for road reflectivity
-    this.currentTimeOfDay = 'day';
+    this.currentTimeOfDay = "day";
 
     // Particle materials
     this.particleMaterials = {
       blood: new THREE.MeshBasicMaterial({
-        color: 0x660000,  // Darker red for better visibility
+        color: 0x660000, // Darker red for better visibility
         transparent: true,
         opacity: 0.9,
-        side: THREE.DoubleSide  // Visible from both sides
+        side: THREE.DoubleSide, // Visible from both sides
       }),
       smoke: new THREE.MeshBasicMaterial({
         color: 0x333333,
         transparent: true,
-        opacity: 0.5
+        opacity: 0.5,
       }),
       spark: new THREE.MeshBasicMaterial({
         color: 0xffff00,
         transparent: true,
-        opacity: 0.9
+        opacity: 0.9,
       }),
       fire: new THREE.MeshBasicMaterial({
         color: 0xff6600,
         transparent: true,
-        opacity: 0.7
-      })
+        opacity: 0.7,
+      }),
     };
 
     // Common vehicle colors
@@ -96,41 +96,51 @@ export class MaterialManager {
       0x808080, // Gray
       0xff8800, // Orange
       0x8800ff, // Purple
-      0x88ff00  // Lime
+      0x88ff00, // Lime
     ];
 
     // Pre-create vehicle materials
-    vehicleColors.forEach(color => {
+    vehicleColors.forEach((color) => {
       const key = `vehicle_${color.toString(16)}`;
 
       // Car body material
-      this.vehicleMaterialPool.set(`${key}_body`, new THREE.MeshStandardMaterial({
-        color,
-        metalness: 0.6,
-        roughness: 0.3
-      }));
+      this.vehicleMaterialPool.set(
+        `${key}_body`,
+        new THREE.MeshStandardMaterial({
+          color,
+          metalness: 0.6,
+          roughness: 0.3,
+        })
+      );
 
       // Car window material
-      this.vehicleMaterialPool.set(`${key}_window`, new THREE.MeshStandardMaterial({
-        color: 0x333344,
-        metalness: 0.9,
-        roughness: 0.1,
-        transparent: true,
-        opacity: 0.7
-      }));
+      this.vehicleMaterialPool.set(
+        `${key}_window`,
+        new THREE.MeshStandardMaterial({
+          color: 0x333344,
+          metalness: 0.9,
+          roughness: 0.1,
+          transparent: true,
+          opacity: 0.7,
+        })
+      );
 
       // Car wheel material
-      this.vehicleMaterialPool.set(`${key}_wheel`, new THREE.MeshStandardMaterial({
-        color: 0x222222,
-        metalness: 0.7,
-        roughness: 0.5
-      }));
+      this.vehicleMaterialPool.set(
+        `${key}_wheel`,
+        new THREE.MeshStandardMaterial({
+          color: 0x222222,
+          metalness: 0.7,
+          roughness: 0.5,
+        })
+      );
     });
 
-    this.stats.shared = this.sharedMaterials.size +
-                       this.vehicleMaterialPool.size +
-                       Object.keys(this.roadMaterials).length +
-                       Object.keys(this.particleMaterials).length;
+    this.stats.shared =
+      this.sharedMaterials.size +
+      this.vehicleMaterialPool.size +
+      Object.keys(this.roadMaterials).length +
+      Object.keys(this.particleMaterials).length;
   }
 
   /**
@@ -145,7 +155,6 @@ export class MaterialManager {
       const material = this.createMaterial(type, options);
       this.sharedMaterials.set(key, material);
       this.stats.shared++;
-      console.log(`Created material: ${key}`); // Debug logging
     } else {
       this.stats.reused++;
     }
@@ -160,7 +169,7 @@ export class MaterialManager {
     // Convert color properties that might be THREE.Color objects
     for (const key in normalized) {
       const value = normalized[key];
-      if (value && typeof value === 'object' && value.isColor) {
+      if (value && typeof value === "object" && value.isColor) {
         // Convert THREE.Color to hex number
         normalized[key] = value.getHex();
       }
@@ -174,15 +183,15 @@ export class MaterialManager {
    */
   createMaterial(type, options) {
     switch (type) {
-      case 'standard':
+      case "standard":
         return new THREE.MeshStandardMaterial(options);
-      case 'basic':
+      case "basic":
         return new THREE.MeshBasicMaterial(options);
-      case 'phong':
+      case "phong":
         return new THREE.MeshPhongMaterial(options);
-      case 'lambert':
+      case "lambert":
         return new THREE.MeshLambertMaterial(options);
-      case 'physical':
+      case "physical":
         return new THREE.MeshPhysicalMaterial(options);
       default:
         return new THREE.MeshStandardMaterial(options);
@@ -192,8 +201,8 @@ export class MaterialManager {
   /**
    * Get a vehicle material from the pool
    */
-  getVehicleMaterial(color, part = 'body') {
-    const colorHex = typeof color === 'number' ? color : parseInt(color, 16);
+  getVehicleMaterial(color, part = "body") {
+    const colorHex = typeof color === "number" ? color : parseInt(color, 16);
     const key = `vehicle_${colorHex.toString(16)}_${part}`;
 
     if (this.vehicleMaterialPool.has(key)) {
@@ -203,7 +212,7 @@ export class MaterialManager {
 
     // Fallback to closest color
     const keys = Array.from(this.vehicleMaterialPool.keys());
-    const fallbackKey = keys.find(k => k.includes(part)) || keys[0];
+    const fallbackKey = keys.find((k) => k.includes(part)) || keys[0];
     this.stats.reused++;
     return this.vehicleMaterialPool.get(fallbackKey);
   }
@@ -211,7 +220,7 @@ export class MaterialManager {
   /**
    * Get road materials
    */
-  getRoadMaterial(type = 'asphalt') {
+  getRoadMaterial(type = "asphalt") {
     this.stats.reused++;
     return this.roadMaterials[type] || this.roadMaterials.asphalt;
   }
@@ -226,7 +235,7 @@ export class MaterialManager {
     this.currentTimeOfDay = timeOfDay;
 
     if (this.roadMaterials && this.roadMaterials.asphalt) {
-      if (timeOfDay === 'day') {
+      if (timeOfDay === "day") {
         // Only during pure daytime - more reflective
         this.roadMaterials.asphalt.roughness = 0.8;
         this.roadMaterials.asphalt.metalness = 0.1;
@@ -242,7 +251,7 @@ export class MaterialManager {
   /**
    * Get particle materials
    */
-  getParticleMaterial(type = 'smoke') {
+  getParticleMaterial(type = "smoke") {
     this.stats.reused++;
     return this.particleMaterials[type] || this.particleMaterials.smoke;
   }
@@ -278,7 +287,6 @@ export class MaterialManager {
     // Check if it's a shared material (shouldn't dispose these normally)
     for (const [key, mat] of this.sharedMaterials) {
       if (mat === material) {
-        console.warn('Attempting to dispose shared material:', key);
         return false;
       }
     }
@@ -295,12 +303,21 @@ export class MaterialManager {
    */
   disposeTexturesInMaterial(material) {
     const textureProperties = [
-      'map', 'normalMap', 'roughnessMap', 'metalnessMap',
-      'aoMap', 'emissiveMap', 'bumpMap', 'displacementMap',
-      'alphaMap', 'envMap', 'lightMap', 'specularMap'
+      "map",
+      "normalMap",
+      "roughnessMap",
+      "metalnessMap",
+      "aoMap",
+      "emissiveMap",
+      "bumpMap",
+      "displacementMap",
+      "alphaMap",
+      "envMap",
+      "lightMap",
+      "specularMap",
     ];
 
-    textureProperties.forEach(prop => {
+    textureProperties.forEach((prop) => {
       if (material[prop] && material[prop].dispose) {
         material[prop].dispose();
       }
@@ -315,7 +332,7 @@ export class MaterialManager {
 
     if (mesh.material) {
       if (Array.isArray(mesh.material)) {
-        mesh.material.forEach(mat => this.disposeMaterial(mat));
+        mesh.material.forEach((mat) => this.disposeMaterial(mat));
       } else {
         this.disposeMaterial(mesh.material);
       }
@@ -323,7 +340,7 @@ export class MaterialManager {
 
     // Recursively dispose children materials
     if (mesh.children) {
-      mesh.children.forEach(child => this.disposeMeshMaterials(child));
+      mesh.children.forEach((child) => this.disposeMeshMaterials(child));
     }
   }
 
@@ -331,7 +348,7 @@ export class MaterialManager {
    * Clean up all cloned materials
    */
   disposeClonedMaterials() {
-    this.clonedMaterials.forEach(material => {
+    this.clonedMaterials.forEach((material) => {
       this.disposeTexturesInMaterial(material);
       material.dispose();
       this.stats.disposed++;
@@ -347,14 +364,14 @@ export class MaterialManager {
     this.disposeClonedMaterials();
 
     // Dispose shared materials
-    this.sharedMaterials.forEach(material => {
+    this.sharedMaterials.forEach((material) => {
       this.disposeTexturesInMaterial(material);
       material.dispose();
     });
     this.sharedMaterials.clear();
 
     // Dispose vehicle materials
-    this.vehicleMaterialPool.forEach(material => {
+    this.vehicleMaterialPool.forEach((material) => {
       this.disposeTexturesInMaterial(material);
       material.dispose();
     });
@@ -362,7 +379,7 @@ export class MaterialManager {
 
     // Dispose road materials
     if (this.roadMaterials) {
-      Object.values(this.roadMaterials).forEach(material => {
+      Object.values(this.roadMaterials).forEach((material) => {
         this.disposeTexturesInMaterial(material);
         material.dispose();
       });
@@ -371,14 +388,12 @@ export class MaterialManager {
 
     // Dispose particle materials
     if (this.particleMaterials) {
-      Object.values(this.particleMaterials).forEach(material => {
+      Object.values(this.particleMaterials).forEach((material) => {
         this.disposeTexturesInMaterial(material);
         material.dispose();
       });
       this.particleMaterials = null;
     }
-
-    console.log('MaterialManager disposed. Stats:', this.stats);
   }
 
   /**
@@ -390,7 +405,10 @@ export class MaterialManager {
       currentShared: this.sharedMaterials.size,
       currentCloned: this.clonedMaterials.size,
       vehiclePoolSize: this.vehicleMaterialPool.size,
-      totalActive: this.sharedMaterials.size + this.clonedMaterials.size + this.vehicleMaterialPool.size
+      totalActive:
+        this.sharedMaterials.size +
+        this.clonedMaterials.size +
+        this.vehicleMaterialPool.size,
     };
   }
 
@@ -399,13 +417,6 @@ export class MaterialManager {
    */
   logStats() {
     const stats = this.getStats();
-    console.log('%c📊 Material Manager Stats', 'color: #00ff00; font-weight: bold');
-    console.log(`Shared Materials: ${stats.currentShared}`);
-    console.log(`Cloned Materials: ${stats.currentCloned}`);
-    console.log(`Vehicle Pool: ${stats.vehiclePoolSize}`);
-    console.log(`Total Active: ${stats.totalActive}`);
-    console.log(`Times Reused: ${stats.reused}`);
-    console.log(`Total Disposed: ${stats.disposed}`);
   }
 }
 

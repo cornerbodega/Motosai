@@ -1,13 +1,13 @@
-import * as THREE from 'three';
-import { getTextureCache } from '../services/TextureCache.js';
+import * as THREE from "three";
+import { getTextureCache } from "../services/TextureCache.js";
 
 // Billboard loading states
 export const BILLBOARD_STATE = {
-  UNLOADED: 'unloaded',   // Far away, no resources loaded
-  LOADING: 'loading',     // Loading texture
-  LOADED: 'loaded',       // Texture loaded, visible
-  CULLED: 'culled',       // Behind player, hidden but cached
-  ERROR: 'error'          // Failed to load
+  UNLOADED: "unloaded", // Far away, no resources loaded
+  LOADING: "loading", // Loading texture
+  LOADED: "loaded", // Texture loaded, visible
+  CULLED: "culled", // Behind player, hidden but cached
+  ERROR: "error", // Failed to load
 };
 
 /**
@@ -19,7 +19,7 @@ export class Billboard {
     this.name = config.name || `Billboard_${this.id}`;
 
     // Billboard type: 'large-dual', 'large-single', 'small'
-    this.type = config.type || 'large-dual';
+    this.type = config.type || "large-dual";
 
     // Position and transform
     this.position = new THREE.Vector3(
@@ -29,14 +29,11 @@ export class Billboard {
     );
     this.rotationX = config.rotation_x || 0;
     this.rotationY = config.rotation_y || 0;
-    this.scale = new THREE.Vector2(
-      config.scale_x || 10,
-      config.scale_y || 5
-    );
+    this.scale = new THREE.Vector2(config.scale_x || 10, config.scale_y || 5);
 
     // Texture URL (can be updated dynamically)
     this.textureUrl = config.texture_url || null;
-    this.fallbackUrl = '/textures/billboards/default.png';
+    this.fallbackUrl = "/textures/billboards/default.png";
 
     // State management
     this.state = BILLBOARD_STATE.UNLOADED;
@@ -45,13 +42,13 @@ export class Billboard {
 
     // Three.js objects (disposables)
     this.mesh = null;
-    this.geometry = null;         // Shared geometry reference (don't dispose)
+    this.geometry = null; // Shared geometry reference (don't dispose)
     this.isSharedGeometry = false; // Track if using shared geometry
     this.material = null;
     this.texture = null;
     this.lightLeft = null; // Left ground light
     this.lightRight = null; // Right ground light
-    this.postLeft = null;  // Left support post
+    this.postLeft = null; // Left support post
     this.postRight = null; // Right support post
     this.isSharedPostResources = false; // Track if using shared post geometry/material
 
@@ -60,8 +57,8 @@ export class Billboard {
     this.stoppaId = null;
 
     // Register with Stoppa memory manager
-    if (typeof window !== 'undefined' && window.stoppa) {
-      this.stoppaId = window.stoppa.register('Billboard', this);
+    if (typeof window !== "undefined" && window.stoppa) {
+      this.stoppaId = window.stoppa.register("Billboard", this);
     }
   }
 
@@ -74,13 +71,21 @@ export class Billboard {
    * @param {string} timeOfDay - Current time of day for initial light state
    * @returns {Promise<void>}
    */
-  async load(scene, sharedGeometries = null, sharedPostGeometry = null, sharedPostMaterial = null, timeOfDay = 'day') {
-    if (this.state === BILLBOARD_STATE.LOADED || this.state === BILLBOARD_STATE.LOADING) {
+  async load(
+    scene,
+    sharedGeometries = null,
+    sharedPostGeometry = null,
+    sharedPostMaterial = null,
+    timeOfDay = "day"
+  ) {
+    if (
+      this.state === BILLBOARD_STATE.LOADED ||
+      this.state === BILLBOARD_STATE.LOADING
+    ) {
       return;
     }
 
     this.state = BILLBOARD_STATE.LOADING;
-    console.log(`Loading billboard: ${this.name}`);
 
     try {
       // Load texture from cache
@@ -90,25 +95,33 @@ export class Billboard {
       // Use shared geometry if provided, otherwise create new
       if (sharedGeometries) {
         // Determine geometry size based on type
-        const isLarge = (this.type === 'large-dual' || this.type === 'large-single');
-        this.geometry = isLarge ? sharedGeometries.large : sharedGeometries.small;
+        const isLarge =
+          this.type === "large-dual" || this.type === "large-single";
+        this.geometry = isLarge
+          ? sharedGeometries.large
+          : sharedGeometries.small;
         this.isSharedGeometry = true;
       } else {
         // Fallback: create individual geometry with minimal segments
-        this.geometry = new THREE.PlaneGeometry(this.scale.x, this.scale.y, 1, 1);
+        this.geometry = new THREE.PlaneGeometry(
+          this.scale.x,
+          this.scale.y,
+          1,
+          1
+        );
         this.isSharedGeometry = false;
       }
 
       // Create material with texture
       this.material = new THREE.MeshStandardMaterial({
         map: this.texture,
-        color: 0xffffff,  // White base color (multiplied with texture)
+        color: 0xffffff, // White base color (multiplied with texture)
         side: THREE.DoubleSide,
         transparent: false,
         metalness: 0.1,
         roughness: 0.8,
         depthWrite: true,
-        depthTest: true
+        depthTest: true,
       });
 
       // Ensure texture updates when loaded
@@ -128,28 +141,44 @@ export class Billboard {
 
       // Use shared post resources if available, otherwise create new
       const useSharedPosts = sharedPostGeometry && sharedPostMaterial;
-      const postGeometry = useSharedPosts ? sharedPostGeometry : new THREE.CylinderGeometry(0.3, 0.3, postHeight, 6); // Minimal 6 segments
-      const postMaterial = useSharedPosts ? sharedPostMaterial : new THREE.MeshStandardMaterial({
-        color: 0x444444,
-        metalness: 0.6,
-        roughness: 0.4
-      });
+      const postGeometry = useSharedPosts
+        ? sharedPostGeometry
+        : new THREE.CylinderGeometry(0.3, 0.3, postHeight, 6); // Minimal 6 segments
+      const postMaterial = useSharedPosts
+        ? sharedPostMaterial
+        : new THREE.MeshStandardMaterial({
+            color: 0x444444,
+            metalness: 0.6,
+            roughness: 0.4,
+          });
 
-      if (this.type === 'large-dual') {
+      if (this.type === "large-dual") {
         // Two spotlights (left and right)
         const lightIntensity = 40;
         const lightDistance = 15;
         const lightAngle = Math.PI / 3;
         const lightPenumbra = 0.5;
 
-        this.lightLeft = new THREE.SpotLight(0xffffff, lightIntensity, lightDistance, lightAngle, lightPenumbra);
+        this.lightLeft = new THREE.SpotLight(
+          0xffffff,
+          lightIntensity,
+          lightDistance,
+          lightAngle,
+          lightPenumbra
+        );
         this.lightLeft.position.set(-this.scale.x / 4, -this.scale.y / 2, 3);
         this.lightLeft.target.position.set(-this.scale.x / 4, 0, 0);
         this.lightLeft.castShadow = false;
         this.mesh.add(this.lightLeft);
         this.mesh.add(this.lightLeft.target);
 
-        this.lightRight = new THREE.SpotLight(0xffffff, lightIntensity, lightDistance, lightAngle, lightPenumbra);
+        this.lightRight = new THREE.SpotLight(
+          0xffffff,
+          lightIntensity,
+          lightDistance,
+          lightAngle,
+          lightPenumbra
+        );
         this.lightRight.position.set(this.scale.x / 4, -this.scale.y / 2, 3);
         this.lightRight.target.position.set(this.scale.x / 4, 0, 0);
         this.lightRight.castShadow = false;
@@ -158,23 +187,36 @@ export class Billboard {
 
         // Two support posts
         this.postLeft = new THREE.Mesh(postGeometry, postMaterial);
-        this.postLeft.position.set(-this.scale.x / 4, -this.scale.y / 2 - postHeight / 2, 0);
+        this.postLeft.position.set(
+          -this.scale.x / 4,
+          -this.scale.y / 2 - postHeight / 2,
+          0
+        );
         this.postLeft.scale.y = postHeight / 5; // Scale to correct height (shared geo is 5 units)
         this.mesh.add(this.postLeft);
 
         this.postRight = new THREE.Mesh(postGeometry, postMaterial);
-        this.postRight.position.set(this.scale.x / 4, -this.scale.y / 2 - postHeight / 2, 0);
+        this.postRight.position.set(
+          this.scale.x / 4,
+          -this.scale.y / 2 - postHeight / 2,
+          0
+        );
         this.postRight.scale.y = postHeight / 5; // Scale to correct height
         this.mesh.add(this.postRight);
-
-      } else if (this.type === 'large-single') {
+      } else if (this.type === "large-single") {
         // Single spotlight (center)
         const lightIntensity = 60;
         const lightDistance = 15;
         const lightAngle = Math.PI / 2.5;
         const lightPenumbra = 0.5;
 
-        this.lightLeft = new THREE.SpotLight(0xffffff, lightIntensity, lightDistance, lightAngle, lightPenumbra);
+        this.lightLeft = new THREE.SpotLight(
+          0xffffff,
+          lightIntensity,
+          lightDistance,
+          lightAngle,
+          lightPenumbra
+        );
         this.lightLeft.position.set(0, -this.scale.y / 2, 3);
         this.lightLeft.target.position.set(0, 0, 0);
         this.lightLeft.castShadow = false;
@@ -186,8 +228,7 @@ export class Billboard {
         this.postLeft.position.set(0, -this.scale.y / 2 - postHeight / 2, 0);
         this.postLeft.scale.y = postHeight / 5; // Scale to correct height
         this.mesh.add(this.postLeft);
-
-      } else if (this.type === 'small') {
+      } else if (this.type === "small") {
         // Small billboards have one post but no lights
         this.postLeft = new THREE.Mesh(postGeometry, postMaterial);
         this.postLeft.position.set(0, -this.scale.y / 2 - postHeight / 2, 0);
@@ -205,16 +246,16 @@ export class Billboard {
       this.updateLights(timeOfDay);
 
       this.state = BILLBOARD_STATE.LOADED;
-      console.log(`Billboard loaded: ${this.name} at ${this.position.z.toFixed(0)}m`);
-
     } catch (error) {
       console.error(`Failed to load billboard ${this.name}:`, error);
       this.state = BILLBOARD_STATE.ERROR;
       this.loadAttempts++;
 
       // Try fallback texture if primary failed
-      if (this.loadAttempts < this.maxLoadAttempts && this.textureUrl !== this.fallbackUrl) {
-        console.log(`Retrying with fallback texture for ${this.name}`);
+      if (
+        this.loadAttempts < this.maxLoadAttempts &&
+        this.textureUrl !== this.fallbackUrl
+      ) {
         this.textureUrl = this.fallbackUrl;
         this.state = BILLBOARD_STATE.UNLOADED;
       }
@@ -229,8 +270,6 @@ export class Billboard {
     if (this.state === BILLBOARD_STATE.UNLOADED) {
       return;
     }
-
-    console.log(`Unloading billboard: ${this.name}`);
 
     // Release texture from cache
     if (this.textureUrl || this.fallbackUrl) {
@@ -312,7 +351,6 @@ export class Billboard {
     }
 
     this.state = BILLBOARD_STATE.UNLOADED;
-    console.log(`Billboard unloaded: ${this.name}`);
   }
 
   /**
@@ -345,7 +383,7 @@ export class Billboard {
    */
   updateLights(timeOfDay) {
     // Determine if lights should be on (dusk and night only)
-    const lightsOn = (timeOfDay === 'dusk' || timeOfDay === 'night');
+    const lightsOn = timeOfDay === "dusk" || timeOfDay === "night";
 
     // Update left light if it exists
     if (this.lightLeft) {
@@ -367,8 +405,6 @@ export class Billboard {
     if (newTextureUrl === this.textureUrl) {
       return; // Same texture, no update needed
     }
-
-    console.log(`Updating billboard texture: ${this.name} -> ${newTextureUrl}`);
 
     // Store old URL for cleanup
     const oldUrl = this.textureUrl;
@@ -412,8 +448,6 @@ export class Billboard {
    * @param {THREE.Scene} scene - Scene reference
    */
   dispose(scene) {
-    console.log(`Disposing billboard: ${this.name}`);
-
     // Unload resources
     this.unload(scene);
 
@@ -436,11 +470,11 @@ export class Billboard {
       position: {
         x: this.position.x.toFixed(1),
         y: this.position.y.toFixed(1),
-        z: this.position.z.toFixed(1)
+        z: this.position.z.toFixed(1),
       },
       textureUrl: this.textureUrl,
       loaded: this.state === BILLBOARD_STATE.LOADED,
-      visible: this.mesh ? this.mesh.visible : false
+      visible: this.mesh ? this.mesh.visible : false,
     };
   }
 }

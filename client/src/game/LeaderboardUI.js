@@ -5,28 +5,30 @@ export class LeaderboardUI {
     let serverUrl = import.meta.env.VITE_SERVER_URL;
     if (!serverUrl) {
       // If no env var, check if we're on localhost or deployed
-      if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-        serverUrl = 'http://localhost:8080';
+      if (
+        window.location.hostname === "localhost" ||
+        window.location.hostname === "127.0.0.1"
+      ) {
+        serverUrl = "http://localhost:8080";
       } else {
         // In production, use the backend API server (not the same origin as frontend)
-        serverUrl = 'https://motosai-680702586477.us-central1.run.app';
+        serverUrl = "https://motosai-680702586477.us-central1.run.app";
       }
     }
     this.serverUrl = serverUrl;
-    console.log('LeaderboardUI: Using server URL:', this.serverUrl);
 
     // Separate data storage for each leaderboard type
     this.leaderboardData = {
       carsPassed: [],
-      speed: []
+      speed: [],
     };
     this.dailyLeaderboardData = {
       carsPassed: [],
-      speed: []
+      speed: [],
     };
 
     this.showDaily = false;
-    this.leaderboardType = 'carsPassed'; // 'carsPassed', 'distance', or 'speed'
+    this.leaderboardType = "carsPassed"; // 'carsPassed', 'distance', or 'speed'
     this.updateInterval = 30000; // Update every 30 seconds
     this.lastUpdate = 0;
     this.isVisible = true;
@@ -37,7 +39,10 @@ export class LeaderboardUI {
     this.playerBest = null;
 
     // Check if mobile - skip initialization on mobile to save memory
-    this.isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    this.isMobile =
+      /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+        navigator.userAgent
+      );
     if (this.isMobile) {
       // Don't initialize on mobile - saves memory and CPU
       return;
@@ -51,7 +56,10 @@ export class LeaderboardUI {
     // Auto-update leaderboard (only if connected)
     this.updateTimer = setInterval(() => {
       // Only fetch if multiplayer is connected
-      if (this.game.multiplayerManager?.playerId || this.game.multiplayer?.playerId) {
+      if (
+        this.game.multiplayerManager?.playerId ||
+        this.game.multiplayer?.playerId
+      ) {
         this.fetchLeaderboard();
       }
     }, this.updateInterval);
@@ -59,14 +67,13 @@ export class LeaderboardUI {
 
   // Called by game when player connects to multiplayer
   onPlayerConnected() {
-    console.log('🎮 Player connected - refreshing leaderboard');
     this.fetchLeaderboard();
   }
 
   createUI() {
     // Main container
-    const container = document.createElement('div');
-    container.id = 'leaderboard-container';
+    const container = document.createElement("div");
+    container.id = "leaderboard-container";
     container.style.cssText = `
       position: fixed;
       right: 20px;
@@ -88,7 +95,7 @@ export class LeaderboardUI {
     `;
 
     // Header
-    const header = document.createElement('div');
+    const header = document.createElement("div");
     header.style.cssText = `
       display: flex;
       flex-direction: column;
@@ -99,7 +106,7 @@ export class LeaderboardUI {
     `;
 
     // Title row with minimize button
-    const titleRow = document.createElement('div');
+    const titleRow = document.createElement("div");
     titleRow.style.cssText = `
       display: flex;
       align-items: center;
@@ -107,7 +114,7 @@ export class LeaderboardUI {
     `;
 
     // Title with icon
-    const title = document.createElement('div');
+    const title = document.createElement("div");
     title.style.cssText = `
       font-size: 14px;
       font-weight: bold;
@@ -123,8 +130,8 @@ export class LeaderboardUI {
     `;
 
     // Minimize button
-    const minimizeBtn = document.createElement('button');
-    minimizeBtn.id = 'minimize-btn';
+    const minimizeBtn = document.createElement("button");
+    minimizeBtn.id = "minimize-btn";
     minimizeBtn.style.cssText = `
       background: transparent;
       border: none;
@@ -133,15 +140,15 @@ export class LeaderboardUI {
       font-size: 18px;
       transition: color 0.2s;
     `;
-    minimizeBtn.innerHTML = '⎯';
+    minimizeBtn.innerHTML = "⎯";
     minimizeBtn.onclick = () => this.toggleMinimize();
 
     titleRow.appendChild(title);
     titleRow.appendChild(minimizeBtn);
 
     // Controls row 1 - Type selector only
-    const controlsRow1 = document.createElement('div');
-    controlsRow1.id = 'controls-row-1';
+    const controlsRow1 = document.createElement("div");
+    controlsRow1.id = "controls-row-1";
     controlsRow1.style.cssText = `
       display: flex;
       gap: 5px;
@@ -150,8 +157,8 @@ export class LeaderboardUI {
     `;
 
     // Leaderboard type selector (dropdown)
-    const typeSelector = document.createElement('select');
-    typeSelector.id = 'leaderboard-type-selector';
+    const typeSelector = document.createElement("select");
+    typeSelector.id = "leaderboard-type-selector";
     typeSelector.style.cssText = `
       background: rgba(100, 200, 255, 0.3);
       border: 1px solid rgba(100, 200, 255, 0.5);
@@ -173,8 +180,8 @@ export class LeaderboardUI {
     controlsRow1.appendChild(typeSelector);
 
     // Controls row 2 - Daily/All-Time tabs
-    const controlsRow2 = document.createElement('div');
-    controlsRow2.id = 'controls-row-2';
+    const controlsRow2 = document.createElement("div");
+    controlsRow2.id = "controls-row-2";
     controlsRow2.style.cssText = `
       display: flex;
       gap: 3px;
@@ -185,8 +192,8 @@ export class LeaderboardUI {
     `;
 
     // All-Time tab
-    const allTimeTab = document.createElement('button');
-    allTimeTab.id = 'all-time-tab';
+    const allTimeTab = document.createElement("button");
+    allTimeTab.id = "all-time-tab";
     allTimeTab.style.cssText = `
       background: rgba(100, 200, 255, 0.5);
       border: none;
@@ -200,12 +207,12 @@ export class LeaderboardUI {
       flex: 1;
       font-weight: bold;
     `;
-    allTimeTab.textContent = 'ALL-TIME';
+    allTimeTab.textContent = "ALL-TIME";
     allTimeTab.onclick = () => this.switchToAllTime();
 
     // Daily tab
-    const dailyTab = document.createElement('button');
-    dailyTab.id = 'daily-tab';
+    const dailyTab = document.createElement("button");
+    dailyTab.id = "daily-tab";
     dailyTab.style.cssText = `
       background: transparent;
       border: none;
@@ -218,7 +225,7 @@ export class LeaderboardUI {
       transition: all 0.2s;
       flex: 1;
     `;
-    dailyTab.textContent = 'DAILY';
+    dailyTab.textContent = "DAILY";
     dailyTab.onclick = () => this.switchToDaily();
 
     controlsRow2.appendChild(allTimeTab);
@@ -229,8 +236,8 @@ export class LeaderboardUI {
     header.appendChild(controlsRow2);
 
     // Leaderboard list
-    const listContainer = document.createElement('div');
-    listContainer.id = 'leaderboard-list-container';
+    const listContainer = document.createElement("div");
+    listContainer.id = "leaderboard-list-container";
     listContainer.style.cssText = `
       max-height: 120px;
       overflow-y: auto;
@@ -239,7 +246,7 @@ export class LeaderboardUI {
     `;
 
     // Custom scrollbar
-    const scrollbarStyle = document.createElement('style');
+    const scrollbarStyle = document.createElement("style");
     scrollbarStyle.textContent = `
       #leaderboard-list-container::-webkit-scrollbar {
         width: 6px;
@@ -309,32 +316,32 @@ export class LeaderboardUI {
     // Store reference for cleanup
     this.styleElement = scrollbarStyle;
 
-    const list = document.createElement('div');
-    list.id = 'leaderboard-list';
+    const list = document.createElement("div");
+    list.id = "leaderboard-list";
 
     listContainer.appendChild(list);
 
     // Loading indicator
-    const loading = document.createElement('div');
-    loading.id = 'leaderboard-loading';
+    const loading = document.createElement("div");
+    loading.id = "leaderboard-loading";
     loading.style.cssText = `
       text-align: center;
       padding: 20px;
       color: rgba(255, 255, 255, 0.5);
       display: none;
     `;
-    loading.textContent = 'Loading...';
+    loading.textContent = "Loading...";
 
     // No data message
-    const noData = document.createElement('div');
-    noData.id = 'leaderboard-no-data';
+    const noData = document.createElement("div");
+    noData.id = "leaderboard-no-data";
     noData.style.cssText = `
       text-align: center;
       padding: 20px;
       color: rgba(255, 255, 255, 0.5);
       display: none;
     `;
-    noData.textContent = 'No scores yet. Be the first!';
+    noData.textContent = "No scores yet. Be the first!";
 
     // Assemble container
     container.appendChild(header);
@@ -351,7 +358,7 @@ export class LeaderboardUI {
     this.noDataElement = noData;
     this.allTimeTab = allTimeTab;
     this.dailyTab = dailyTab;
-    this.titleElement = document.getElementById('leaderboard-title');
+    this.titleElement = document.getElementById("leaderboard-title");
     this.minimizeBtn = minimizeBtn;
     this.controlsRow1 = controlsRow1;
     this.controlsRow2 = controlsRow2;
@@ -368,32 +375,44 @@ export class LeaderboardUI {
 
     try {
       // Show loading
-      this.loadingElement.style.display = 'block';
-      this.listElement.style.display = 'none';
-      this.noDataElement.style.display = 'none';
+      this.loadingElement.style.display = "block";
+      this.listElement.style.display = "none";
+      this.noDataElement.style.display = "none";
 
       // Try multiple ways to get player ID
-      const playerId = this.game.multiplayerManager?.playerId ||
-                       this.game.multiplayer?.playerId;
+      const playerId =
+        this.game.multiplayerManager?.playerId ||
+        this.game.multiplayer?.playerId;
 
       if (playerId) {
         // Fetch context-based leaderboards (3 entries around player)
         const [
-          carsResponse, speedResponse,
-          dailyCarsResponse, dailySpeedResponse,
-          playerResponse
+          carsResponse,
+          speedResponse,
+          dailyCarsResponse,
+          dailySpeedResponse,
+          playerResponse,
         ] = await Promise.all([
           fetch(`${this.serverUrl}/api/leaderboard/context/${playerId}`),
           fetch(`${this.serverUrl}/api/leaderboard/context-speed/${playerId}`),
-          fetch(`${this.serverUrl}/api/leaderboard/context/${playerId}?daily=true`),
-          fetch(`${this.serverUrl}/api/leaderboard/context-speed/${playerId}?daily=true`),
-          fetch(`${this.serverUrl}/api/leaderboard/player/${playerId}`)
+          fetch(
+            `${this.serverUrl}/api/leaderboard/context/${playerId}?daily=true`
+          ),
+          fetch(
+            `${this.serverUrl}/api/leaderboard/context-speed/${playerId}?daily=true`
+          ),
+          fetch(`${this.serverUrl}/api/leaderboard/player/${playerId}`),
         ]);
 
         // Check if responses are OK before parsing
-        if (!carsResponse.ok || !speedResponse.ok || !dailyCarsResponse.ok ||
-            !dailySpeedResponse.ok || !playerResponse.ok) {
-          throw new Error('Server returned error response');
+        if (
+          !carsResponse.ok ||
+          !speedResponse.ok ||
+          !dailyCarsResponse.ok ||
+          !dailySpeedResponse.ok ||
+          !playerResponse.ok
+        ) {
+          throw new Error("Server returned error response");
         }
 
         // Parse all responses
@@ -423,18 +442,25 @@ export class LeaderboardUI {
       } else {
         // No player ID - fetch top 3
         const [
-          carsResponse, speedResponse,
-          dailyCarsResponse, dailySpeedResponse
+          carsResponse,
+          speedResponse,
+          dailyCarsResponse,
+          dailySpeedResponse,
         ] = await Promise.all([
           fetch(`${this.serverUrl}/api/leaderboard/top?limit=3`),
           fetch(`${this.serverUrl}/api/leaderboard/top-speed?limit=3`),
           fetch(`${this.serverUrl}/api/leaderboard/daily?limit=3`),
-          fetch(`${this.serverUrl}/api/leaderboard/daily-speed?limit=3`)
+          fetch(`${this.serverUrl}/api/leaderboard/daily-speed?limit=3`),
         ]);
 
         // Check if responses are OK before parsing
-        if (!carsResponse.ok || !speedResponse.ok || !dailyCarsResponse.ok || !dailySpeedResponse.ok) {
-          throw new Error('Server returned error response');
+        if (
+          !carsResponse.ok ||
+          !speedResponse.ok ||
+          !dailyCarsResponse.ok ||
+          !dailySpeedResponse.ok
+        ) {
+          throw new Error("Server returned error response");
         }
 
         // Parse all responses
@@ -451,7 +477,8 @@ export class LeaderboardUI {
           this.leaderboardData.speed = speedData.leaderboard || [];
         }
         if (dailyCarsData.success) {
-          this.dailyLeaderboardData.carsPassed = dailyCarsData.leaderboard || [];
+          this.dailyLeaderboardData.carsPassed =
+            dailyCarsData.leaderboard || [];
         }
         if (dailySpeedData.success) {
           this.dailyLeaderboardData.speed = dailySpeedData.leaderboard || [];
@@ -460,12 +487,11 @@ export class LeaderboardUI {
 
       this.updateDisplay();
       this.lastUpdate = Date.now();
-
     } catch (error) {
-      console.error('Error fetching leaderboard:', error);
-      console.error('Error details:', error.message, error.stack);
-      this.loadingElement.style.display = 'none';
-      this.noDataElement.style.display = 'block';
+      console.error("Error fetching leaderboard:", error);
+      console.error("Error details:", error.message, error.stack);
+      this.loadingElement.style.display = "none";
+      this.noDataElement.style.display = "block";
       this.noDataElement.textContent = `Failed to load: ${error.message}`;
     }
   }
@@ -476,46 +502,49 @@ export class LeaderboardUI {
       return;
     }
 
-    const dataSource = this.showDaily ? this.dailyLeaderboardData : this.leaderboardData;
+    const dataSource = this.showDaily
+      ? this.dailyLeaderboardData
+      : this.leaderboardData;
     const data = dataSource[this.leaderboardType];
 
     // Hide loading
-    this.loadingElement.style.display = 'none';
+    this.loadingElement.style.display = "none";
 
     if (!data || data.length === 0) {
-      this.listElement.style.display = 'none';
-      this.noDataElement.style.display = 'block';
+      this.listElement.style.display = "none";
+      this.noDataElement.style.display = "block";
       return;
     }
 
-    this.listElement.style.display = 'block';
-    this.noDataElement.style.display = 'none';
+    this.listElement.style.display = "block";
+    this.noDataElement.style.display = "none";
 
     // Clear current list
-    this.listElement.innerHTML = '';
+    this.listElement.innerHTML = "";
 
-    const playerId = this.game.multiplayerManager?.playerId || this.game.multiplayer?.playerId;
+    const playerId =
+      this.game.multiplayerManager?.playerId || this.game.multiplayer?.playerId;
 
     // Display entries
     data.forEach((entry, index) => {
-      const entryDiv = document.createElement('div');
-      entryDiv.className = 'leaderboard-entry';
+      const entryDiv = document.createElement("div");
+      entryDiv.className = "leaderboard-entry";
 
       let rank = entry.rank || index + 1;
 
       // Add special classes for top 3
-      if (rank === 1) entryDiv.classList.add('gold');
-      else if (rank === 2) entryDiv.classList.add('silver');
-      else if (rank === 3) entryDiv.classList.add('bronze');
+      if (rank === 1) entryDiv.classList.add("gold");
+      else if (rank === 2) entryDiv.classList.add("silver");
+      else if (rank === 3) entryDiv.classList.add("bronze");
 
       // Check if this is the current player
       const isCurrentPlayer = playerId === entry.player_id;
       if (isCurrentPlayer) {
-        entryDiv.classList.add('current-player');
+        entryDiv.classList.add("current-player");
       }
 
       // Rank section
-      const rankSection = document.createElement('div');
+      const rankSection = document.createElement("div");
       rankSection.style.cssText = `
         display: flex;
         align-items: center;
@@ -524,41 +553,43 @@ export class LeaderboardUI {
       `;
 
       // Medal for top 3
-      let medal = '';
-      if (rank === 1) medal = '🥇';
-      else if (rank === 2) medal = '🥈';
-      else if (rank === 3) medal = '🥉';
+      let medal = "";
+      if (rank === 1) medal = "🥇";
+      else if (rank === 2) medal = "🥈";
+      else if (rank === 3) medal = "🥉";
 
       rankSection.innerHTML = `
-        ${medal ? `<span class="rank-medal">${medal}</span>` : ''}
-        <span style="color: ${isCurrentPlayer ? 'white' : 'rgba(255, 255, 255, 0.6)'}; font-size: 10px;">#${rank}</span>
+        ${medal ? `<span class="rank-medal">${medal}</span>` : ""}
+        <span style="color: ${
+          isCurrentPlayer ? "white" : "rgba(255, 255, 255, 0.6)"
+        }; font-size: 10px;">#${rank}</span>
       `;
 
       // Player name
-      const nameSection = document.createElement('div');
+      const nameSection = document.createElement("div");
       nameSection.style.cssText = `
         flex: 1;
-        font-size: ${isCurrentPlayer ? '12px' : '11px'};
+        font-size: ${isCurrentPlayer ? "12px" : "11px"};
         color: white;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
       `;
-      nameSection.textContent = entry.username || 'Anonymous';
+      nameSection.textContent = entry.username || "Anonymous";
 
       // Score section - display different metric based on type
-      const scoreSection = document.createElement('div');
+      const scoreSection = document.createElement("div");
       scoreSection.style.cssText = `
-        font-size: ${isCurrentPlayer ? '14px' : '12px'};
+        font-size: ${isCurrentPlayer ? "14px" : "12px"};
         font-weight: bold;
         color: white;
       `;
 
       // Format the score based on leaderboard type
       let scoreValue;
-      if (this.leaderboardType === 'carsPassed') {
+      if (this.leaderboardType === "carsPassed") {
         scoreValue = entry.vehicles_passed || 0;
-      } else if (this.leaderboardType === 'speed') {
+      } else if (this.leaderboardType === "speed") {
         const mph = Math.round((entry.max_speed || 0) * 2.237);
         scoreValue = `${mph}mph`;
       }
@@ -583,12 +614,12 @@ export class LeaderboardUI {
     this.showDaily = false;
 
     // Update tab styling
-    this.allTimeTab.style.background = 'rgba(100, 200, 255, 0.5)';
-    this.allTimeTab.style.color = 'white';
-    this.allTimeTab.style.fontWeight = 'bold';
-    this.dailyTab.style.background = 'transparent';
-    this.dailyTab.style.color = 'rgba(255, 255, 255, 0.6)';
-    this.dailyTab.style.fontWeight = 'normal';
+    this.allTimeTab.style.background = "rgba(100, 200, 255, 0.5)";
+    this.allTimeTab.style.color = "white";
+    this.allTimeTab.style.fontWeight = "bold";
+    this.dailyTab.style.background = "transparent";
+    this.dailyTab.style.color = "rgba(255, 255, 255, 0.6)";
+    this.dailyTab.style.fontWeight = "normal";
 
     this.updateDisplay();
   }
@@ -598,12 +629,12 @@ export class LeaderboardUI {
     this.showDaily = true;
 
     // Update tab styling
-    this.dailyTab.style.background = 'rgba(100, 200, 255, 0.5)';
-    this.dailyTab.style.color = 'white';
-    this.dailyTab.style.fontWeight = 'bold';
-    this.allTimeTab.style.background = 'transparent';
-    this.allTimeTab.style.color = 'rgba(255, 255, 255, 0.6)';
-    this.allTimeTab.style.fontWeight = 'normal';
+    this.dailyTab.style.background = "rgba(100, 200, 255, 0.5)";
+    this.dailyTab.style.color = "white";
+    this.dailyTab.style.fontWeight = "bold";
+    this.allTimeTab.style.background = "transparent";
+    this.allTimeTab.style.color = "rgba(255, 255, 255, 0.6)";
+    this.allTimeTab.style.fontWeight = "normal";
 
     this.updateDisplay();
   }
@@ -615,43 +646,45 @@ export class LeaderboardUI {
 
   applyMinimizedState() {
     if (this.isMinimized) {
-      this.container.style.height = '45px';
-      this.container.style.overflow = 'hidden';
-      this.controlsRow1.style.display = 'none';
-      this.controlsRow2.style.display = 'none';
-      document.getElementById('leaderboard-list-container').style.display = 'none';
-      this.minimizeBtn.innerHTML = '+';
+      this.container.style.height = "45px";
+      this.container.style.overflow = "hidden";
+      this.controlsRow1.style.display = "none";
+      this.controlsRow2.style.display = "none";
+      document.getElementById("leaderboard-list-container").style.display =
+        "none";
+      this.minimizeBtn.innerHTML = "+";
     } else {
-      this.container.style.height = 'auto';
-      this.controlsRow1.style.display = 'flex';
-      this.controlsRow2.style.display = 'flex';
-      document.getElementById('leaderboard-list-container').style.display = 'block';
-      this.minimizeBtn.innerHTML = '⎯';
+      this.container.style.height = "auto";
+      this.controlsRow1.style.display = "flex";
+      this.controlsRow2.style.display = "flex";
+      document.getElementById("leaderboard-list-container").style.display =
+        "block";
+      this.minimizeBtn.innerHTML = "⎯";
     }
   }
 
   toggleVisibility() {
     this.isVisible = !this.isVisible;
-    this.container.style.display = this.isVisible ? 'block' : 'none';
+    this.container.style.display = this.isVisible ? "block" : "none";
   }
 
   setupKeyboardControls() {
     // Store handler reference for proper cleanup
     this.keydownHandler = (e) => {
       // Press L to toggle leaderboard visibility
-      if (e.key === 'l' || e.key === 'L') {
+      if (e.key === "l" || e.key === "L") {
         this.toggleVisibility();
       }
     };
-    document.addEventListener('keydown', this.keydownHandler);
+    document.addEventListener("keydown", this.keydownHandler);
   }
 
   // Called when player achieves a new high score
   onNewHighScore(data) {
     // Animate the leaderboard
-    this.container.style.animation = 'newHighScore 1s ease';
+    this.container.style.animation = "newHighScore 1s ease";
     setTimeout(() => {
-      this.container.style.animation = '';
+      this.container.style.animation = "";
     }, 1000);
 
     // Refresh leaderboard
@@ -662,7 +695,7 @@ export class LeaderboardUI {
   }
 
   showNotification(message) {
-    const notification = document.createElement('div');
+    const notification = document.createElement("div");
     notification.style.cssText = `
       position: fixed;
       top: 50%;
@@ -684,8 +717,8 @@ export class LeaderboardUI {
     document.body.appendChild(notification);
 
     setTimeout(() => {
-      notification.style.transition = 'opacity 0.5s';
-      notification.style.opacity = '0';
+      notification.style.transition = "opacity 0.5s";
+      notification.style.opacity = "0";
       setTimeout(() => notification.remove(), 500);
     }, 3000);
   }
@@ -693,9 +726,13 @@ export class LeaderboardUI {
   // Update leaderboard with live data
   updateLiveEntry(playerId, username, vehiclesPassed) {
     // Find or create entry for live updates (only for carsPassed leaderboard)
-    const dataSource = this.showDaily ? this.dailyLeaderboardData : this.leaderboardData;
+    const dataSource = this.showDaily
+      ? this.dailyLeaderboardData
+      : this.leaderboardData;
     const currentData = dataSource.carsPassed;
-    const existingIndex = currentData.findIndex(e => e.player_id === playerId);
+    const existingIndex = currentData.findIndex(
+      (e) => e.player_id === playerId
+    );
 
     if (existingIndex >= 0) {
       currentData[existingIndex].vehicles_passed = vehiclesPassed;
@@ -705,7 +742,7 @@ export class LeaderboardUI {
     currentData.sort((a, b) => b.vehicles_passed - a.vehicles_passed);
 
     // Only refresh display if we're currently showing carsPassed leaderboard
-    if (this.leaderboardType === 'carsPassed') {
+    if (this.leaderboardType === "carsPassed") {
       this.updateDisplay();
     }
   }
@@ -719,7 +756,7 @@ export class LeaderboardUI {
 
     // Remove event listener
     if (this.keydownHandler) {
-      document.removeEventListener('keydown', this.keydownHandler);
+      document.removeEventListener("keydown", this.keydownHandler);
       this.keydownHandler = null;
     }
 

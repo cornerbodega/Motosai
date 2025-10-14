@@ -1,6 +1,6 @@
-import * as THREE from 'three';
-import { ROAD_CONSTANTS } from './RoadConstants.js';
-import { getMaterialManager } from '../utils/MaterialManager.js';
+import * as THREE from "three";
+import { ROAD_CONSTANTS } from "./RoadConstants.js";
+import { getMaterialManager } from "../utils/MaterialManager.js";
 
 export class TerrainSystem {
   constructor(scene) {
@@ -30,15 +30,15 @@ export class TerrainSystem {
 
   initMaterials() {
     // Death Valley desert terrain material
-    this.terrainMaterial = this.materialManager.getMaterial('lambert', {
-      color: 0xD2B48C, // Sandy tan base color
-      flatShading: true // Low-poly look
+    this.terrainMaterial = this.materialManager.getMaterial("lambert", {
+      color: 0xd2b48c, // Sandy tan base color
+      flatShading: true, // Low-poly look
     });
 
     // Mountain material with slight color variation
-    this.mountainMaterial = this.materialManager.getMaterial('lambert', {
-      color: 0x8B7355, // Darker brown for mountains
-      flatShading: true
+    this.mountainMaterial = this.materialManager.getMaterial("lambert", {
+      color: 0x8b7355, // Darker brown for mountains
+      flatShading: true,
     });
   }
 
@@ -77,7 +77,10 @@ export class TerrainSystem {
 
     // Smooth transition from flat to mountainous
     const transitionZone = 100;
-    const transitionFactor = Math.min(1, (distFromRoad - this.roadClearance) / transitionZone);
+    const transitionFactor = Math.min(
+      1,
+      (distFromRoad - this.roadClearance) / transitionZone
+    );
 
     // Generate terrain using fractal noise
     const baseHeight = this.fbm(x * this.noiseScale, z * this.noiseScale);
@@ -86,7 +89,8 @@ export class TerrainSystem {
     const ridgeNoise = Math.sin(x * 0.003) * 0.3;
 
     // Combine noises
-    const height = (baseHeight + ridgeNoise) * this.heightScale * transitionFactor;
+    const height =
+      (baseHeight + ridgeNoise) * this.heightScale * transitionFactor;
 
     return height;
   }
@@ -94,8 +98,8 @@ export class TerrainSystem {
   generate() {
     // Create two terrain meshes for seamless transitions
     // Position them aligned to grid to prevent gaps
-    const startPositions = [-this.terrainDepth, 0].map(z =>
-      Math.round(z / this.terrainDepth) * this.terrainDepth
+    const startPositions = [-this.terrainDepth, 0].map(
+      (z) => Math.round(z / this.terrainDepth) * this.terrainDepth
     );
 
     for (let i = 0; i < 2; i++) {
@@ -160,32 +164,38 @@ export class TerrainSystem {
     // If mesh 0 is too far behind (player passed it), move it ahead
     if (dist0 < -this.terrainDepth) {
       // Align to terrain grid to prevent gaps
-      const newZ = Math.round((mesh1Z + this.terrainDepth) / this.terrainDepth) * this.terrainDepth;
+      const newZ =
+        Math.round((mesh1Z + this.terrainDepth) / this.terrainDepth) *
+        this.terrainDepth;
       this.terrainMeshes[0].position.z = newZ;
       this.updateTerrainVertices(this.terrainMeshes[0].geometry, newZ);
-      console.log(`Moved terrain 0 from ${mesh0Z} to ${newZ} (player at ${playerZ})`);
     }
 
     // If mesh 1 is too far behind (player passed it), move it ahead
     if (dist1 < -this.terrainDepth) {
       // Align to terrain grid to prevent gaps
-      const newZ = Math.round((mesh0Z + this.terrainDepth) / this.terrainDepth) * this.terrainDepth;
+      const newZ =
+        Math.round((mesh0Z + this.terrainDepth) / this.terrainDepth) *
+        this.terrainDepth;
       this.terrainMeshes[1].position.z = newZ;
       this.updateTerrainVertices(this.terrainMeshes[1].geometry, newZ);
-      console.log(`Moved terrain 1 from ${mesh1Z} to ${newZ} (player at ${playerZ})`);
     }
 
     // Handle backward movement
     if (dist0 > this.terrainDepth * 2) {
       // Align to terrain grid to prevent gaps
-      const newZ = Math.round((mesh1Z - this.terrainDepth) / this.terrainDepth) * this.terrainDepth;
+      const newZ =
+        Math.round((mesh1Z - this.terrainDepth) / this.terrainDepth) *
+        this.terrainDepth;
       this.terrainMeshes[0].position.z = newZ;
       this.updateTerrainVertices(this.terrainMeshes[0].geometry, newZ);
     }
 
     if (dist1 > this.terrainDepth * 2) {
       // Align to terrain grid to prevent gaps
-      const newZ = Math.round((mesh0Z - this.terrainDepth) / this.terrainDepth) * this.terrainDepth;
+      const newZ =
+        Math.round((mesh0Z - this.terrainDepth) / this.terrainDepth) *
+        this.terrainDepth;
       this.terrainMeshes[1].position.z = newZ;
       this.updateTerrainVertices(this.terrainMeshes[1].geometry, newZ);
     }
@@ -193,8 +203,8 @@ export class TerrainSystem {
 
   reset() {
     // Reset terrain positions for respawn - aligned to grid
-    const startPositions = [-this.terrainDepth, 0].map(z =>
-      Math.round(z / this.terrainDepth) * this.terrainDepth
+    const startPositions = [-this.terrainDepth, 0].map(
+      (z) => Math.round(z / this.terrainDepth) * this.terrainDepth
     );
 
     this.terrainMeshes.forEach((mesh, i) => {
@@ -206,12 +216,11 @@ export class TerrainSystem {
     });
 
     this.lastUpdateZ = 0;
-    console.log('Terrain system reset for respawn');
   }
 
   dispose() {
     // Properly dispose both terrain meshes
-    this.terrainMeshes.forEach(mesh => {
+    this.terrainMeshes.forEach((mesh) => {
       if (mesh) {
         // Dispose geometry
         if (mesh.geometry) {

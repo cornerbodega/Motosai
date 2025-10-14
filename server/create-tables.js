@@ -1,26 +1,24 @@
-import { createClient } from '@supabase/supabase-js';
-import dotenv from 'dotenv';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import { createClient } from "@supabase/supabase-js";
+import dotenv from "dotenv";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-dotenv.config({ path: join(__dirname, '.env') });
+dotenv.config({ path: join(__dirname, ".env") });
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseKey) {
-  console.error('Missing Supabase credentials');
+  console.error("Missing Supabase credentials");
   process.exit(1);
 }
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 async function createTables() {
-  console.log('Creating Motosai multiplayer tables...\n');
-
   // SQL statements to create tables
   const sqlStatements = [
     // Game sessions table
@@ -101,46 +99,35 @@ async function createTables() {
     `CREATE INDEX IF NOT EXISTS idx_mo_player_states_player ON mo_player_states(player_id)`,
     `CREATE INDEX IF NOT EXISTS idx_mo_player_states_active ON mo_player_states(is_active)`,
     `CREATE INDEX IF NOT EXISTS idx_mo_chat_messages_session ON mo_chat_messages(session_id)`,
-    `CREATE INDEX IF NOT EXISTS idx_mo_race_results_session ON mo_race_results(session_id)`
+    `CREATE INDEX IF NOT EXISTS idx_mo_race_results_session ON mo_race_results(session_id)`,
   ];
 
   // Note: RLS policies need to be created via Supabase dashboard or with service role key
-  console.log('Note: This script will attempt to create tables.');
-  console.log('If it fails, you may need to run the SQL directly in Supabase dashboard.\n');
 
   // Test if we can query the database
   try {
     // Try to create tables using RPC (if you have a function set up)
     // Otherwise, you'll need to use Supabase dashboard
-    
-    console.log('Checking existing tables...');
-    
+
     // Check if tables exist
-    const tables = ['mo_game_sessions', 'mo_players', 'mo_player_states', 'mo_chat_messages', 'mo_race_results'];
-    
+    const tables = [
+      "mo_game_sessions",
+      "mo_players",
+      "mo_player_states",
+      "mo_chat_messages",
+      "mo_race_results",
+    ];
+
     for (const table of tables) {
-      const { data, error } = await supabase
-        .from(table)
-        .select('*')
-        .limit(1);
-      
-      if (error && error.message.includes('does not exist')) {
-        console.log(`❌ Table ${table} does not exist`);
+      const { data, error } = await supabase.from(table).select("*").limit(1);
+
+      if (error && error.message.includes("does not exist")) {
       } else if (error) {
-        console.log(`⚠️  Table ${table} error: ${error.message}`);
       } else {
-        console.log(`✅ Table ${table} exists`);
       }
     }
-    
-    console.log('\n📝 To create missing tables:');
-    console.log('1. Go to Supabase SQL Editor: https://app.supabase.com/project/zibmgusmsqnpqacuygec/sql');
-    console.log('2. Copy the SQL from /database/schema.sql');
-    console.log('3. Run the SQL queries');
-    console.log('\nAlternatively, run each SQL statement above in the SQL editor.');
-    
   } catch (error) {
-    console.error('Error:', error.message);
+    console.error("Error:", error.message);
   }
 }
 

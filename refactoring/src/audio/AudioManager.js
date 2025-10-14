@@ -22,10 +22,10 @@ export class AudioManager {
 
     // Categories for volume control
     this.categoryVolumes = new Map([
-      ['sfx', 1.0],
-      ['music', 0.8],
-      ['ambient', 0.6],
-      ['ui', 1.0]
+      ["sfx", 1.0],
+      ["music", 0.8],
+      ["ambient", 0.6],
+      ["ui", 1.0],
     ]);
 
     // Initialize audio context on first user interaction
@@ -50,14 +50,13 @@ export class AudioManager {
       this.audioContext = new AudioContext();
 
       // Resume if suspended (browser autoplay policy)
-      if (this.audioContext.state === 'suspended') {
+      if (this.audioContext.state === "suspended") {
         await this.audioContext.resume();
       }
 
       this.initialized = true;
-      console.log('[AudioManager] Initialized with sample rate:', this.audioContext.sampleRate);
     } catch (error) {
-      console.error('[AudioManager] Failed to initialize:', error);
+      console.error("[AudioManager] Failed to initialize:", error);
     }
   }
 
@@ -68,7 +67,7 @@ export class AudioManager {
    * @param {number} poolSize - Number of instances to pool
    * @param {string} category - Sound category
    */
-  async createSoundPool(key, url, poolSize = 3, category = 'sfx') {
+  async createSoundPool(key, url, poolSize = 3, category = "sfx") {
     if (this.soundPools.has(key)) {
       return this.soundPools.get(key);
     }
@@ -77,13 +76,13 @@ export class AudioManager {
       instances: [],
       currentIndex: 0,
       category,
-      url
+      url,
     };
 
     // Create multiple audio elements for pooling
     for (let i = 0; i < poolSize; i++) {
       const audio = new Audio(url);
-      audio.preload = 'auto';
+      audio.preload = "auto";
       audio.volume = this.getEffectiveVolume(category);
 
       // Track for cleanup
@@ -94,12 +93,15 @@ export class AudioManager {
     this.soundPools.set(key, pool);
 
     // Preload all instances
-    await Promise.all(pool.instances.map(audio =>
-      new Promise(resolve => {
-        audio.addEventListener('canplaythrough', resolve, { once: true });
-        audio.load();
-      })
-    ));
+    await Promise.all(
+      pool.instances.map(
+        (audio) =>
+          new Promise((resolve) => {
+            audio.addEventListener("canplaythrough", resolve, { once: true });
+            audio.load();
+          })
+      )
+    );
 
     return pool;
   }
@@ -121,7 +123,8 @@ export class AudioManager {
     pool.currentIndex = (pool.currentIndex + 1) % pool.instances.length;
 
     // Apply options
-    audio.volume = this.getEffectiveVolume(pool.category) * (options.volume || 1.0);
+    audio.volume =
+      this.getEffectiveVolume(pool.category) * (options.volume || 1.0);
     audio.playbackRate = options.playbackRate || 1.0;
 
     if (options.loop !== undefined) {
@@ -132,7 +135,7 @@ export class AudioManager {
     audio.currentTime = 0;
 
     if (!this.isMuted) {
-      audio.play().catch(error => {
+      audio.play().catch((error) => {
         console.error(`[AudioManager] Error playing sound '${key}':`, error);
       });
     }
@@ -142,9 +145,13 @@ export class AudioManager {
 
     // Auto-cleanup when done
     if (!audio.loop) {
-      audio.addEventListener('ended', () => {
-        this.activeSounds.delete(audio);
-      }, { once: true });
+      audio.addEventListener(
+        "ended",
+        () => {
+          this.activeSounds.delete(audio);
+        },
+        { once: true }
+      );
     }
 
     return audio;
@@ -156,7 +163,7 @@ export class AudioManager {
    * @param {string} category - Sound category
    * @param {Object} options - Playback options
    */
-  async playOneShot(url, category = 'sfx', options = {}) {
+  async playOneShot(url, category = "sfx", options = {}) {
     if (this.isMuted) return null;
 
     const audio = new Audio(url);
@@ -169,16 +176,20 @@ export class AudioManager {
     this.activeSounds.add(audio);
 
     // Auto-cleanup when done
-    audio.addEventListener('ended', () => {
-      this.activeSounds.delete(audio);
-      this.audioElements.delete(id);
-    }, { once: true });
+    audio.addEventListener(
+      "ended",
+      () => {
+        this.activeSounds.delete(audio);
+        this.audioElements.delete(id);
+      },
+      { once: true }
+    );
 
     try {
       await audio.play();
       return audio;
     } catch (error) {
-      console.error('[AudioManager] Error playing one-shot sound:', error);
+      console.error("[AudioManager] Error playing one-shot sound:", error);
       this.activeSounds.delete(audio);
       this.audioElements.delete(id);
       return null;
@@ -202,16 +213,20 @@ export class AudioManager {
     music.loop = true;
     music.volume = 0;
 
-    const id = 'background_music';
+    const id = "background_music";
     this.audioElements.set(id, music);
     this.currentMusic = music;
 
     if (!this.isMuted) {
       try {
         await music.play();
-        await this.fadeIn(music, fadeInDuration, this.getEffectiveVolume('music'));
+        await this.fadeIn(
+          music,
+          fadeInDuration,
+          this.getEffectiveVolume("music")
+        );
       } catch (error) {
-        console.error('[AudioManager] Error playing music:', error);
+        console.error("[AudioManager] Error playing music:", error);
       }
     }
 
@@ -225,7 +240,7 @@ export class AudioManager {
    * @param {number} targetVolume - Target volume
    */
   async fadeIn(audio, duration = 1000, targetVolume = 1.0) {
-    return new Promise(resolve => {
+    return new Promise((resolve) => {
       const startVolume = audio.volume;
       const startTime = Date.now();
 
@@ -258,7 +273,7 @@ export class AudioManager {
    * @param {number} duration - Fade duration in ms
    */
   async fadeOut(audio, duration = 1000) {
-    return new Promise(resolve => {
+    return new Promise((resolve) => {
       const startVolume = audio.volume;
       const startTime = Date.now();
 
@@ -318,7 +333,7 @@ export class AudioManager {
     // Stop pooled sounds
     for (const [key, pool] of this.soundPools.entries()) {
       if (pool.category === category) {
-        pool.instances.forEach(audio => this.stopSound(audio));
+        pool.instances.forEach((audio) => this.stopSound(audio));
       }
     }
 
@@ -344,7 +359,7 @@ export class AudioManager {
 
     // Stop all pooled sounds
     for (const pool of this.soundPools.values()) {
-      pool.instances.forEach(audio => {
+      pool.instances.forEach((audio) => {
         audio.pause();
         audio.currentTime = 0;
       });
@@ -411,14 +426,14 @@ export class AudioManager {
     // Update pooled sounds
     for (const pool of this.soundPools.values()) {
       const volume = this.getEffectiveVolume(pool.category);
-      pool.instances.forEach(audio => {
+      pool.instances.forEach((audio) => {
         audio.volume = volume;
       });
     }
 
     // Update current music
     if (this.currentMusic) {
-      this.currentMusic.volume = this.getEffectiveVolume('music');
+      this.currentMusic.volume = this.getEffectiveVolume("music");
     }
   }
 
@@ -434,7 +449,7 @@ export class AudioManager {
       pooledSounds: this.soundPools.size,
       totalAudioElements: this.audioElements.size,
       activeFades: this.activeFades.size,
-      categoryVolumes: Object.fromEntries(this.categoryVolumes)
+      categoryVolumes: Object.fromEntries(this.categoryVolumes),
     };
   }
 
@@ -451,7 +466,7 @@ export class AudioManager {
     // Stop and dispose all audio elements
     for (const audio of this.audioElements.values()) {
       audio.pause();
-      audio.src = '';
+      audio.src = "";
       audio.load();
     }
     this.audioElements.clear();

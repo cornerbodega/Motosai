@@ -1,9 +1,9 @@
-import { supabase } from '../utils/supabase.js';
+import { supabase } from "../utils/supabase.js";
 
 export class AccountModal {
   constructor(game) {
     this.game = game;
-    this.serverUrl = import.meta.env.VITE_SERVER_URL || 'http://localhost:8080';
+    this.serverUrl = import.meta.env.VITE_SERVER_URL || "http://localhost:8080";
     this.isVisible = false;
     this.currentUser = null;
 
@@ -14,20 +14,20 @@ export class AccountModal {
 
   async checkAuthStatus() {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       this.currentUser = session?.user || null;
       this.updateModalContent();
     } catch (error) {
-      console.error('Error checking auth status:', error);
+      console.error("Error checking auth status:", error);
     }
   }
 
   setupAuthStateListener() {
     // Listen for auth state changes (OAuth callback, magic link, etc.)
     supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('Auth state changed:', event);
-
-      if (event === 'SIGNED_IN' && session) {
+      if (event === "SIGNED_IN" && session) {
         this.currentUser = session.user;
 
         // Link player ID to the newly authenticated user
@@ -37,7 +37,7 @@ export class AccountModal {
         if (this.isVisible) {
           this.updateModalContent();
         }
-      } else if (event === 'SIGNED_OUT') {
+      } else if (event === "SIGNED_OUT") {
         this.currentUser = null;
         if (this.isVisible) {
           this.updateModalContent();
@@ -48,8 +48,8 @@ export class AccountModal {
 
   createModal() {
     // Modal overlay
-    const overlay = document.createElement('div');
-    overlay.id = 'account-modal-overlay';
+    const overlay = document.createElement("div");
+    overlay.id = "account-modal-overlay";
     overlay.style.cssText = `
       position: fixed;
       top: 0;
@@ -65,8 +65,8 @@ export class AccountModal {
     `;
 
     // Modal container
-    const modal = document.createElement('div');
-    modal.id = 'account-modal';
+    const modal = document.createElement("div");
+    modal.id = "account-modal";
     modal.style.cssText = `
       background: linear-gradient(135deg, rgba(20, 20, 40, 0.95) 0%, rgba(0, 0, 0, 0.95) 100%);
       border: 2px solid rgba(100, 200, 255, 0.5);
@@ -82,7 +82,7 @@ export class AccountModal {
     `;
 
     // Header
-    const header = document.createElement('div');
+    const header = document.createElement("div");
     header.style.cssText = `
       display: flex;
       justify-content: space-between;
@@ -92,16 +92,16 @@ export class AccountModal {
       padding-bottom: 15px;
     `;
 
-    const title = document.createElement('h2');
+    const title = document.createElement("h2");
     title.style.cssText = `
       margin: 0;
       font-size: 24px;
       color: #ffa500;
       text-shadow: 0 0 10px rgba(255, 165, 0, 0.5);
     `;
-    title.textContent = '🏍️ Account';
+    title.textContent = "🏍️ Account";
 
-    const closeBtn = document.createElement('button');
+    const closeBtn = document.createElement("button");
     closeBtn.style.cssText = `
       background: transparent;
       border: none;
@@ -116,17 +116,18 @@ export class AccountModal {
       align-items: center;
       justify-content: center;
     `;
-    closeBtn.innerHTML = '×';
-    closeBtn.onmouseover = () => closeBtn.style.color = '#ff0000';
-    closeBtn.onmouseout = () => closeBtn.style.color = 'rgba(255, 255, 255, 0.6)';
+    closeBtn.innerHTML = "×";
+    closeBtn.onmouseover = () => (closeBtn.style.color = "#ff0000");
+    closeBtn.onmouseout = () =>
+      (closeBtn.style.color = "rgba(255, 255, 255, 0.6)");
     closeBtn.onclick = () => this.hide();
 
     header.appendChild(title);
     header.appendChild(closeBtn);
 
     // Content area (will be populated based on auth status)
-    const content = document.createElement('div');
-    content.id = 'account-modal-content';
+    const content = document.createElement("div");
+    content.id = "account-modal-content";
 
     modal.appendChild(header);
     modal.appendChild(content);
@@ -144,12 +145,12 @@ export class AccountModal {
         this.hide();
       }
     };
-    overlay.addEventListener('click', this.overlayClickHandler);
+    overlay.addEventListener("click", this.overlayClickHandler);
   }
 
   updateModalContent() {
     const content = this.contentElement;
-    content.innerHTML = '';
+    content.innerHTML = "";
 
     if (this.currentUser) {
       // User is logged in - show rename form
@@ -265,44 +266,49 @@ export class AccountModal {
     `;
 
     // Tab switching
-    const emailTab = container.querySelector('#tab-email');
-    const loginTab = container.querySelector('#tab-login');
-    const signupTab = container.querySelector('#tab-signup');
-    const formContainer = container.querySelector('#auth-form-container');
-    const googleBtn = container.querySelector('#google-signin-btn');
+    const emailTab = container.querySelector("#tab-email");
+    const loginTab = container.querySelector("#tab-login");
+    const signupTab = container.querySelector("#tab-signup");
+    const formContainer = container.querySelector("#auth-form-container");
+    const googleBtn = container.querySelector("#google-signin-btn");
 
     const switchTab = (tabType) => {
       // Reset all tabs
       const tabs = [emailTab, loginTab, signupTab];
-      tabs.forEach(tab => {
-        tab.style.background = 'rgba(100, 200, 255, 0.1)';
-        tab.style.borderColor = 'rgba(100, 200, 255, 0.3)';
-        tab.style.color = 'rgba(255, 255, 255, 0.6)';
+      tabs.forEach((tab) => {
+        tab.style.background = "rgba(100, 200, 255, 0.1)";
+        tab.style.borderColor = "rgba(100, 200, 255, 0.3)";
+        tab.style.color = "rgba(255, 255, 255, 0.6)";
       });
 
       // Activate selected tab
-      const activeTab = tabType === 'email' ? emailTab : (tabType === 'login' ? loginTab : signupTab);
-      activeTab.style.background = 'rgba(100, 200, 255, 0.3)';
-      activeTab.style.borderColor = 'rgba(100, 200, 255, 0.5)';
-      activeTab.style.color = 'white';
+      const activeTab =
+        tabType === "email"
+          ? emailTab
+          : tabType === "login"
+          ? loginTab
+          : signupTab;
+      activeTab.style.background = "rgba(100, 200, 255, 0.3)";
+      activeTab.style.borderColor = "rgba(100, 200, 255, 0.5)";
+      activeTab.style.color = "white";
 
       // Render form
-      if (tabType === 'email') {
+      if (tabType === "email") {
         this.renderMagicLinkForm(formContainer);
-      } else if (tabType === 'login') {
+      } else if (tabType === "login") {
         this.renderLoginForm(formContainer);
       } else {
         this.renderSignupForm(formContainer);
       }
     };
 
-    emailTab.onclick = () => switchTab('email');
-    loginTab.onclick = () => switchTab('login');
-    signupTab.onclick = () => switchTab('signup');
+    emailTab.onclick = () => switchTab("email");
+    loginTab.onclick = () => switchTab("login");
+    signupTab.onclick = () => switchTab("signup");
     googleBtn.onclick = () => this.handleGoogleSignIn();
 
     // Show magic link form by default
-    switchTab('email');
+    switchTab("email");
   }
 
   renderLoginForm(container) {
@@ -360,7 +366,7 @@ export class AccountModal {
       </form>
     `;
 
-    const form = container.querySelector('#login-form');
+    const form = container.querySelector("#login-form");
     form.onsubmit = (e) => this.handleLogin(e);
   }
 
@@ -422,7 +428,7 @@ export class AccountModal {
       </form>
     `;
 
-    const form = container.querySelector('#signup-form');
+    const form = container.querySelector("#signup-form");
     form.onsubmit = (e) => this.handleSignup(e);
   }
 
@@ -467,12 +473,15 @@ export class AccountModal {
       </form>
     `;
 
-    const form = container.querySelector('#magic-link-form');
+    const form = container.querySelector("#magic-link-form");
     form.onsubmit = (e) => this.handleMagicLink(e);
   }
 
   renderRenameForm(container) {
-    const currentUsername = this.game.multiplayerManager?.username || localStorage.getItem('motosai_username') || 'Unknown';
+    const currentUsername =
+      this.game.multiplayerManager?.username ||
+      localStorage.getItem("motosai_username") ||
+      "Unknown";
 
     container.innerHTML = `
       <div>
@@ -563,8 +572,8 @@ export class AccountModal {
       </div>
     `;
 
-    const form = container.querySelector('#rename-form');
-    const logoutBtn = container.querySelector('#logout-btn');
+    const form = container.querySelector("#rename-form");
+    const logoutBtn = container.querySelector("#logout-btn");
 
     form.onsubmit = (e) => this.handleRename(e);
     logoutBtn.onclick = () => this.handleLogout();
@@ -573,25 +582,25 @@ export class AccountModal {
   async handleLogin(e) {
     e.preventDefault();
 
-    const email = document.getElementById('login-email').value;
-    const password = document.getElementById('login-password').value;
-    const errorDiv = document.getElementById('auth-error');
-    const successDiv = document.getElementById('auth-success');
+    const email = document.getElementById("login-email").value;
+    const password = document.getElementById("login-password").value;
+    const errorDiv = document.getElementById("auth-error");
+    const successDiv = document.getElementById("auth-success");
 
-    errorDiv.style.display = 'none';
-    successDiv.style.display = 'none';
+    errorDiv.style.display = "none";
+    successDiv.style.display = "none";
 
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
-        password
+        password,
       });
 
       if (error) throw error;
 
       this.currentUser = data.user;
-      successDiv.textContent = 'Login successful!';
-      successDiv.style.display = 'block';
+      successDiv.textContent = "Login successful!";
+      successDiv.style.display = "block";
 
       // Link player ID to Supabase user
       await this.linkPlayerToUser();
@@ -600,36 +609,36 @@ export class AccountModal {
       setTimeout(() => {
         this.updateModalContent();
       }, 1000);
-
     } catch (error) {
-      console.error('Login error:', error);
-      errorDiv.textContent = error.message || 'Login failed';
-      errorDiv.style.display = 'block';
+      console.error("Login error:", error);
+      errorDiv.textContent = error.message || "Login failed";
+      errorDiv.style.display = "block";
     }
   }
 
   async handleSignup(e) {
     e.preventDefault();
 
-    const email = document.getElementById('signup-email').value;
-    const password = document.getElementById('signup-password').value;
-    const errorDiv = document.getElementById('auth-error');
-    const successDiv = document.getElementById('auth-success');
+    const email = document.getElementById("signup-email").value;
+    const password = document.getElementById("signup-password").value;
+    const errorDiv = document.getElementById("auth-error");
+    const successDiv = document.getElementById("auth-success");
 
-    errorDiv.style.display = 'none';
-    successDiv.style.display = 'none';
+    errorDiv.style.display = "none";
+    successDiv.style.display = "none";
 
     try {
       const { data, error } = await supabase.auth.signUp({
         email,
-        password
+        password,
       });
 
       if (error) throw error;
 
       if (data.user) {
-        successDiv.textContent = 'Account created! Please check your email to verify.';
-        successDiv.style.display = 'block';
+        successDiv.textContent =
+          "Account created! Please check your email to verify.";
+        successDiv.style.display = "block";
 
         // If email confirmation is disabled, update current user and link
         if (data.session) {
@@ -641,112 +650,111 @@ export class AccountModal {
           }, 2000);
         }
       }
-
     } catch (error) {
-      console.error('Signup error:', error);
-      errorDiv.textContent = error.message || 'Signup failed';
-      errorDiv.style.display = 'block';
+      console.error("Signup error:", error);
+      errorDiv.textContent = error.message || "Signup failed";
+      errorDiv.style.display = "block";
     }
   }
 
   async handleGoogleSignIn() {
-    const errorDiv = document.getElementById('auth-error');
-    const successDiv = document.getElementById('auth-success');
+    const errorDiv = document.getElementById("auth-error");
+    const successDiv = document.getElementById("auth-success");
 
-    errorDiv.style.display = 'none';
-    successDiv.style.display = 'none';
+    errorDiv.style.display = "none";
+    successDiv.style.display = "none";
 
     try {
       const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
+        provider: "google",
         options: {
-          redirectTo: window.location.origin
-        }
+          redirectTo: window.location.origin,
+        },
       });
 
       if (error) throw error;
 
       // User will be redirected to Google for authentication
       // After successful auth, they'll be redirected back and session will be established
-
     } catch (error) {
-      console.error('Google sign-in error:', error);
-      errorDiv.textContent = error.message || 'Google sign-in failed';
-      errorDiv.style.display = 'block';
+      console.error("Google sign-in error:", error);
+      errorDiv.textContent = error.message || "Google sign-in failed";
+      errorDiv.style.display = "block";
     }
   }
 
   async handleMagicLink(e) {
     e.preventDefault();
 
-    const email = document.getElementById('magic-link-email').value;
-    const errorDiv = document.getElementById('auth-error');
-    const successDiv = document.getElementById('auth-success');
+    const email = document.getElementById("magic-link-email").value;
+    const errorDiv = document.getElementById("auth-error");
+    const successDiv = document.getElementById("auth-success");
 
-    errorDiv.style.display = 'none';
-    successDiv.style.display = 'none';
+    errorDiv.style.display = "none";
+    successDiv.style.display = "none";
 
     try {
       const { error } = await supabase.auth.signInWithOtp({
         email,
         options: {
-          emailRedirectTo: window.location.origin
-        }
+          emailRedirectTo: window.location.origin,
+        },
       });
 
       if (error) throw error;
 
-      successDiv.textContent = 'Magic link sent! Check your email to sign in.';
-      successDiv.style.display = 'block';
-
+      successDiv.textContent = "Magic link sent! Check your email to sign in.";
+      successDiv.style.display = "block";
     } catch (error) {
-      console.error('Magic link error:', error);
-      errorDiv.textContent = error.message || 'Failed to send magic link';
-      errorDiv.style.display = 'block';
+      console.error("Magic link error:", error);
+      errorDiv.textContent = error.message || "Failed to send magic link";
+      errorDiv.style.display = "block";
     }
   }
 
   async handleRename(e) {
     e.preventDefault();
 
-    const newUsername = document.getElementById('new-username').value.trim();
-    const errorDiv = document.getElementById('rename-error');
-    const successDiv = document.getElementById('rename-success');
+    const newUsername = document.getElementById("new-username").value.trim();
+    const errorDiv = document.getElementById("rename-error");
+    const successDiv = document.getElementById("rename-success");
 
-    errorDiv.style.display = 'none';
-    successDiv.style.display = 'none';
+    errorDiv.style.display = "none";
+    successDiv.style.display = "none";
 
     // Validate username
     if (!/^[a-zA-Z0-9_]{3,20}$/.test(newUsername)) {
-      errorDiv.textContent = 'Invalid username format';
-      errorDiv.style.display = 'block';
+      errorDiv.textContent = "Invalid username format";
+      errorDiv.style.display = "block";
       return;
     }
 
     try {
-      const playerId = localStorage.getItem('motosai_player_id');
-      const { data: { session } } = await supabase.auth.getSession();
+      const playerId = localStorage.getItem("motosai_player_id");
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
 
       const response = await fetch(`${this.serverUrl}/api/account/rename`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
           playerId,
-          newUsername
-        })
+          newUsername,
+        }),
       });
 
       const result = await response.json();
 
       if (!result.success) {
-        throw new Error(result.error || 'Failed to rename account');
+        throw new Error(result.error || "Failed to rename account");
       }
 
       // Update local storage
-      localStorage.setItem('motosai_username', newUsername);
+      localStorage.setItem("motosai_username", newUsername);
 
       // Update multiplayer manager
       if (this.game.multiplayerManager) {
@@ -754,7 +762,7 @@ export class AccountModal {
       }
 
       successDiv.textContent = `Successfully renamed to ${newUsername}!`;
-      successDiv.style.display = 'block';
+      successDiv.style.display = "block";
 
       // Refresh leaderboard if it exists
       if (this.game.leaderboardUI) {
@@ -765,11 +773,10 @@ export class AccountModal {
       setTimeout(() => {
         this.updateModalContent();
       }, 2000);
-
     } catch (error) {
-      console.error('Rename error:', error);
-      errorDiv.textContent = error.message || 'Failed to rename account';
-      errorDiv.style.display = 'block';
+      console.error("Rename error:", error);
+      errorDiv.textContent = error.message || "Failed to rename account";
+      errorDiv.style.display = "block";
     }
   }
 
@@ -779,49 +786,50 @@ export class AccountModal {
       this.currentUser = null;
       this.updateModalContent();
     } catch (error) {
-      console.error('Logout error:', error);
+      console.error("Logout error:", error);
     }
   }
 
   async linkPlayerToUser() {
     try {
-      const playerId = localStorage.getItem('motosai_player_id');
-      const { data: { session } } = await supabase.auth.getSession();
+      const playerId = localStorage.getItem("motosai_player_id");
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
 
       if (!playerId || !session) return;
 
       await fetch(`${this.serverUrl}/api/account/link`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
           playerId,
-          userId: session.user.id
-        })
+          userId: session.user.id,
+        }),
       });
-
     } catch (error) {
-      console.error('Error linking player to user:', error);
+      console.error("Error linking player to user:", error);
     }
   }
 
   show() {
     this.isVisible = true;
-    this.overlay.style.display = 'flex';
+    this.overlay.style.display = "flex";
     this.checkAuthStatus();
   }
 
   hide() {
     this.isVisible = false;
-    this.overlay.style.display = 'none';
+    this.overlay.style.display = "none";
   }
 
   dispose() {
     // Remove event listener
     if (this.overlay && this.overlayClickHandler) {
-      this.overlay.removeEventListener('click', this.overlayClickHandler);
+      this.overlay.removeEventListener("click", this.overlayClickHandler);
       this.overlayClickHandler = null;
     }
 

@@ -337,18 +337,18 @@ export class MotosaiGame {
   
   initBackgrounds() {
     try {
-      console.log('[INIT] Creating BackgroundSystem...');
+
       this.backgrounds = new BackgroundSystem(this.scene, this.camera);
-      console.log('[INIT] BackgroundSystem created successfully');
+
       
       // Test with initial location (Big Sur) - this should trigger segment 0
-      console.log('[INIT] Setting initial location to segment 0...');
+
       this.backgrounds.updateLocation(0, {
         lat: 36.2704,
         lng: -121.8081,
         name: 'Big Sur California Coast'
       });
-      console.log('[INIT] Initial location set');
+
     } catch (error) {
       console.error('Error creating BackgroundSystem:', error);
       this.backgrounds = null; // Prevent crashes in render loop
@@ -467,7 +467,7 @@ export class MotosaiGame {
     try {
       // Connect with a default username for now
       const playerInfo = await this.multiplayer.connect();
-      console.log(`Connected to multiplayer as ${playerInfo.username}`);
+
       
       // Add multiplayer status to HUD
       this.updateMultiplayerHUD();
@@ -897,11 +897,11 @@ export class MotosaiGame {
     if (this.isFirstPerson) {
       this.cameraOffset = this.firstPersonOffset.clone();
       this.cameraLookOffset = this.firstPersonLookOffset.clone();
-      console.log('Switched to First Person view');
+
     } else {
       this.cameraOffset = this.thirdPersonOffset.clone();
       this.cameraLookOffset = this.thirdPersonLookOffset.clone();
-      console.log('Switched to Third Person view');
+
     }
   }
   
@@ -976,12 +976,12 @@ export class MotosaiGame {
     this.frontWheel.rotation.x = 0;
     this.rearWheel.rotation.x = 0;
     
-    console.log('Player respawned!');
+
   }
   
   handlePerformanceChange(event) {
     const { level, previousLevel } = event.detail;
-    console.log(`Performance level changed from ${previousLevel} to ${level}`);
+
     
     // Update current config
     this.currentConfig = this.performanceManager.getConfig();
@@ -1032,18 +1032,18 @@ export class MotosaiGame {
       this.useV2Physics = false;
       this.physics = new MotorcyclePhysics();
       this.inputController = new InputController();
-      console.log('Switched to Physics V1 (Original Complex)');
+
     } else if (!this.useV2Physics) {
       this.useV2Physics = true;
       this.physics = new MotorcyclePhysicsV2();
       this.inputController = new InputController();
-      console.log('Switched to Physics V2 (Improved Complex)');
+
     } else {
       this.useSimplePhysics = true;
       this.useV2Physics = false;
       this.physics = new SimpleBikePhysics();
       this.inputController = null;
-      console.log('Switched to Simple Physics (Working)');
+
     }
     
     // Restore position and velocity
@@ -1211,7 +1211,7 @@ export class MotosaiGame {
         // Debug: Log every 300 frames to reduce console overhead
         if (!this.bgLogCounter) this.bgLogCounter = 0;
         if (this.bgLogCounter++ % 300 === 0) {
-          console.log(`[DEBUG] Distance: ${(this.distance/5280).toFixed(2)}mi, absoluteZ: ${absoluteZ.toFixed(0)}m, location:`, location);
+
         }
         
         this.backgrounds.updateLocation(absoluteZ, location);
@@ -1309,7 +1309,7 @@ export class MotosaiGame {
   }
   
   applyGraphicsSettings(settings) {
-    console.log('Applying graphics settings:', settings);
+
     
     // Shadows
     if (this.renderer) {
@@ -1380,7 +1380,7 @@ export class MotosaiGame {
     
     // Anti-aliasing requires renderer recreation
     if (this.renderer && settings.antialias !== this.currentConfig.antialias) {
-      console.log('Anti-aliasing change requires renderer restart');
+
       this.recreateRenderer(settings.antialias);
     }
     

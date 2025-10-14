@@ -1,8 +1,8 @@
-import * as THREE from 'three';
-import { UnsplashService } from '../../client/src/game/backgrounds/UnsplashService.js';
-import { ImageCacheManager } from '../../client/src/game/backgrounds/ImageCacheManager.js';
-import { getGlobalResourcePool } from '../core/ResourcePool.js';
-import { disposeTexture, disposeObject3D } from '../utils/DisposalUtils.js';
+import * as THREE from "three";
+import { UnsplashService } from "../../client/src/game/backgrounds/UnsplashService.js";
+import { ImageCacheManager } from "../../client/src/game/backgrounds/ImageCacheManager.js";
+import { getGlobalResourcePool } from "../core/ResourcePool.js";
+import { disposeTexture, disposeObject3D } from "../utils/DisposalUtils.js";
 
 /**
  * Refactored BackgroundSystem with proper memory management
@@ -55,30 +55,30 @@ export class BackgroundSystemRefactored {
 
   createSkyDome() {
     // Get pooled geometry
-    const geometry = this.resourcePool.getSharedGeometry('sphere', {
+    const geometry = this.resourcePool.getSharedGeometry("sphere", {
       radius: 2000,
       widthSegments: 64,
-      heightSegments: 32
+      heightSegments: 32,
     });
 
     // Get pooled material
-    const material = this.resourcePool.getSharedMaterial('skyDome', {
-      color: 0x87CEEB,
+    const material = this.resourcePool.getSharedMaterial("skyDome", {
+      color: 0x87ceeb,
       fog: false,
       side: THREE.BackSide,
       depthWrite: false,
-      transparent: false
+      transparent: false,
     });
 
     // Remove old sky if exists
-    const oldSky = this.scene.getObjectByName('sky');
+    const oldSky = this.scene.getObjectByName("sky");
     if (oldSky) {
       this.disposeObject(oldSky);
     }
 
     // Create new sky mesh
     this.horizonPlane = new THREE.Mesh(geometry, material);
-    this.horizonPlane.name = 'sky';
+    this.horizonPlane.name = "sky";
     this.horizonPlane.renderOrder = -1000;
     this.horizonPlane.frustumCulled = false;
     this.scene.add(this.horizonPlane);
@@ -89,23 +89,23 @@ export class BackgroundSystemRefactored {
 
   createTransitionSphere() {
     // Get pooled resources
-    const geometry = this.resourcePool.getSharedGeometry('sphere', {
+    const geometry = this.resourcePool.getSharedGeometry("sphere", {
       radius: 2000,
       widthSegments: 64,
-      heightSegments: 32
+      heightSegments: 32,
     });
 
-    const material = this.resourcePool.getSharedMaterial('transitionSphere', {
+    const material = this.resourcePool.getSharedMaterial("transitionSphere", {
       color: 0xffffff,
       fog: false,
       side: THREE.BackSide,
       depthWrite: false,
       transparent: true,
-      opacity: 0
+      opacity: 0,
     });
 
     this.transitionSphere = new THREE.Mesh(geometry, material);
-    this.transitionSphere.name = 'transitionSky';
+    this.transitionSphere.name = "transitionSky";
     this.transitionSphere.renderOrder = -999;
     this.transitionSphere.frustumCulled = false;
     this.transitionSphere.visible = false;
@@ -120,14 +120,12 @@ export class BackgroundSystemRefactored {
 
     if (segmentId !== this.currentSegment) {
       const milesTravel = (absolutePosition / 1609.34).toFixed(2);
-      console.log(`[BG] Segment change at ${milesTravel} miles (segment ${segmentId})`);
 
       // Rate limiting
       const now = Date.now();
       const timeSinceLastChange = (now - this.lastBackgroundChange) / 1000;
 
       if (timeSinceLastChange < 30) {
-        console.log(`[BG] Skipping - only ${timeSinceLastChange.toFixed(1)}s since last change`);
         return;
       }
 
@@ -142,8 +140,6 @@ export class BackgroundSystemRefactored {
     if (this.isDisposed) return;
 
     try {
-      console.log(`[BG] Loading segment ${segmentId}: ${location.name}`);
-
       // Clean up old textures before loading new ones
       this.cleanupOldTextures();
 
@@ -167,21 +163,21 @@ export class BackgroundSystemRefactored {
         // Default gradient fallback
         this.applyGradientBackground({
           stops: [
-            { color: '#87CEEB', position: 0 },
-            { color: '#98D8F8', position: 0.5 },
-            { color: '#4682B4', position: 1 }
-          ]
+            { color: "#87CEEB", position: 0 },
+            { color: "#98D8F8", position: 0.5 },
+            { color: "#4682B4", position: 1 },
+          ],
         });
       }
     } catch (error) {
-      console.error('[BG] Error loading background:', error);
+      console.error("[BG] Error loading background:", error);
       // Error fallback gradient
       this.applyGradientBackground({
         stops: [
-          { color: '#FFB6C1', position: 0 },
-          { color: '#FFA07A', position: 0.5 },
-          { color: '#FF6347', position: 1 }
-        ]
+          { color: "#FFB6C1", position: 0 },
+          { color: "#FFA07A", position: 0.5 },
+          { color: "#FF6347", position: 1 },
+        ],
       });
     }
   }
@@ -193,13 +189,13 @@ export class BackgroundSystemRefactored {
     const oldTexture = this.horizonPlane.material.map;
 
     // Create gradient texture
-    const canvas = document.createElement('canvas');
+    const canvas = document.createElement("canvas");
     canvas.width = 512;
     canvas.height = 256;
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext("2d");
 
     const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
-    gradient.stops.forEach(stop => {
+    gradient.stops.forEach((stop) => {
       grad.addColorStop(stop.position, stop.color);
     });
 
@@ -259,7 +255,7 @@ export class BackgroundSystemRefactored {
         },
         undefined,
         (error) => {
-          console.error('[BG] Error loading photo:', error);
+          console.error("[BG] Error loading photo:", error);
           reject(error);
         }
       );
@@ -284,7 +280,7 @@ export class BackgroundSystemRefactored {
       } else if (photo.url) {
         await this.loadPhotoToSphere(this.transitionSphere, photo.url);
       } else {
-        console.error('[BG] Invalid photo data');
+        console.error("[BG] Invalid photo data");
         resolve();
         return;
       }
@@ -350,13 +346,13 @@ export class BackgroundSystemRefactored {
   }
 
   async applyGradientToSphere(sphere, gradient) {
-    const canvas = document.createElement('canvas');
+    const canvas = document.createElement("canvas");
     canvas.width = 512;
     canvas.height = 256;
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext("2d");
 
     const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
-    gradient.stops.forEach(stop => {
+    gradient.stops.forEach((stop) => {
       grad.addColorStop(stop.position, stop.color);
     });
 

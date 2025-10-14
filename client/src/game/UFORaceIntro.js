@@ -63,7 +63,7 @@ export class UFORaceIntro {
       this.loadUFO(),
       this.createStarField(),
       this.create3DText(),
-      this.setupLighting()
+      this.setupLighting(),
     ]);
 
     // Position camera for intro view
@@ -81,9 +81,15 @@ export class UFORaceIntro {
     // Create realistic Earth with textures
     // Load large textures from GCS to avoid Cloud Run memory limits
     const GCS_BASE = "https://storage.googleapis.com/motosai-app";
-    const earthColorTexture = this.textureLoader.load(`${GCS_BASE}/textures/earth/earth_color_10K.png`);
-    const earthRoughnessMap = this.textureLoader.load(`${GCS_BASE}/textures/earth/earth_landocean_4K.png`);
-    const earthHeightMap = this.textureLoader.load(`${GCS_BASE}/textures/earth/topography_5K.png`);
+    const earthColorTexture = this.textureLoader.load(
+      `${GCS_BASE}/textures/earth/earth_color_10K.png`
+    );
+    const earthRoughnessMap = this.textureLoader.load(
+      `${GCS_BASE}/textures/earth/earth_landocean_4K.png`
+    );
+    const earthHeightMap = this.textureLoader.load(
+      `${GCS_BASE}/textures/earth/topography_5K.png`
+    );
 
     // Track textures for disposal
     this.textures.push(earthColorTexture, earthRoughnessMap, earthHeightMap);
@@ -105,7 +111,9 @@ export class UFORaceIntro {
     this.scene.add(this.earthModel);
 
     // Create atmosphere layer - match RhymeWithUs exactly
-    const atmosphereTexture = this.textureLoader.load("/textures/smoke/fog3.png");
+    const atmosphereTexture = this.textureLoader.load(
+      "/textures/smoke/fog3.png"
+    );
     this.textures.push(atmosphereTexture);
 
     const atmosphereGeometry = new THREE.SphereGeometry(1, 1024, 256);
@@ -114,7 +122,10 @@ export class UFORaceIntro {
       map: atmosphereTexture,
     });
 
-    this.atmosphereModel = new THREE.Mesh(atmosphereGeometry, atmosphereMaterial);
+    this.atmosphereModel = new THREE.Mesh(
+      atmosphereGeometry,
+      atmosphereMaterial
+    );
     this.atmosphereModel.position.set(0, -35, -15); // Match Earth position
     this.atmosphereModel.rotation.y = Math.PI / 4;
     this.atmosphereModel.rotation.x = Math.PI / 4;
@@ -160,7 +171,7 @@ export class UFORaceIntro {
                 metalness: 0.9,
                 roughness: 0.1,
                 emissive: colorData.emissive,
-                emissiveIntensity: 0.5
+                emissiveIntensity: 0.5,
               });
               colorIndex++;
             }
@@ -171,7 +182,6 @@ export class UFORaceIntro {
           this.ufoModel.rotation.x = -0.2;
           this.ufoModel.rotation.y = Math.PI;
 
-          console.log("UFO loaded successfully, size:", size, "scale:", scale);
           this.scene.add(this.ufoModel);
 
           // Add blue sphere glow effect (matching in-game UFO)
@@ -180,7 +190,7 @@ export class UFORaceIntro {
             color: 0x00ffff,
             transparent: true,
             opacity: 0.2,
-            side: THREE.BackSide
+            side: THREE.BackSide,
           });
           const glowMesh = new THREE.Mesh(glowGeometry, glowMaterial);
           this.ufoModel.add(glowMesh);
@@ -188,9 +198,7 @@ export class UFORaceIntro {
 
           resolve();
         },
-        (progress) => {
-          console.log("Loading UFO:", (progress.loaded / progress.total * 100).toFixed(0) + "%");
-        },
+        (progress) => {},
         (error) => {
           console.error("UFO model failed to load:", error);
           this.createFallbackUFO();
@@ -205,13 +213,21 @@ export class UFORaceIntro {
     const group = new THREE.Group();
 
     // Dome
-    const domeGeometry = new THREE.SphereGeometry(0.5, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2);
+    const domeGeometry = new THREE.SphereGeometry(
+      0.5,
+      16,
+      8,
+      0,
+      Math.PI * 2,
+      0,
+      Math.PI / 2
+    );
     const domeMaterial = new THREE.MeshStandardMaterial({
       color: 0x888888,
       metalness: 0.8,
       roughness: 0.2,
       emissive: 0x00ffff,
-      emissiveIntensity: 0.3
+      emissiveIntensity: 0.3,
     });
     const dome = new THREE.Mesh(domeGeometry, domeMaterial);
     dome.position.y = 0.2;
@@ -224,7 +240,7 @@ export class UFORaceIntro {
       metalness: 0.9,
       roughness: 0.1,
       emissive: 0x0088ff,
-      emissiveIntensity: 0.2
+      emissiveIntensity: 0.2,
     });
     const disc = new THREE.Mesh(discGeometry, discMaterial);
     group.add(disc);
@@ -234,7 +250,7 @@ export class UFORaceIntro {
     const lightMaterial = new THREE.MeshBasicMaterial({
       color: 0x00ffff,
       emissive: 0x00ffff,
-      emissiveIntensity: 1
+      emissiveIntensity: 1,
     });
 
     for (let i = 0; i < 8; i++) {
@@ -255,7 +271,7 @@ export class UFORaceIntro {
     const starsMaterial = new THREE.PointsMaterial({
       color: 0xffffff,
       size: 0.1,
-      sizeAttenuation: true
+      sizeAttenuation: true,
     });
 
     const starsVertices = [];
@@ -266,71 +282,82 @@ export class UFORaceIntro {
       starsVertices.push(x, y, z);
     }
 
-    starsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starsVertices, 3));
+    starsGeometry.setAttribute(
+      "position",
+      new THREE.Float32BufferAttribute(starsVertices, 3)
+    );
     this.starField = new THREE.Points(starsGeometry, starsMaterial);
     this.scene.add(this.starField);
   }
 
   async create3DText() {
     return new Promise((resolve) => {
-      this.fontLoader.load('/fonts/4.json', (font) => {
-        // Main title text
-        const titleGeometry = new TextGeometry('MOTOSAI', {
-          font: font,
-          size: 0.7,
-          height: 0.2,
-          curveSegments: 12,
-          bevelEnabled: true,
-          bevelThickness: 0.03,
-          bevelSize: 0.02,
-          bevelOffset: 0,
-          bevelSegments: 5
-        });
-        titleGeometry.center();
+      this.fontLoader.load(
+        "/fonts/4.json",
+        (font) => {
+          // Main title text
+          const titleGeometry = new TextGeometry("MOTOSAI", {
+            font: font,
+            size: 0.7,
+            height: 0.2,
+            curveSegments: 12,
+            bevelEnabled: true,
+            bevelThickness: 0.03,
+            bevelSize: 0.02,
+            bevelOffset: 0,
+            bevelSegments: 5,
+          });
+          titleGeometry.center();
 
-        const textMaterial = new THREE.MeshStandardMaterial({
-          color: 0x00ffff,
-          metalness: 0.8,
-          roughness: 0.2,
-          emissive: 0x00ffff,
-          emissiveIntensity: 0.4
-        });
+          const textMaterial = new THREE.MeshStandardMaterial({
+            color: 0x00ffff,
+            metalness: 0.8,
+            roughness: 0.2,
+            emissive: 0x00ffff,
+            emissiveIntensity: 0.4,
+          });
 
-        this.text3D = new THREE.Mesh(titleGeometry, textMaterial);
-        this.text3D.position.set(0, 3.5, 0);
-        this.scene.add(this.text3D);
+          this.text3D = new THREE.Mesh(titleGeometry, textMaterial);
+          this.text3D.position.set(0, 3.5, 0);
+          this.scene.add(this.text3D);
 
-        // Subtitle text
-        const subtitleGeometry = new TextGeometry('Level: Death Valley, USA', {
-          font: font,
-          size: 0.3,
-          height: 0.1,
-          curveSegments: 12,
-          bevelEnabled: true,
-          bevelThickness: 0.02,
-          bevelSize: 0.01,
-          bevelOffset: 0,
-          bevelSegments: 5
-        });
-        subtitleGeometry.center();
+          // Subtitle text
+          const subtitleGeometry = new TextGeometry(
+            "Level: Death Valley, USA",
+            {
+              font: font,
+              size: 0.3,
+              height: 0.1,
+              curveSegments: 12,
+              bevelEnabled: true,
+              bevelThickness: 0.02,
+              bevelSize: 0.01,
+              bevelOffset: 0,
+              bevelSegments: 5,
+            }
+          );
+          subtitleGeometry.center();
 
-        const subtitleMaterial = new THREE.MeshStandardMaterial({
-          color: 0xffaa00,
-          metalness: 0.6,
-          roughness: 0.3,
-          emissive: 0xffaa00,
-          emissiveIntensity: 0.3
-        });
+          const subtitleMaterial = new THREE.MeshStandardMaterial({
+            color: 0xffaa00,
+            metalness: 0.6,
+            roughness: 0.3,
+            emissive: 0xffaa00,
+            emissiveIntensity: 0.3,
+          });
 
-        this.subtitle3D = new THREE.Mesh(subtitleGeometry, subtitleMaterial);
-        this.subtitle3D.position.set(0, 2.5, 0);
-        this.scene.add(this.subtitle3D);
+          this.subtitle3D = new THREE.Mesh(subtitleGeometry, subtitleMaterial);
+          this.subtitle3D.position.set(0, 2.5, 0);
+          this.scene.add(this.subtitle3D);
 
-        resolve();
-      }, undefined, (error) => {
-        console.warn("Font failed to load:", error);
-        resolve();
-      });
+          resolve();
+        },
+        undefined,
+        (error) => {
+          console.warn("Font failed to load:", error);
+          resolve();
+        }
+      );
     });
   }
 
@@ -403,7 +430,10 @@ export class UFORaceIntro {
       if (this.ufoTransitioning) {
         // Animate UFO: scale down fast first, then move toward Earth
         const transitionElapsed = Date.now() - this.ufoTransitionStart;
-        const transitionProgress = Math.min(transitionElapsed / this.ufoTransitionDuration, 1);
+        const transitionProgress = Math.min(
+          transitionElapsed / this.ufoTransitionDuration,
+          1
+        );
 
         // Scale shrinks very fast in the first 30% of animation
         let scaleProgress = Math.min(transitionProgress / 0.3, 1);
@@ -414,14 +444,17 @@ export class UFORaceIntro {
         if (transitionProgress > 0.3) {
           moveProgress = (transitionProgress - 0.3) / 0.7;
           // Ease-in-out for smooth movement
-          moveProgress = moveProgress < 0.5
-            ? 2 * moveProgress * moveProgress
-            : 1 - Math.pow(-2 * moveProgress + 2, 2) / 2;
+          moveProgress =
+            moveProgress < 0.5
+              ? 2 * moveProgress * moveProgress
+              : 1 - Math.pow(-2 * moveProgress + 2, 2) / 2;
         }
 
         // Scale down to 5% of original size (much smaller)
         const targetScale = this.ufoStartScale * 0.05;
-        const currentScale = this.ufoStartScale + (targetScale - this.ufoStartScale) * scaleProgress;
+        const currentScale =
+          this.ufoStartScale +
+          (targetScale - this.ufoStartScale) * scaleProgress;
         this.ufoModel.scale.setScalar(currentScale);
 
         // Move toward Earth position (-1, -10, 0) with spiral motion
@@ -430,9 +463,15 @@ export class UFORaceIntro {
         const targetZ = 0;
 
         // Base linear interpolation
-        const baseX = this.ufoStartPosition.x + (targetX - this.ufoStartPosition.x) * moveProgress;
-        const baseY = this.ufoStartPosition.y + (targetY - this.ufoStartPosition.y) * moveProgress;
-        const baseZ = this.ufoStartPosition.z + (targetZ - this.ufoStartPosition.z) * moveProgress;
+        const baseX =
+          this.ufoStartPosition.x +
+          (targetX - this.ufoStartPosition.x) * moveProgress;
+        const baseY =
+          this.ufoStartPosition.y +
+          (targetY - this.ufoStartPosition.y) * moveProgress;
+        const baseZ =
+          this.ufoStartPosition.z +
+          (targetZ - this.ufoStartPosition.z) * moveProgress;
 
         // Add subtle spiral motion - decreasing radius as it descends
         const spiralRadius = 1.2 * (1 - moveProgress); // Radius shrinks from 1.2 to 0
@@ -484,10 +523,12 @@ export class UFORaceIntro {
     // Static text - no pulsing animation
 
     // Animate lights for cool effect
-    if (this.lights[2]) { // Blue light
+    if (this.lights[2]) {
+      // Blue light
       this.lights[2].intensity = 2 + Math.sin(elapsed * 0.003) * 0.8;
     }
-    if (this.lights[3]) { // Purple light
+    if (this.lights[3]) {
+      // Purple light
       this.lights[3].intensity = 2 + Math.cos(elapsed * 0.003) * 0.8;
     }
 
@@ -507,7 +548,7 @@ export class UFORaceIntro {
 
   showUI() {
     // Create UI overlay
-    this.uiContainer = document.createElement('div');
+    this.uiContainer = document.createElement("div");
     this.uiContainer.style.cssText = `
       position: absolute;
       top: 0;
@@ -523,14 +564,14 @@ export class UFORaceIntro {
     `;
 
     // Color chooser container
-    const colorContainer = document.createElement('div');
+    const colorContainer = document.createElement("div");
     colorContainer.style.cssText = `
       margin: 20px 0;
       pointer-events: auto;
     `;
 
-    const colorLabel = document.createElement('label');
-    colorLabel.textContent = 'Rider Gear Color:';
+    const colorLabel = document.createElement("label");
+    colorLabel.textContent = "Rider Gear Color:";
     colorLabel.style.cssText = `
       color: white;
       font-size: 18px;
@@ -539,8 +580,8 @@ export class UFORaceIntro {
     `;
     colorContainer.appendChild(colorLabel);
 
-    const colorSelect = document.createElement('select');
-    colorSelect.id = 'introRiderColor';
+    const colorSelect = document.createElement("select");
+    colorSelect.id = "introRiderColor";
     colorSelect.style.cssText = `
       padding: 8px 15px;
       font-size: 16px;
@@ -560,15 +601,15 @@ export class UFORaceIntro {
       <option value="0x800080">Purple</option>
       <option value="0x00ffff">Cyan</option>
     `;
-    colorSelect.addEventListener('change', (e) => {
+    colorSelect.addEventListener("change", (e) => {
       this.selectedColor = parseInt(e.target.value);
     });
     colorContainer.appendChild(colorSelect);
     this.uiContainer.appendChild(colorContainer);
 
     // Start button
-    const startButton = document.createElement('button');
-    startButton.textContent = 'START GAME';
+    const startButton = document.createElement("button");
+    startButton.textContent = "START GAME";
     startButton.style.cssText = `
       padding: 15px 40px;
       font-size: 20px;
@@ -582,18 +623,18 @@ export class UFORaceIntro {
       pointer-events: auto;
       text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
     `;
-    startButton.addEventListener('mouseenter', () => {
-      startButton.style.background = 'rgba(255, 255, 255, 0.3)';
-      startButton.style.transform = 'scale(1.05)';
+    startButton.addEventListener("mouseenter", () => {
+      startButton.style.background = "rgba(255, 255, 255, 0.3)";
+      startButton.style.transform = "scale(1.05)";
     });
-    startButton.addEventListener('mouseleave', () => {
-      startButton.style.background = 'rgba(255, 255, 255, 0.2)';
-      startButton.style.transform = 'scale(1)';
+    startButton.addEventListener("mouseleave", () => {
+      startButton.style.background = "rgba(255, 255, 255, 0.2)";
+      startButton.style.transform = "scale(1)";
     });
 
     // Store bound handler for cleanup
     this.boundStartHandler = () => this.handleStartGame();
-    startButton.addEventListener('click', this.boundStartHandler);
+    startButton.addEventListener("click", this.boundStartHandler);
     this.uiContainer.appendChild(startButton);
 
     document.body.appendChild(this.uiContainer);
@@ -618,7 +659,7 @@ export class UFORaceIntro {
       this.ufoStartPosition = {
         x: this.ufoModel.position.x,
         y: this.ufoModel.position.y,
-        z: this.ufoModel.position.z
+        z: this.ufoModel.position.z,
       };
       this.ufoStartScale = this.ufoModel.scale.x; // Assuming uniform scale
     } else {
@@ -645,8 +686,10 @@ export class UFORaceIntro {
         if (child.geometry) child.geometry.dispose();
         if (child.material) {
           if (child.material.map) child.material.map.dispose();
-          if (child.material.roughnessMap) child.material.roughnessMap.dispose();
-          if (child.material.displacementMap) child.material.displacementMap.dispose();
+          if (child.material.roughnessMap)
+            child.material.roughnessMap.dispose();
+          if (child.material.displacementMap)
+            child.material.displacementMap.dispose();
           child.material.dispose();
         }
       });
@@ -676,8 +719,10 @@ export class UFORaceIntro {
           if (child.material.map) child.material.map.dispose();
           if (child.material.emissiveMap) child.material.emissiveMap.dispose();
           if (child.material.normalMap) child.material.normalMap.dispose();
-          if (child.material.roughnessMap) child.material.roughnessMap.dispose();
-          if (child.material.metalnessMap) child.material.metalnessMap.dispose();
+          if (child.material.roughnessMap)
+            child.material.roughnessMap.dispose();
+          if (child.material.metalnessMap)
+            child.material.metalnessMap.dispose();
           child.material.dispose();
         }
       });
@@ -700,7 +745,8 @@ export class UFORaceIntro {
     if (this.subtitle3D) {
       if (this.subtitle3D.geometry) this.subtitle3D.geometry.dispose();
       if (this.subtitle3D.material) {
-        if (this.subtitle3D.material.matcap) this.subtitle3D.material.matcap.dispose();
+        if (this.subtitle3D.material.matcap)
+          this.subtitle3D.material.matcap.dispose();
         this.subtitle3D.material.dispose();
       }
       this.scene.remove(this.subtitle3D);
@@ -716,14 +762,14 @@ export class UFORaceIntro {
     }
 
     // Clean up lights
-    this.lights.forEach(light => {
+    this.lights.forEach((light) => {
       this.scene.remove(light);
       if (light.dispose) light.dispose();
     });
     this.lights = [];
 
     // Dispose all tracked textures
-    this.textures.forEach(texture => {
+    this.textures.forEach((texture) => {
       if (texture && texture.dispose) texture.dispose();
     });
     this.textures = [];
@@ -739,8 +785,6 @@ export class UFORaceIntro {
     // Clear callbacks to prevent memory leaks
     this.onComplete = null;
     this.onStartGame = null;
-
-    console.log('UFORaceIntro cleaned up successfully');
   }
 
   // Get the UFO model to use in gameplay

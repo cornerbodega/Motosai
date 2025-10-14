@@ -1,8 +1,8 @@
-import * as THREE from 'three';
-import { getMaterialManager } from '../utils/MaterialManager.js';
+import * as THREE from "three";
+import { getMaterialManager } from "../utils/MaterialManager.js";
 
 export class BloodTrackSystem {
-  constructor(scene, debugMode = false, performanceLevel = 'high') {
+  constructor(scene, debugMode = false, performanceLevel = "high") {
     this.scene = scene;
     this.bloodStains = []; // Active bloodstains on the ground
     this.bloodTracks = []; // Active tire tracks
@@ -13,7 +13,7 @@ export class BloodTrackSystem {
 
     // Use MaterialManager for materials
     this.materialManager = getMaterialManager();
-    this.trackMaterial = this.materialManager.getParticleMaterial('blood');
+    this.trackMaterial = this.materialManager.getParticleMaterial("blood");
 
     // Reusable geometry for all tracks - bigger and more visible
     this.trackGeometry = new THREE.PlaneGeometry(0.8, 2.0);
@@ -32,14 +32,14 @@ export class BloodTrackSystem {
 
   // Get max tracks based on quality setting
   getMaxTracksForQuality(quality) {
-    switch(quality) {
-      case 'low':
-        return 300;   // Minimal tracks for low-end devices
-      case 'medium':
-        return 1000;  // Moderate amount
-      case 'high':
+    switch (quality) {
+      case "low":
+        return 300; // Minimal tracks for low-end devices
+      case "medium":
+        return 1000; // Moderate amount
+      case "high":
       default:
-        return 2000;  // Reduced from 5000 to prevent memory issues
+        return 2000; // Reduced from 5000 to prevent memory issues
     }
   }
 
@@ -47,7 +47,6 @@ export class BloodTrackSystem {
   setPerformanceLevel(level) {
     this.performanceLevel = level;
     this.maxTracks = this.getMaxTracksForQuality(level);
-    console.log(`BloodTrackSystem: Performance set to ${level}, max tracks: ${this.maxTracks}`);
   }
 
   // Pre-create materials with different opacity levels
@@ -59,7 +58,7 @@ export class BloodTrackSystem {
         color: 0x660000,
         transparent: true,
         opacity: opacity,
-        side: THREE.DoubleSide
+        side: THREE.DoubleSide,
       });
       this.materialPool.push(material);
     }
@@ -77,7 +76,7 @@ export class BloodTrackSystem {
       position: position.clone(),
       radius: radius,
       age: 0,
-      maxAge: 60 // Bloodstains last 60 seconds for more chances to drive through them
+      maxAge: 60, // Bloodstains last 60 seconds for more chances to drive through them
     };
     this.bloodStains.push(bloodStain);
 
@@ -88,7 +87,7 @@ export class BloodTrackSystem {
         color: 0xff0000,
         transparent: true,
         opacity: 0.3,
-        side: THREE.DoubleSide
+        side: THREE.DoubleSide,
       });
       const debugMesh = new THREE.Mesh(debugGeometry, debugMaterial);
       debugMesh.position.copy(position);
@@ -102,17 +101,22 @@ export class BloodTrackSystem {
   // Check if vehicle is driving through blood
   checkVehicleBloodContact(vehiclePosition, vehicleWidth = 2) {
     // Only check Y-aligned positions (ignore height differences)
-    const vehiclePos2D = new THREE.Vector2(vehiclePosition.x, vehiclePosition.z);
+    const vehiclePos2D = new THREE.Vector2(
+      vehiclePosition.x,
+      vehiclePosition.z
+    );
 
     for (const bloodStain of this.bloodStains) {
-      const stainPos2D = new THREE.Vector2(bloodStain.position.x, bloodStain.position.z);
+      const stainPos2D = new THREE.Vector2(
+        bloodStain.position.x,
+        bloodStain.position.z
+      );
       const distance = vehiclePos2D.distanceTo(stainPos2D);
 
       // More precise check - vehicle must actually overlap with blood
       // Make detection even more precise to avoid cross-lane contamination
       const effectiveRadius = bloodStain.radius * 0.6; // Much smaller for precise detection
       if (distance < effectiveRadius + vehicleWidth / 2) {
-        console.log(`🩸 Vehicle at ${vehiclePosition.x.toFixed(1)}, ${vehiclePosition.z.toFixed(1)} hit blood at ${bloodStain.position.x.toFixed(1)}, ${bloodStain.position.z.toFixed(1)} (distance: ${distance.toFixed(2)})`);
         return bloodStain;
       }
     }
@@ -122,13 +126,12 @@ export class BloodTrackSystem {
   // Register vehicle as creating blood trails
   startVehicleBloodTrail(vehicleId, bloodStain) {
     if (!this.vehicleBloodStatus.has(vehicleId)) {
-      console.log(`🚗🩸 Vehicle ${vehicleId} started blood trail from stain at:`, bloodStain.position);
       this.vehicleBloodStatus.set(vehicleId, {
         lastTrackPosition: null,
         bloodIntensity: 1.0, // Starts strong, fades over distance
         totalDistance: 0,
         maxTrailDistance: 500, // Blood trails last much longer - 500 meters
-        sourceStain: bloodStain
+        sourceStain: bloodStain,
       });
     }
   }
@@ -140,7 +143,6 @@ export class BloodTrackSystem {
 
     // Check if the source blood stain still exists
     if (!this.bloodStains.includes(status.sourceStain)) {
-      console.log(`Vehicle ${vehicle.id} blood trail ended - source stain removed`);
       this.vehicleBloodStatus.delete(vehicle.id);
       return false;
     }
@@ -157,12 +159,20 @@ export class BloodTrackSystem {
       // Create intermediate tracks if moved a lot at once
       const numIntermediateTracks = Math.floor(distance / this.trackSpacing);
       if (numIntermediateTracks > 1) {
-        const direction = new THREE.Vector3().subVectors(vehicle.position, status.lastTrackPosition).normalize();
+        const direction = new THREE.Vector3()
+          .subVectors(vehicle.position, status.lastTrackPosition)
+          .normalize();
         for (let i = 1; i < numIntermediateTracks; i++) {
-          const intermediatePos = status.lastTrackPosition.clone().add(
-            direction.clone().multiplyScalar(i * this.trackSpacing)
+          const intermediatePos = status.lastTrackPosition
+            .clone()
+            .add(direction.clone().multiplyScalar(i * this.trackSpacing));
+          this.createTireTracks(
+            intermediatePos,
+            vehicle.velocity,
+            vehicle.width,
+            status.bloodIntensity,
+            vehicle.id
           );
-          this.createTireTracks(intermediatePos, vehicle.velocity, vehicle.width, status.bloodIntensity, vehicle.id);
         }
       }
 
@@ -170,15 +180,27 @@ export class BloodTrackSystem {
     }
 
     // Fade blood trail over distance
-    status.bloodIntensity = Math.max(0, 1.0 - (status.totalDistance / status.maxTrailDistance));
+    status.bloodIntensity = Math.max(
+      0,
+      1.0 - status.totalDistance / status.maxTrailDistance
+    );
 
     // Stop creating tracks when intensity is too low or exceeded max distance
-    if (status.bloodIntensity > 0.1 && status.totalDistance < status.maxTrailDistance) {
-      this.createTireTracks(vehicle.position, vehicle.velocity, vehicle.width, status.bloodIntensity, vehicle.id);
+    if (
+      status.bloodIntensity > 0.1 &&
+      status.totalDistance < status.maxTrailDistance
+    ) {
+      this.createTireTracks(
+        vehicle.position,
+        vehicle.velocity,
+        vehicle.width,
+        status.bloodIntensity,
+        vehicle.id
+      );
       status.lastTrackPosition = vehicle.position.clone();
     } else {
       // Trail has ended - remove from tracking
-      console.log(`Vehicle ${vehicle.id} blood trail ended after ${status.totalDistance.toFixed(1)}m`);
+
       this.vehicleBloodStatus.delete(vehicle.id);
       return false;
     }
@@ -187,7 +209,13 @@ export class BloodTrackSystem {
   }
 
   // Create tire tracks when vehicle drives through blood
-  createTireTracks(vehiclePosition, vehicleVelocity, vehicleWidth = 2, intensity = 1.0, vehicleId = null) {
+  createTireTracks(
+    vehiclePosition,
+    vehicleVelocity,
+    vehicleWidth = 2,
+    intensity = 1.0,
+    vehicleId = null
+  ) {
     // Create tracks for left and right tires
     const trackWidth = 0.3; // Width of each tire track
     const tireSpacing = vehicleWidth * 0.8; // Distance between left and right tires
@@ -205,11 +233,29 @@ export class BloodTrackSystem {
     }
 
     // Create track segments with intensity and distance info
-    this.createSingleTrack(leftTirePos, vehicleVelocity, trackWidth, intensity, distanceFromSource);
-    this.createSingleTrack(rightTirePos, vehicleVelocity, trackWidth, intensity, distanceFromSource);
+    this.createSingleTrack(
+      leftTirePos,
+      vehicleVelocity,
+      trackWidth,
+      intensity,
+      distanceFromSource
+    );
+    this.createSingleTrack(
+      rightTirePos,
+      vehicleVelocity,
+      trackWidth,
+      intensity,
+      distanceFromSource
+    );
   }
 
-  createSingleTrack(position, velocity, width, intensity = 1.0, distanceFromSource = 0) {
+  createSingleTrack(
+    position,
+    velocity,
+    width,
+    intensity = 1.0,
+    distanceFromSource = 0
+  ) {
     // Create a small track segment
     const trackLength = 1.0; // Length of each track segment
 
@@ -259,7 +305,7 @@ export class BloodTrackSystem {
       fadeStartAge: 20, // Start fading much later
       initialIntensity: intensity,
       distanceFromSource: distanceFromSource,
-      creationTime: Date.now() // Track when this segment was created
+      creationTime: Date.now(), // Track when this segment was created
     };
 
     this.bloodTracks.push(trackData);
@@ -269,8 +315,11 @@ export class BloodTrackSystem {
   update(deltaTime) {
     // MEMORY LEAK FIX: Clean up excess tracks if array grows too large
     if (this.bloodTracks.length > this.maxTracks) {
-      console.warn(`Blood tracks exceeded limit (${this.bloodTracks.length}/${this.maxTracks}), cleaning up oldest tracks`);
-      while (this.bloodTracks.length > this.maxTracks * 0.8) { // Clean down to 80% capacity
+      console.warn(
+        `Blood tracks exceeded limit (${this.bloodTracks.length}/${this.maxTracks}), cleaning up oldest tracks`
+      );
+      while (this.bloodTracks.length > this.maxTracks * 0.8) {
+        // Clean down to 80% capacity
         const oldTrack = this.bloodTracks.shift();
         if (oldTrack && oldTrack.mesh) {
           this.scene.remove(oldTrack.mesh);
@@ -286,12 +335,13 @@ export class BloodTrackSystem {
       bloodStain.age += deltaTime;
 
       if (bloodStain.age > bloodStain.maxAge) {
-        console.log('Blood stain expired at position:', bloodStain.position);
         this.bloodStains.splice(i, 1);
 
         // Remove debug marker if exists
         if (this.debugMode) {
-          const markerIndex = this.debugMarkers.findIndex(m => m.stain === bloodStain);
+          const markerIndex = this.debugMarkers.findIndex(
+            (m) => m.stain === bloodStain
+          );
           if (markerIndex >= 0) {
             const marker = this.debugMarkers[markerIndex];
             this.scene.remove(marker.mesh);
@@ -311,8 +361,6 @@ export class BloodTrackSystem {
 
   // Called when death animation creates bloodstains
   registerCrashSite(deathPosition) {
-    console.log('🩸 Registering crash site blood at:', deathPosition);
-
     // Add main bloodstain at crash site - size it to fit within one lane
     // Lane width is 4.5m, so radius of 2.0m keeps blood in single lane
     this.addBloodStain(deathPosition, 2.0);
@@ -322,25 +370,23 @@ export class BloodTrackSystem {
       const offset = new THREE.Vector3(
         (Math.random() - 0.5) * 2.0, // Much tighter spread (2m max)
         0,
-        (Math.random() - 0.5) * 3.0  // Forward/back spread
+        (Math.random() - 0.5) * 3.0 // Forward/back spread
       );
       const secondaryPos = deathPosition.clone().add(offset);
       this.addBloodStain(secondaryPos, 1.0); // Smaller secondary stains
     }
-
-    console.log(`Blood stains registered: ${this.bloodStains.length} active stains`);
   }
 
   // Clear only blood stains - called on respawn
   // Active blood trails continue naturally, existing tracks remain
   clearBloodStainsOnly() {
-    console.log('🩸 Clearing blood stains only (keeping active trails and existing tracks)');
-
     // Remove all blood stains to prevent new blood trails from starting
     for (const bloodStain of this.bloodStains) {
       // Remove debug marker if exists
       if (this.debugMode) {
-        const markerIndex = this.debugMarkers.findIndex(m => m.stain === bloodStain);
+        const markerIndex = this.debugMarkers.findIndex(
+          (m) => m.stain === bloodStain
+        );
         if (markerIndex >= 0) {
           const marker = this.debugMarkers[markerIndex];
           this.scene.remove(marker.mesh);
@@ -351,19 +397,17 @@ export class BloodTrackSystem {
       }
     }
     this.bloodStains = [];
-
-    console.log('Blood stains cleared - active trails continue, existing tracks remain');
   }
 
   // Clear all blood-related data - called on full reset/restart
   clearAllBloodData() {
-    console.log('🧹 Clearing all blood data for full reset');
-
     // Remove all blood stains
     for (const bloodStain of this.bloodStains) {
       // Remove debug marker if exists
       if (this.debugMode) {
-        const markerIndex = this.debugMarkers.findIndex(m => m.stain === bloodStain);
+        const markerIndex = this.debugMarkers.findIndex(
+          (m) => m.stain === bloodStain
+        );
         if (markerIndex >= 0) {
           const marker = this.debugMarkers[markerIndex];
           this.scene.remove(marker.mesh);
@@ -376,7 +420,7 @@ export class BloodTrackSystem {
     this.bloodStains = [];
 
     // Clear all active vehicle blood trails
-    console.log(`Clearing ${this.vehicleBloodStatus.size} active vehicle blood trails`);
+
     this.vehicleBloodStatus.clear();
 
     // Remove all blood tracks from scene
@@ -396,14 +440,11 @@ export class BloodTrackSystem {
       }
     }
     this.trackPool = [];
-
-    console.log('Blood data cleared');
   }
 
   // Clear blood trail for specific vehicle (called when vehicle is removed)
   clearVehicleBloodTrail(vehicleId) {
     if (this.vehicleBloodStatus.has(vehicleId)) {
-      console.log(`Clearing blood trail for vehicle ${vehicleId}`);
       this.vehicleBloodStatus.delete(vehicleId);
     }
   }

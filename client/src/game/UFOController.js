@@ -102,7 +102,15 @@ export class UFOController {
     const group = new THREE.Group();
 
     // Dome
-    const domeGeometry = new THREE.SphereGeometry(1, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2);
+    const domeGeometry = new THREE.SphereGeometry(
+      1,
+      16,
+      8,
+      0,
+      Math.PI * 2,
+      0,
+      Math.PI / 2
+    );
     const domeMaterial = new THREE.MeshStandardMaterial({
       color: 0x555555,
       metalness: 0.8,
@@ -110,7 +118,7 @@ export class UFOController {
       emissive: 0x00ddff,
       emissiveIntensity: 0.8,
       transparent: false,
-      opacity: 1.0
+      opacity: 1.0,
     });
     const dome = new THREE.Mesh(domeGeometry, domeMaterial);
     dome.position.y = 0.4;
@@ -125,7 +133,7 @@ export class UFOController {
       emissive: 0x0066cc,
       emissiveIntensity: 0.8,
       transparent: false,
-      opacity: 1.0
+      opacity: 1.0,
     });
     const disc = new THREE.Mesh(discGeometry, discMaterial);
     group.add(disc);
@@ -135,7 +143,7 @@ export class UFOController {
     const lightMaterial = new THREE.MeshBasicMaterial({
       color: 0x00ffff,
       emissive: 0x00ffff,
-      emissiveIntensity: 1
+      emissiveIntensity: 1,
     });
 
     for (let i = 0; i < 12; i++) {
@@ -177,7 +185,6 @@ export class UFOController {
   addGlow() {
     // Don't add glow if it already exists
     if (this.glowMesh) {
-      console.log('Glow already exists, skipping');
       return;
     }
 
@@ -188,7 +195,7 @@ export class UFOController {
       transparent: true,
       opacity: 0.2,
       side: THREE.BackSide,
-      blending: THREE.AdditiveBlending
+      blending: THREE.AdditiveBlending,
     });
     this.glowMesh = new THREE.Mesh(glowGeometry, glowMaterial);
     this.ufo.add(this.glowMesh);
@@ -197,7 +204,6 @@ export class UFOController {
   addParticleTrail() {
     // Don't add particle trail if it already exists
     if (this.particleSystem) {
-      console.log('Particle trail already exists, skipping');
       return;
     }
 
@@ -217,7 +223,7 @@ export class UFOController {
       size: 2.0,
       transparent: true,
       opacity: 0.9,
-      blending: THREE.AdditiveBlending
+      blending: THREE.AdditiveBlending,
     });
 
     this.particleSystem = new THREE.Points(geometry, material);
@@ -226,10 +232,15 @@ export class UFOController {
 
   update(deltaTime, playerPosition, playerSpeed) {
     if (!this.ufo) {
-      console.warn('UFOController.update called but ufo is null');
+      console.warn("UFOController.update called but ufo is null");
       return;
     }
-    if (this.isEscaping || this.isFlyingToBike || this.isFlyingAway || this.isPlayingIntro) {
+    if (
+      this.isEscaping ||
+      this.isFlyingToBike ||
+      this.isFlyingAway ||
+      this.isPlayingIntro
+    ) {
       // Don't update position during animations
       return;
     }
@@ -240,10 +251,10 @@ export class UFOController {
 
     // Log first update call
     if (!this.hasLoggedFirstUpdate) {
-      console.log('UFO first update - Before:', {
+      console.log("UFO first update - Before:", {
         ufoPos: this.ufo.position,
         playerPos: playerPosition,
-        playerSpeed: playerSpeed
+        playerSpeed: playerSpeed,
       });
       this.hasLoggedFirstUpdate = true;
     }
@@ -301,13 +312,17 @@ export class UFOController {
     this.dartTime += deltaTime;
     if (this.dartTime >= this.nextDartTime) {
       this.dartTime = 0;
-      this.nextDartTime = Math.random() * 5 + (3 * speedFactor); // Longer wait when fast
+      this.nextDartTime = Math.random() * 5 + 3 * speedFactor; // Longer wait when fast
       this.dartDirection = (Math.random() - 0.5) * 2;
     }
 
     // Smaller darts at high speed
-    const dartDecay = Math.max(0, 1 - (this.dartTime / 1.0));
-    const dartOffset = this.dartDirection * (4 + slowFactor * 4) * dartDecay * Math.sin(dartDecay * Math.PI);
+    const dartDecay = Math.max(0, 1 - this.dartTime / 1.0);
+    const dartOffset =
+      this.dartDirection *
+      (4 + slowFactor * 4) *
+      dartDecay *
+      Math.sin(dartDecay * Math.PI);
     spiralX += dartOffset;
 
     // Apply all motion (higher base altitude for floaty feel)
@@ -316,12 +331,12 @@ export class UFOController {
 
     // Log first position update
     if (this.hasLoggedFirstUpdate && !this.hasLoggedFirstPosition) {
-      console.log('UFO first update - After:', {
+      console.log("UFO first update - After:", {
         spiralX: spiralX,
         spiralRadius: spiralRadius,
         finalX: this.ufo.position.x,
         finalY: this.ufo.position.y,
-        finalZ: this.ufo.position.z
+        finalZ: this.ufo.position.z,
       });
       this.hasLoggedFirstPosition = true;
     }
@@ -330,7 +345,8 @@ export class UFOController {
     this.ufo.rotation.y += deltaTime * (0.4 + speedFactor * 0.8);
 
     // Forward tilt increases with speed (looks like it's racing ahead)
-    this.ufo.rotation.x = -0.3 * speedFactor + Math.cos(this.spiralAngle * 0.5) * 0.1 * slowFactor;
+    this.ufo.rotation.x =
+      -0.3 * speedFactor + Math.cos(this.spiralAngle * 0.5) * 0.1 * slowFactor;
 
     // Banking tilt based on spiral position (less at high speed)
     this.ufo.rotation.z = Math.sin(this.spiralAngle) * (0.2 * slowFactor);
@@ -404,7 +420,6 @@ export class UFOController {
     const animate = () => {
       // Check if animation was cancelled (e.g., by respawn)
       if (!this.escapeAnimationRunning) {
-        console.log('UFO escape animation cancelled');
         if (onComplete) onComplete();
         return;
       }
@@ -439,12 +454,13 @@ export class UFOController {
       if (t < 0.2) {
         // Quick initial rise
         const riseT = t / 0.2;
-        this.ufo.position.y = startPos.y + (riseT * escapeHeight * 0.3);
+        this.ufo.position.y = startPos.y + riseT * escapeHeight * 0.3;
       } else {
         // Continue rising to full escape height
         const riseT = (t - 0.2) / 0.8;
         const easedRise = 1 - Math.pow(1 - riseT, 2); // Ease out
-        this.ufo.position.y = startPos.y + (0.3 * escapeHeight) + (easedRise * 0.7 * escapeHeight);
+        this.ufo.position.y =
+          startPos.y + 0.3 * escapeHeight + easedRise * 0.7 * escapeHeight;
       }
 
       // Spin while escaping
@@ -460,7 +476,7 @@ export class UFOController {
         this.isEscaping = false;
         this.escapeAnimationRunning = false;
         this.escapeAnimationId = null;
-        console.log('UFO escape complete - ready for respawn');
+
         if (onComplete) onComplete();
       }
     };
@@ -491,7 +507,6 @@ export class UFOController {
     const animate = () => {
       // Check if animation was cancelled
       if (!this.flyToBikeAnimationRunning) {
-        console.log('UFO fly-to-bike animation cancelled');
         if (onComplete) onComplete();
         return;
       }
@@ -500,9 +515,7 @@ export class UFOController {
       const t = Math.min(elapsed / flyDuration, 1);
 
       // Ease-in-out for smooth movement
-      const eased = t < 0.5
-        ? 2 * t * t
-        : 1 - Math.pow(-2 * t + 2, 2) / 2;
+      const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 
       // Move toward target position
       this.ufo.position.x = startPos.x + (targetX - startPos.x) * eased;
@@ -522,7 +535,7 @@ export class UFOController {
         this.flyToBikeAnimationRunning = false;
         this.isFloatingAboveBike = true;
         this.flyToBikeAnimationId = null;
-        console.log('UFO reached bike - now floating');
+
         if (onComplete) onComplete();
       }
     };
@@ -556,7 +569,8 @@ export class UFOController {
 
     // Pulse glow
     if (this.glowMesh) {
-      this.glowMesh.material.opacity = 0.2 + Math.sin(this.floatTime * 2) * 0.08;
+      this.glowMesh.material.opacity =
+        0.2 + Math.sin(this.floatTime * 2) * 0.08;
     }
 
     // Update particle trail
@@ -573,8 +587,6 @@ export class UFOController {
       if (onComplete) onComplete();
       return;
     }
-
-    console.log('UFO playIntroFlyIn starting from position:', this.ufo.position);
 
     // Set intro flag
     this.isPlayingIntro = true;
@@ -606,9 +618,9 @@ export class UFOController {
     const targetY = 35; // Default flying height
     const targetZ = playerPosition.z + this.targetDistance; // 200 units ahead
 
-    console.log('UFO intro animation:', {
+    console.log("UFO intro animation:", {
       startPos: startPos,
-      targetPos: { x: targetX, y: targetY, z: targetZ }
+      targetPos: { x: targetX, y: targetY, z: targetZ },
     });
 
     const animate = () => {
@@ -634,7 +646,7 @@ export class UFOController {
       } else {
         this.isPlayingIntro = false;
         this.introAnimationId = null;
-        console.log('UFO intro complete at position:', this.ufo.position);
+
         if (onComplete) onComplete();
       }
     };
@@ -679,7 +691,7 @@ export class UFOController {
       } else {
         this.isFlyingAway = false;
         this.flyAwayAnimationId = null;
-        console.log('UFO fly away complete');
+
         if (onComplete) onComplete();
       }
     };
@@ -688,8 +700,6 @@ export class UFOController {
   }
 
   cleanup() {
-    console.log('UFOController: Starting cleanup');
-
     // Cancel all animation frames
     if (this.escapeAnimationId) {
       cancelAnimationFrame(this.escapeAnimationId);
@@ -760,13 +770,11 @@ export class UFOController {
     this.wobbleTime = 0;
     this.dartTime = 0;
     this.floatTime = 0;
-
-    console.log('UFOController: Cleanup complete');
   }
 
   disposeMaterial(material) {
     if (Array.isArray(material)) {
-      material.forEach(mat => this.disposeMaterial(mat));
+      material.forEach((mat) => this.disposeMaterial(mat));
       return;
     }
 

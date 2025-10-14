@@ -1042,8 +1042,6 @@ export class DeathAnimation {
 
   // Remote crash methods for multiplayer
   triggerRemoteCrash(position, velocity, playerName) {
-    console.log(`🚨 Triggering remote crash effect for ${playerName}`);
-
     // Calculate impact direction
     const impactDirection = new THREE.Vector3(
       -Math.sign(velocity.x) || Math.random() - 0.5,
@@ -1058,8 +1056,6 @@ export class DeathAnimation {
   }
 
   triggerRemoteDeath(position, velocity, playerName) {
-    console.log(`💀 Triggering remote death effect for ${playerName}`);
-
     // Calculate impact direction
     const impactDirection = new THREE.Vector3(
       -Math.sign(velocity.x) || Math.random() - 0.5,

@@ -1,6 +1,6 @@
-import * as THREE from 'three';
-import { Billboard, BILLBOARD_STATE } from './Billboard.js';
-import { getTextureCache } from '../services/TextureCache.js';
+import * as THREE from "three";
+import { Billboard, BILLBOARD_STATE } from "./Billboard.js";
+import { getTextureCache } from "../services/TextureCache.js";
 
 /**
  * BillboardSystem - Manages all billboards with aggressive distance-based culling
@@ -13,20 +13,20 @@ export class BillboardSystem {
     this.textureCache = getTextureCache();
 
     // Conservative distance thresholds (in meters)
-    this.loadDistance = 400;      // Load billboards within 400m
-    this.unloadDistance = 600;    // Unload billboards beyond 600m
-    this.cullDistance = -50;      // Hide billboards 50m behind player
+    this.loadDistance = 400; // Load billboards within 400m
+    this.unloadDistance = 600; // Unload billboards beyond 600m
+    this.cullDistance = -50; // Hide billboards 50m behind player
 
     // Performance settings
     this.maxLoadedBillboards = 5; // Max 5 billboards loaded at once (reduced for memory)
-    this.updateInterval = 0.5;    // Check distances every 0.5 seconds
+    this.updateInterval = 0.5; // Check distances every 0.5 seconds
     this.timeSinceUpdate = 0;
 
     // Shared geometries (memory optimization - reuse across all billboards)
     // Use minimal segments for low-poly optimization (1x1 segments for flat planes)
     this.sharedGeometries = {
       large: new THREE.PlaneGeometry(20, 10, 1, 1),
-      small: new THREE.PlaneGeometry(12, 6, 1, 1)
+      small: new THREE.PlaneGeometry(12, 6, 1, 1),
     };
 
     // Shared post geometry and material (all posts use same size)
@@ -35,7 +35,7 @@ export class BillboardSystem {
     this.sharedPostMaterial = new THREE.MeshStandardMaterial({
       color: 0x444444, // Dark gray metal
       metalness: 0.6,
-      roughness: 0.4
+      roughness: 0.4,
     });
 
     // Stats tracking
@@ -44,19 +44,13 @@ export class BillboardSystem {
       loaded: 0,
       unloaded: 0,
       culled: 0,
-      visible: 0
+      visible: 0,
     };
 
     // Register with Stoppa
-    if (typeof window !== 'undefined' && window.stoppa) {
-      this.stoppaId = window.stoppa.register('BillboardSystem', this);
+    if (typeof window !== "undefined" && window.stoppa) {
+      this.stoppaId = window.stoppa.register("BillboardSystem", this);
     }
-
-    console.log('🪧 BillboardSystem initialized (Memory-Optimized)');
-    console.log(`  Load distance: ${this.loadDistance}m`);
-    console.log(`  Unload distance: ${this.unloadDistance}m`);
-    console.log(`  Max loaded: ${this.maxLoadedBillboards} billboards`);
-    console.log(`  Optimizations: Shared geometries (1×1 segments), shared post resources (6 segments)`);
   }
 
   /**
@@ -76,16 +70,12 @@ export class BillboardSystem {
    * @param {Array} billboardConfigs - Array of billboard configurations
    */
   loadBillboards(billboardConfigs) {
-    console.log(`Loading ${billboardConfigs.length} billboard configurations...`);
-
     for (const config of billboardConfigs) {
       this.addBillboard(config);
     }
 
     // Sort by Z position for efficient culling
     this.billboards.sort((a, b) => a.position.z - b.position.z);
-
-    console.log(`BillboardSystem: ${this.billboards.length} billboards registered`);
   }
 
   /**
@@ -94,7 +84,7 @@ export class BillboardSystem {
    * @param {THREE.Vector3} playerPosition - Current player position
    * @param {string} timeOfDay - Current time of day ('dawn', 'day', 'dusk', 'night')
    */
-  update(deltaTime, playerPosition, timeOfDay = 'day') {
+  update(deltaTime, playerPosition, timeOfDay = "day") {
     // Throttle distance checks for performance
     this.timeSinceUpdate += deltaTime;
     if (this.timeSinceUpdate < this.updateInterval) {
@@ -139,7 +129,10 @@ export class BillboardSystem {
         }
 
         // Cull (hide) billboards behind player but keep loaded for a bit
-        if (!isInFront || (playerPosition.z - billboard.position.z) > Math.abs(this.cullDistance)) {
+        if (
+          !isInFront ||
+          playerPosition.z - billboard.position.z > Math.abs(this.cullDistance)
+        ) {
           billboard.hide();
           continue;
         }
@@ -150,7 +143,11 @@ export class BillboardSystem {
       }
 
       // Queue billboards for loading if within range and in front
-      if (billboard.state === BILLBOARD_STATE.UNLOADED && isInFront && distance <= this.loadDistance) {
+      if (
+        billboard.state === BILLBOARD_STATE.UNLOADED &&
+        isInFront &&
+        distance <= this.loadDistance
+      ) {
         billboardsToLoad.push({ billboard, distance });
       }
     }
@@ -165,9 +162,17 @@ export class BillboardSystem {
       const toLoad = billboardsToLoad.slice(0, slotsAvailable);
 
       for (const { billboard } of toLoad) {
-        billboard.load(this.scene, this.sharedGeometries, this.sharedPostGeometry, this.sharedPostMaterial, timeOfDay).catch(error => {
-          console.error(`Failed to load billboard ${billboard.name}:`, error);
-        });
+        billboard
+          .load(
+            this.scene,
+            this.sharedGeometries,
+            this.sharedPostGeometry,
+            this.sharedPostMaterial,
+            timeOfDay
+          )
+          .catch((error) => {
+            console.error(`Failed to load billboard ${billboard.name}:`, error);
+          });
       }
     }
   }
@@ -179,9 +184,11 @@ export class BillboardSystem {
    * @returns {Billboard|null}
    */
   getBillboardNear(zPosition, tolerance = 50) {
-    return this.billboards.find(b =>
-      Math.abs(b.position.z - zPosition) < tolerance
-    ) || null;
+    return (
+      this.billboards.find(
+        (b) => Math.abs(b.position.z - zPosition) < tolerance
+      ) || null
+    );
   }
 
   /**
@@ -190,7 +197,7 @@ export class BillboardSystem {
    * @param {string} newTextureUrl - New texture URL
    */
   async updateBillboardTexture(billboardId, newTextureUrl) {
-    const billboard = this.billboards.find(b => b.id === billboardId);
+    const billboard = this.billboards.find((b) => b.id === billboardId);
     if (billboard) {
       await billboard.updateTexture(newTextureUrl, this.scene);
     } else {
@@ -211,20 +218,20 @@ export class BillboardSystem {
         loaded: this.stats.loaded,
         unloaded: this.stats.unloaded,
         culled: this.stats.culled,
-        visible: this.stats.visible
+        visible: this.stats.visible,
       },
       textures: {
         cached: textureStats.cachedTextures,
         memoryUsed: textureStats.memoryUsed,
         memoryMax: textureStats.memoryMax,
         memoryPercent: textureStats.memoryPercent,
-        hitRate: textureStats.hitRate
+        hitRate: textureStats.hitRate,
       },
       limits: {
         loadDistance: this.loadDistance,
         unloadDistance: this.unloadDistance,
-        maxLoaded: this.maxLoadedBillboards
-      }
+        maxLoaded: this.maxLoadedBillboards,
+      },
     };
   }
 
@@ -233,10 +240,10 @@ export class BillboardSystem {
    */
   logStats() {
     const stats = this.getStats();
-    console.log('🪧 Billboard System Stats:', {
+    console.log("🪧 Billboard System Stats:", {
       billboards: `${stats.billboards.visible} visible / ${stats.billboards.loaded} loaded / ${stats.billboards.total} total`,
       textures: `${stats.textures.cached} cached, ${stats.textures.memoryPercent}% memory used`,
-      hitRate: `${stats.textures.hitRate}% cache hit rate`
+      hitRate: `${stats.textures.hitRate}% cache hit rate`,
     });
   }
 
@@ -246,16 +253,14 @@ export class BillboardSystem {
    */
   getLoadedBillboardsInfo() {
     return this.billboards
-      .filter(b => b.state === BILLBOARD_STATE.LOADED)
-      .map(b => b.getInfo());
+      .filter((b) => b.state === BILLBOARD_STATE.LOADED)
+      .map((b) => b.getInfo());
   }
 
   /**
    * Dispose all billboards and cleanup
    */
   dispose() {
-    console.log('Disposing BillboardSystem...');
-
     // Dispose all billboards
     for (const billboard of this.billboards) {
       billboard.dispose(this.scene);
@@ -289,8 +294,6 @@ export class BillboardSystem {
       window.stoppa.unregister(this.stoppaId);
       this.stoppaId = null;
     }
-
-    console.log('BillboardSystem disposed');
   }
 
   /**
@@ -299,10 +302,8 @@ export class BillboardSystem {
    * @param {number} spacing - Spacing between billboards (meters)
    */
   createTestBillboards(count = 8, spacing = 600) {
-    console.log(`Creating ${count} test billboards...`);
-
-    const sides = ['left', 'right'];
-    const types = ['large-dual', 'large-single', 'small']; // Billboard types
+    const sides = ["left", "right"];
+    const types = ["large-dual", "large-single", "small"]; // Billboard types
 
     for (let i = 0; i < count; i++) {
       const side = sides[i % 2];
@@ -311,16 +312,17 @@ export class BillboardSystem {
       // Different sizes based on type
       let scaleX, scaleY, posY, xPos;
 
-      if (type === 'large-dual' || type === 'large-single') {
+      if (type === "large-dual" || type === "large-single") {
         scaleX = 20;
         scaleY = 10;
         posY = 10;
-        xPos = side === 'left' ? -40 : 40;
-      } else { // small
+        xPos = side === "left" ? -40 : 40;
+      } else {
+        // small
         scaleX = 12;
         scaleY = 6;
         posY = 7;
-        xPos = side === 'left' ? -35 : 35; // Closer to road
+        xPos = side === "left" ? -35 : 35; // Closer to road
       }
 
       this.addBillboard({
@@ -334,14 +336,12 @@ export class BillboardSystem {
         rotation_y: Math.PI,
         scale_x: scaleX,
         scale_y: scaleY,
-        texture_url: '/textures/billboards/default.png',
-        side: side
+        texture_url: "/textures/billboards/default.png",
+        side: side,
       });
     }
 
     // Sort by Z position
     this.billboards.sort((a, b) => a.position.z - b.position.z);
-
-    console.log(`Created ${count} test billboards (varied types) from z=${100} to z=${100 + (count - 1) * spacing}`);
   }
 }

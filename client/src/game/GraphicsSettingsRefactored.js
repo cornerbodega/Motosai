@@ -1,4 +1,4 @@
-import { EventManager } from '../../refactoring/src/core/EventManager.js';
+import { EventManager } from "../../refactoring/src/core/EventManager.js";
 
 /**
  * Refactored GraphicsSettings with proper event management
@@ -15,69 +15,69 @@ export class GraphicsSettings {
 
     // Custom settings that override auto-adjust
     this.customSettings = {
-      preset: 'auto',
+      preset: "auto",
       shadows: true,
-      shadowQuality: 'medium',
+      shadowQuality: "medium",
       antialias: true,
       pixelRatio: 1.0,
-      vehicleDensity: 'medium',
+      vehicleDensity: "medium",
       particleEffects: true,
-      backgroundQuality: 'high',
-      fogDistance: 'medium',
+      backgroundQuality: "high",
+      fogDistance: "medium",
       postProcessing: false,
-      autoAdjust: true
+      autoAdjust: true,
     };
 
     // Preset configurations (same as before)
     this.presets = {
       low: {
         shadows: false,
-        shadowQuality: 'low',
+        shadowQuality: "low",
         antialias: false,
         pixelRatio: 0.75,
-        vehicleDensity: 'low',
+        vehicleDensity: "low",
         particleEffects: false,
-        backgroundQuality: 'low',
-        fogDistance: 'near',
+        backgroundQuality: "low",
+        fogDistance: "near",
         postProcessing: false,
-        autoAdjust: false
+        autoAdjust: false,
       },
       medium: {
         shadows: true,
-        shadowQuality: 'low',
+        shadowQuality: "low",
         antialias: false,
         pixelRatio: 1.0,
-        vehicleDensity: 'medium',
+        vehicleDensity: "medium",
         particleEffects: true,
-        backgroundQuality: 'medium',
-        fogDistance: 'medium',
+        backgroundQuality: "medium",
+        fogDistance: "medium",
         postProcessing: false,
-        autoAdjust: false
+        autoAdjust: false,
       },
       high: {
         shadows: true,
-        shadowQuality: 'medium',
+        shadowQuality: "medium",
         antialias: true,
         pixelRatio: 1.25,
-        vehicleDensity: 'high',
+        vehicleDensity: "high",
         particleEffects: true,
-        backgroundQuality: 'high',
-        fogDistance: 'far',
+        backgroundQuality: "high",
+        fogDistance: "far",
         postProcessing: false,
-        autoAdjust: false
+        autoAdjust: false,
       },
       ultra: {
         shadows: true,
-        shadowQuality: 'high',
+        shadowQuality: "high",
         antialias: true,
         pixelRatio: Math.min(window.devicePixelRatio, 2),
-        vehicleDensity: 'high',
+        vehicleDensity: "high",
         particleEffects: true,
-        backgroundQuality: 'high',
-        fogDistance: 'far',
+        backgroundQuality: "high",
+        fogDistance: "far",
         postProcessing: true,
-        autoAdjust: false
-      }
+        autoAdjust: false,
+      },
     };
 
     this.loadSettings();
@@ -86,26 +86,29 @@ export class GraphicsSettings {
   }
 
   loadSettings() {
-    const savedSettings = localStorage.getItem('motosaiGraphicsSettings');
+    const savedSettings = localStorage.getItem("motosaiGraphicsSettings");
     if (savedSettings) {
       try {
         const parsed = JSON.parse(savedSettings);
         this.customSettings = { ...this.customSettings, ...parsed };
       } catch (e) {
-        console.error('Failed to load graphics settings:', e);
+        console.error("Failed to load graphics settings:", e);
       }
     }
   }
 
   saveSettings() {
-    localStorage.setItem('motosaiGraphicsSettings', JSON.stringify(this.customSettings));
+    localStorage.setItem(
+      "motosaiGraphicsSettings",
+      JSON.stringify(this.customSettings)
+    );
   }
 
   createUI() {
     // Create settings button
-    const settingsButton = document.createElement('button');
-    settingsButton.id = 'graphics-settings-button';
-    settingsButton.innerHTML = '⚙️';
+    const settingsButton = document.createElement("button");
+    settingsButton.id = "graphics-settings-button";
+    settingsButton.innerHTML = "⚙️";
     settingsButton.style.cssText = `
       position: fixed;
       top: 10px;
@@ -123,19 +126,31 @@ export class GraphicsSettings {
     `;
 
     // Use EventManager for hover effects
-    this.eventManager.add(settingsButton, 'mouseover', () => {
-      settingsButton.style.background = 'rgba(0, 0, 0, 0.9)';
-      settingsButton.style.borderColor = '#666';
-    }, {}, 'ui');
+    this.eventManager.add(
+      settingsButton,
+      "mouseover",
+      () => {
+        settingsButton.style.background = "rgba(0, 0, 0, 0.9)";
+        settingsButton.style.borderColor = "#666";
+      },
+      {},
+      "ui"
+    );
 
-    this.eventManager.add(settingsButton, 'mouseout', () => {
-      settingsButton.style.background = 'rgba(0, 0, 0, 0.7)';
-      settingsButton.style.borderColor = '#444';
-    }, {}, 'ui');
+    this.eventManager.add(
+      settingsButton,
+      "mouseout",
+      () => {
+        settingsButton.style.background = "rgba(0, 0, 0, 0.7)";
+        settingsButton.style.borderColor = "#444";
+      },
+      {},
+      "ui"
+    );
 
     // Create settings panel
-    this.settingsPanel = document.createElement('div');
-    this.settingsPanel.id = 'graphics-settings-panel';
+    this.settingsPanel = document.createElement("div");
+    this.settingsPanel.id = "graphics-settings-panel";
     this.settingsPanel.style.cssText = `
       position: fixed;
       top: 60px;
@@ -161,14 +176,26 @@ export class GraphicsSettings {
     document.body.appendChild(this.settingsPanel);
 
     // Toggle panel on button click - using EventManager
-    this.eventManager.add(settingsButton, 'click', () => this.togglePanel(), {}, 'ui');
+    this.eventManager.add(
+      settingsButton,
+      "click",
+      () => this.togglePanel(),
+      {},
+      "ui"
+    );
 
     // Close on escape - using EventManager
-    this.eventManager.add(document, 'keydown', (e) => {
-      if (e.key === 'Escape' && this.isOpen) {
-        this.togglePanel();
-      }
-    }, {}, 'ui');
+    this.eventManager.add(
+      document,
+      "keydown",
+      (e) => {
+        if (e.key === "Escape" && this.isOpen) {
+          this.togglePanel();
+        }
+      },
+      {},
+      "ui"
+    );
   }
 
   updatePanelContent() {
@@ -183,7 +210,13 @@ export class GraphicsSettings {
       <div style="margin-bottom: 15px; padding: 10px; background: rgba(0,0,0,0.3); border-radius: 8px;">
         <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
           <span>Current FPS:</span>
-          <span style="color: ${currentFPS < 30 ? '#ff6666' : currentFPS < 50 ? '#ffcc66' : '#66ff66'}">
+          <span style="color: ${
+            currentFPS < 30
+              ? "#ff6666"
+              : currentFPS < 50
+              ? "#ffcc66"
+              : "#66ff66"
+          }">
             ${currentFPS.toFixed(0)}
           </span>
         </div>
@@ -196,38 +229,66 @@ export class GraphicsSettings {
       <div style="margin-bottom: 20px;">
         <label style="display: block; margin-bottom: 8px; font-weight: 500;">Quality Preset</label>
         <select id="preset-select" style="width: 100%; padding: 8px; background: #333; border: 1px solid #555; border-radius: 4px; color: white; font-size: 14px;">
-          <option value="auto" ${this.customSettings.preset === 'auto' ? 'selected' : ''}>Auto-Adjust</option>
-          <option value="low" ${this.customSettings.preset === 'low' ? 'selected' : ''}>Low (Potato)</option>
-          <option value="medium" ${this.customSettings.preset === 'medium' ? 'selected' : ''}>Medium</option>
-          <option value="high" ${this.customSettings.preset === 'high' ? 'selected' : ''}>High</option>
-          <option value="ultra" ${this.customSettings.preset === 'ultra' ? 'selected' : ''}>Ultra</option>
-          <option value="custom" ${this.customSettings.preset === 'custom' ? 'selected' : ''}>Custom</option>
+          <option value="auto" ${
+            this.customSettings.preset === "auto" ? "selected" : ""
+          }>Auto-Adjust</option>
+          <option value="low" ${
+            this.customSettings.preset === "low" ? "selected" : ""
+          }>Low (Potato)</option>
+          <option value="medium" ${
+            this.customSettings.preset === "medium" ? "selected" : ""
+          }>Medium</option>
+          <option value="high" ${
+            this.customSettings.preset === "high" ? "selected" : ""
+          }>High</option>
+          <option value="ultra" ${
+            this.customSettings.preset === "ultra" ? "selected" : ""
+          }>Ultra</option>
+          <option value="custom" ${
+            this.customSettings.preset === "custom" ? "selected" : ""
+          }>Custom</option>
         </select>
       </div>
 
-      <div id="custom-settings" style="display: ${this.customSettings.preset === 'custom' ? 'block' : 'none'};">
+      <div id="custom-settings" style="display: ${
+        this.customSettings.preset === "custom" ? "block" : "none"
+      };">
         <h3 style="font-size: 16px; margin: 20px 0 15px 0; color: #aaa;">Advanced Settings</h3>
 
         <div style="margin-bottom: 15px;">
           <label style="display: flex; align-items: center; cursor: pointer;">
-            <input type="checkbox" id="shadows-toggle" ${this.customSettings.shadows ? 'checked' : ''}
+            <input type="checkbox" id="shadows-toggle" ${
+              this.customSettings.shadows ? "checked" : ""
+            }
                    style="margin-right: 8px;">
             Enable Shadows
           </label>
         </div>
 
-        <div style="margin-bottom: 15px; ${!this.customSettings.shadows ? 'opacity: 0.5; pointer-events: none;' : ''}">
+        <div style="margin-bottom: 15px; ${
+          !this.customSettings.shadows
+            ? "opacity: 0.5; pointer-events: none;"
+            : ""
+        }">
           <label style="display: block; margin-bottom: 8px;">Shadow Quality</label>
           <select id="shadow-quality" style="width: 100%; padding: 6px; background: #333; border: 1px solid #555; border-radius: 4px; color: white;">
-            <option value="low" ${this.customSettings.shadowQuality === 'low' ? 'selected' : ''}>Low</option>
-            <option value="medium" ${this.customSettings.shadowQuality === 'medium' ? 'selected' : ''}>Medium</option>
-            <option value="high" ${this.customSettings.shadowQuality === 'high' ? 'selected' : ''}>High</option>
+            <option value="low" ${
+              this.customSettings.shadowQuality === "low" ? "selected" : ""
+            }>Low</option>
+            <option value="medium" ${
+              this.customSettings.shadowQuality === "medium" ? "selected" : ""
+            }>Medium</option>
+            <option value="high" ${
+              this.customSettings.shadowQuality === "high" ? "selected" : ""
+            }>High</option>
           </select>
         </div>
 
         <div style="margin-bottom: 15px;">
           <label style="display: flex; align-items: center; cursor: pointer;">
-            <input type="checkbox" id="antialias-toggle" ${this.customSettings.antialias ? 'checked' : ''}
+            <input type="checkbox" id="antialias-toggle" ${
+              this.customSettings.antialias ? "checked" : ""
+            }
                    style="margin-right: 8px;">
             Anti-Aliasing (Smoother edges)
           </label>
@@ -235,7 +296,9 @@ export class GraphicsSettings {
 
         <div style="margin-bottom: 15px;">
           <label style="display: block; margin-bottom: 8px;">
-            Render Scale: <span id="pixel-ratio-value">${(this.customSettings.pixelRatio * 100).toFixed(0)}%</span>
+            Render Scale: <span id="pixel-ratio-value">${(
+              this.customSettings.pixelRatio * 100
+            ).toFixed(0)}%</span>
           </label>
           <input type="range" id="pixel-ratio" min="50" max="200" step="25"
                  value="${this.customSettings.pixelRatio * 100}"
@@ -245,15 +308,23 @@ export class GraphicsSettings {
         <div style="margin-bottom: 15px;">
           <label style="display: block; margin-bottom: 8px;">Traffic Density</label>
           <select id="vehicle-density" style="width: 100%; padding: 6px; background: #333; border: 1px solid #555; border-radius: 4px; color: white;">
-            <option value="low" ${this.customSettings.vehicleDensity === 'low' ? 'selected' : ''}>Low (15 cars)</option>
-            <option value="medium" ${this.customSettings.vehicleDensity === 'medium' ? 'selected' : ''}>Medium (25 cars)</option>
-            <option value="high" ${this.customSettings.vehicleDensity === 'high' ? 'selected' : ''}>High (40 cars)</option>
+            <option value="low" ${
+              this.customSettings.vehicleDensity === "low" ? "selected" : ""
+            }>Low (15 cars)</option>
+            <option value="medium" ${
+              this.customSettings.vehicleDensity === "medium" ? "selected" : ""
+            }>Medium (25 cars)</option>
+            <option value="high" ${
+              this.customSettings.vehicleDensity === "high" ? "selected" : ""
+            }>High (40 cars)</option>
           </select>
         </div>
 
         <div style="margin-bottom: 15px;">
           <label style="display: flex; align-items: center; cursor: pointer;">
-            <input type="checkbox" id="particles-toggle" ${this.customSettings.particleEffects ? 'checked' : ''}
+            <input type="checkbox" id="particles-toggle" ${
+              this.customSettings.particleEffects ? "checked" : ""
+            }
                    style="margin-right: 8px;">
             Particle Effects (Blood, debris)
           </label>
@@ -262,18 +333,32 @@ export class GraphicsSettings {
         <div style="margin-bottom: 15px;">
           <label style="display: block; margin-bottom: 8px;">Background Quality</label>
           <select id="background-quality" style="width: 100%; padding: 6px; background: #333; border: 1px solid #555; border-radius: 4px; color: white;">
-            <option value="low" ${this.customSettings.backgroundQuality === 'low' ? 'selected' : ''}>Low (Static)</option>
-            <option value="medium" ${this.customSettings.backgroundQuality === 'medium' ? 'selected' : ''}>Medium (Cached)</option>
-            <option value="high" ${this.customSettings.backgroundQuality === 'high' ? 'selected' : ''}>High (Dynamic)</option>
+            <option value="low" ${
+              this.customSettings.backgroundQuality === "low" ? "selected" : ""
+            }>Low (Static)</option>
+            <option value="medium" ${
+              this.customSettings.backgroundQuality === "medium"
+                ? "selected"
+                : ""
+            }>Medium (Cached)</option>
+            <option value="high" ${
+              this.customSettings.backgroundQuality === "high" ? "selected" : ""
+            }>High (Dynamic)</option>
           </select>
         </div>
 
         <div style="margin-bottom: 15px;">
           <label style="display: block; margin-bottom: 8px;">View Distance</label>
           <select id="fog-distance" style="width: 100%; padding: 6px; background: #333; border: 1px solid #555; border-radius: 4px; color: white;">
-            <option value="near" ${this.customSettings.fogDistance === 'near' ? 'selected' : ''}>Near (500m)</option>
-            <option value="medium" ${this.customSettings.fogDistance === 'medium' ? 'selected' : ''}>Medium (1000m)</option>
-            <option value="far" ${this.customSettings.fogDistance === 'far' ? 'selected' : ''}>Far (2000m)</option>
+            <option value="near" ${
+              this.customSettings.fogDistance === "near" ? "selected" : ""
+            }>Near (500m)</option>
+            <option value="medium" ${
+              this.customSettings.fogDistance === "medium" ? "selected" : ""
+            }>Medium (1000m)</option>
+            <option value="far" ${
+              this.customSettings.fogDistance === "far" ? "selected" : ""
+            }>Far (2000m)</option>
           </select>
         </div>
       </div>
@@ -293,7 +378,7 @@ export class GraphicsSettings {
     `;
 
     // Clear old panel listeners before attaching new ones
-    this.eventManager.removeContext('panel');
+    this.eventManager.removeContext("panel");
     this.attachEventListeners();
   }
 
@@ -301,109 +386,175 @@ export class GraphicsSettings {
     // All event listeners use EventManager with 'panel' context for easy cleanup
 
     // Preset selector
-    const presetSelect = document.getElementById('preset-select');
+    const presetSelect = document.getElementById("preset-select");
     if (presetSelect) {
-      this.eventManager.add(presetSelect, 'change', (e) => {
-        this.customSettings.preset = e.target.value;
-        if (e.target.value !== 'custom' && e.target.value !== 'auto') {
-          this.applyPreset(e.target.value);
-        } else if (e.target.value === 'auto') {
-          this.customSettings.autoAdjust = true;
-          this.performanceManager.enableAutoAdjust(true);
-        }
-        this.updatePanelContent();
-      }, {}, 'panel');
+      this.eventManager.add(
+        presetSelect,
+        "change",
+        (e) => {
+          this.customSettings.preset = e.target.value;
+          if (e.target.value !== "custom" && e.target.value !== "auto") {
+            this.applyPreset(e.target.value);
+          } else if (e.target.value === "auto") {
+            this.customSettings.autoAdjust = true;
+            this.performanceManager.enableAutoAdjust(true);
+          }
+          this.updatePanelContent();
+        },
+        {},
+        "panel"
+      );
     }
 
     // Custom settings listeners
-    const shadowsToggle = document.getElementById('shadows-toggle');
+    const shadowsToggle = document.getElementById("shadows-toggle");
     if (shadowsToggle) {
-      this.eventManager.add(shadowsToggle, 'change', (e) => {
-        this.customSettings.shadows = e.target.checked;
-        this.customSettings.preset = 'custom';
-        this.updatePanelContent();
-      }, {}, 'panel');
+      this.eventManager.add(
+        shadowsToggle,
+        "change",
+        (e) => {
+          this.customSettings.shadows = e.target.checked;
+          this.customSettings.preset = "custom";
+          this.updatePanelContent();
+        },
+        {},
+        "panel"
+      );
     }
 
-    const shadowQuality = document.getElementById('shadow-quality');
+    const shadowQuality = document.getElementById("shadow-quality");
     if (shadowQuality) {
-      this.eventManager.add(shadowQuality, 'change', (e) => {
-        this.customSettings.shadowQuality = e.target.value;
-        this.customSettings.preset = 'custom';
-      }, {}, 'panel');
+      this.eventManager.add(
+        shadowQuality,
+        "change",
+        (e) => {
+          this.customSettings.shadowQuality = e.target.value;
+          this.customSettings.preset = "custom";
+        },
+        {},
+        "panel"
+      );
     }
 
-    const antialiasToggle = document.getElementById('antialias-toggle');
+    const antialiasToggle = document.getElementById("antialias-toggle");
     if (antialiasToggle) {
-      this.eventManager.add(antialiasToggle, 'change', (e) => {
-        this.customSettings.antialias = e.target.checked;
-        this.customSettings.preset = 'custom';
-      }, {}, 'panel');
+      this.eventManager.add(
+        antialiasToggle,
+        "change",
+        (e) => {
+          this.customSettings.antialias = e.target.checked;
+          this.customSettings.preset = "custom";
+        },
+        {},
+        "panel"
+      );
     }
 
-    const pixelRatio = document.getElementById('pixel-ratio');
-    const pixelRatioValue = document.getElementById('pixel-ratio-value');
+    const pixelRatio = document.getElementById("pixel-ratio");
+    const pixelRatioValue = document.getElementById("pixel-ratio-value");
     if (pixelRatio) {
-      this.eventManager.add(pixelRatio, 'input', (e) => {
-        const value = e.target.value / 100;
-        this.customSettings.pixelRatio = value;
-        if (pixelRatioValue) {
-          pixelRatioValue.textContent = `${e.target.value}%`;
-        }
-        this.customSettings.preset = 'custom';
-      }, {}, 'panel');
+      this.eventManager.add(
+        pixelRatio,
+        "input",
+        (e) => {
+          const value = e.target.value / 100;
+          this.customSettings.pixelRatio = value;
+          if (pixelRatioValue) {
+            pixelRatioValue.textContent = `${e.target.value}%`;
+          }
+          this.customSettings.preset = "custom";
+        },
+        {},
+        "panel"
+      );
     }
 
-    const vehicleDensity = document.getElementById('vehicle-density');
+    const vehicleDensity = document.getElementById("vehicle-density");
     if (vehicleDensity) {
-      this.eventManager.add(vehicleDensity, 'change', (e) => {
-        this.customSettings.vehicleDensity = e.target.value;
-        this.customSettings.preset = 'custom';
-      }, {}, 'panel');
+      this.eventManager.add(
+        vehicleDensity,
+        "change",
+        (e) => {
+          this.customSettings.vehicleDensity = e.target.value;
+          this.customSettings.preset = "custom";
+        },
+        {},
+        "panel"
+      );
     }
 
-    const particlesToggle = document.getElementById('particles-toggle');
+    const particlesToggle = document.getElementById("particles-toggle");
     if (particlesToggle) {
-      this.eventManager.add(particlesToggle, 'change', (e) => {
-        this.customSettings.particleEffects = e.target.checked;
-        this.customSettings.preset = 'custom';
-      }, {}, 'panel');
+      this.eventManager.add(
+        particlesToggle,
+        "change",
+        (e) => {
+          this.customSettings.particleEffects = e.target.checked;
+          this.customSettings.preset = "custom";
+        },
+        {},
+        "panel"
+      );
     }
 
-    const backgroundQuality = document.getElementById('background-quality');
+    const backgroundQuality = document.getElementById("background-quality");
     if (backgroundQuality) {
-      this.eventManager.add(backgroundQuality, 'change', (e) => {
-        this.customSettings.backgroundQuality = e.target.value;
-        this.customSettings.preset = 'custom';
-      }, {}, 'panel');
+      this.eventManager.add(
+        backgroundQuality,
+        "change",
+        (e) => {
+          this.customSettings.backgroundQuality = e.target.value;
+          this.customSettings.preset = "custom";
+        },
+        {},
+        "panel"
+      );
     }
 
-    const fogDistance = document.getElementById('fog-distance');
+    const fogDistance = document.getElementById("fog-distance");
     if (fogDistance) {
-      this.eventManager.add(fogDistance, 'change', (e) => {
-        this.customSettings.fogDistance = e.target.value;
-        this.customSettings.preset = 'custom';
-      }, {}, 'panel');
+      this.eventManager.add(
+        fogDistance,
+        "change",
+        (e) => {
+          this.customSettings.fogDistance = e.target.value;
+          this.customSettings.preset = "custom";
+        },
+        {},
+        "panel"
+      );
     }
 
     // Apply and Reset buttons
-    const applyButton = document.getElementById('apply-settings');
+    const applyButton = document.getElementById("apply-settings");
     if (applyButton) {
-      this.eventManager.add(applyButton, 'click', () => {
-        this.applySettings();
-        this.saveSettings();
-        this.showNotification('Settings applied!');
-      }, {}, 'panel');
+      this.eventManager.add(
+        applyButton,
+        "click",
+        () => {
+          this.applySettings();
+          this.saveSettings();
+          this.showNotification("Settings applied!");
+        },
+        {},
+        "panel"
+      );
     }
 
-    const resetButton = document.getElementById('reset-settings');
+    const resetButton = document.getElementById("reset-settings");
     if (resetButton) {
-      this.eventManager.add(resetButton, 'click', () => {
-        this.resetToDefault();
-        this.updatePanelContent();
-        this.applySettings();
-        this.showNotification('Settings reset to default');
-      }, {}, 'panel');
+      this.eventManager.add(
+        resetButton,
+        "click",
+        () => {
+          this.resetToDefault();
+          this.updatePanelContent();
+          this.applySettings();
+          this.showNotification("Settings reset to default");
+        },
+        {},
+        "panel"
+      );
     }
   }
 
@@ -412,39 +563,41 @@ export class GraphicsSettings {
       this.customSettings = {
         ...this.customSettings,
         ...this.presets[presetName],
-        preset: presetName
+        preset: presetName,
       };
       this.performanceManager.enableAutoAdjust(false);
-      this.performanceManager.setPerformanceLevel(presetName === 'ultra' ? 'high' : presetName);
+      this.performanceManager.setPerformanceLevel(
+        presetName === "ultra" ? "high" : presetName
+      );
     }
   }
 
   applySettings() {
     // Dispatch event with all settings
-    const event = new CustomEvent('graphicsSettingsChanged', {
-      detail: this.customSettings
+    const event = new CustomEvent("graphicsSettingsChanged", {
+      detail: this.customSettings,
     });
     window.dispatchEvent(event);
 
     // If custom preset, disable auto-adjust
-    if (this.customSettings.preset === 'custom') {
+    if (this.customSettings.preset === "custom") {
       this.performanceManager.enableAutoAdjust(false);
     }
   }
 
   resetToDefault() {
     this.customSettings = {
-      preset: 'auto',
+      preset: "auto",
       shadows: true,
-      shadowQuality: 'medium',
+      shadowQuality: "medium",
       antialias: true,
       pixelRatio: 1.0,
-      vehicleDensity: 'medium',
+      vehicleDensity: "medium",
       particleEffects: true,
-      backgroundQuality: 'high',
-      fogDistance: 'medium',
+      backgroundQuality: "high",
+      fogDistance: "medium",
       postProcessing: false,
-      autoAdjust: true
+      autoAdjust: true,
     };
     this.performanceManager.enableAutoAdjust(true);
     this.saveSettings();
@@ -452,7 +605,7 @@ export class GraphicsSettings {
 
   togglePanel() {
     this.isOpen = !this.isOpen;
-    this.settingsPanel.style.display = this.isOpen ? 'block' : 'none';
+    this.settingsPanel.style.display = this.isOpen ? "block" : "none";
     if (this.isOpen) {
       this.updatePanelContent();
     }
@@ -460,44 +613,50 @@ export class GraphicsSettings {
 
   setupKeyboardShortcuts() {
     // Use EventManager for keyboard shortcuts
-    this.eventManager.add(document, 'keydown', (e) => {
-      // G key to toggle graphics settings
-      if (e.key === 'g' || e.key === 'G') {
-        if (!e.ctrlKey && !e.metaKey && !e.altKey) {
-          this.togglePanel();
+    this.eventManager.add(
+      document,
+      "keydown",
+      (e) => {
+        // G key to toggle graphics settings
+        if (e.key === "g" || e.key === "G") {
+          if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+            this.togglePanel();
+          }
         }
-      }
 
-      // Number keys for quick presets
-      if (!this.isOpen && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        switch(e.key) {
-          case '1':
-            this.applyPreset('low');
-            this.applySettings();
-            this.showNotification('Low quality preset applied');
-            break;
-          case '2':
-            this.applyPreset('medium');
-            this.applySettings();
-            this.showNotification('Medium quality preset applied');
-            break;
-          case '3':
-            this.applyPreset('high');
-            this.applySettings();
-            this.showNotification('High quality preset applied');
-            break;
-          case '4':
-            this.applyPreset('ultra');
-            this.applySettings();
-            this.showNotification('Ultra quality preset applied');
-            break;
+        // Number keys for quick presets
+        if (!this.isOpen && !e.ctrlKey && !e.metaKey && !e.altKey) {
+          switch (e.key) {
+            case "1":
+              this.applyPreset("low");
+              this.applySettings();
+              this.showNotification("Low quality preset applied");
+              break;
+            case "2":
+              this.applyPreset("medium");
+              this.applySettings();
+              this.showNotification("Medium quality preset applied");
+              break;
+            case "3":
+              this.applyPreset("high");
+              this.applySettings();
+              this.showNotification("High quality preset applied");
+              break;
+            case "4":
+              this.applyPreset("ultra");
+              this.applySettings();
+              this.showNotification("Ultra quality preset applied");
+              break;
+          }
         }
-      }
-    }, {}, 'shortcuts');
+      },
+      {},
+      "shortcuts"
+    );
   }
 
   showNotification(message) {
-    const notification = document.createElement('div');
+    const notification = document.createElement("div");
     notification.style.cssText = `
       position: fixed;
       bottom: 20px;
@@ -514,7 +673,7 @@ export class GraphicsSettings {
     notification.textContent = message;
 
     // Add animation
-    const style = document.createElement('style');
+    const style = document.createElement("style");
     style.textContent = `
       @keyframes slideIn {
         from { transform: translateX(100%); opacity: 0; }
@@ -531,7 +690,7 @@ export class GraphicsSettings {
 
     // Auto-remove notification
     const timeout = setTimeout(() => {
-      notification.style.animation = 'slideOut 0.3s ease';
+      notification.style.animation = "slideOut 0.3s ease";
       setTimeout(() => {
         notification.remove();
         style.remove();
@@ -558,12 +717,12 @@ export class GraphicsSettings {
 
     // Clear notification timeouts
     if (this.notificationTimeouts) {
-      this.notificationTimeouts.forEach(timeout => clearTimeout(timeout));
+      this.notificationTimeouts.forEach((timeout) => clearTimeout(timeout));
       this.notificationTimeouts.clear();
     }
 
     // Remove UI elements
-    const button = document.getElementById('graphics-settings-button');
+    const button = document.getElementById("graphics-settings-button");
     if (button) {
       button.remove();
     }
@@ -572,7 +731,5 @@ export class GraphicsSettings {
       this.settingsPanel.remove();
       this.settingsPanel = null;
     }
-
-    console.log('GraphicsSettings disposed - all event listeners removed');
   }
 }

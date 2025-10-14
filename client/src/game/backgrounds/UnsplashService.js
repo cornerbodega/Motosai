@@ -26,7 +26,6 @@ export class UnsplashService {
 
     // If no API key, return mock data for testing
     if (this.USE_MOCK_DATA) {
-      console.log("[Unsplash] Using MOCK data");
       return this.getMockPhotos(lat, lng, location_name);
     }
 

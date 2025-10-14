@@ -46,17 +46,17 @@ export class Stoppa {
       id,
       createdAt: Date.now(),
       stackTrace: this.getStackTrace(),
-      disposed: false
+      disposed: false,
     };
 
     this.resources.set(id, entry);
 
     // Add weak references for Three.js objects
-    if (type === 'texture' && resource.isTexture) {
+    if (type === "texture" && resource.isTexture) {
       this.textureCache.set(resource, id);
-    } else if (type === 'geometry' && resource.isBufferGeometry) {
+    } else if (type === "geometry" && resource.isBufferGeometry) {
       this.geometryCache.set(resource, id);
-    } else if (type === 'material' && resource.isMaterial) {
+    } else if (type === "material" && resource.isMaterial) {
       this.materialCache.set(resource, id);
     }
 
@@ -81,7 +81,7 @@ export class Stoppa {
       target,
       event,
       handler,
-      options
+      options,
     });
 
     target.addEventListener(event, handler, options);
@@ -132,15 +132,15 @@ export class Stoppa {
 
     // Dispose based on type
     switch (type) {
-      case 'texture':
+      case "texture":
         if (resource.dispose) resource.dispose();
         break;
 
-      case 'geometry':
+      case "geometry":
         if (resource.dispose) resource.dispose();
         break;
 
-      case 'material':
+      case "material":
         if (resource.dispose) resource.dispose();
         if (resource.map) resource.map.dispose();
         if (resource.normalMap) resource.normalMap.dispose();
@@ -151,23 +151,23 @@ export class Stoppa {
         if (resource.envMap) resource.envMap.dispose();
         break;
 
-      case 'mesh':
+      case "mesh":
         if (resource.geometry) resource.geometry.dispose();
         if (resource.material) {
           if (Array.isArray(resource.material)) {
-            resource.material.forEach(mat => mat.dispose());
+            resource.material.forEach((mat) => mat.dispose());
           } else {
             resource.material.dispose();
           }
         }
         break;
 
-      case 'scene':
+      case "scene":
         resource.traverse((object) => {
           if (object.geometry) object.geometry.dispose();
           if (object.material) {
             if (Array.isArray(object.material)) {
-              object.material.forEach(mat => mat.dispose());
+              object.material.forEach((mat) => mat.dispose());
             } else {
               object.material.dispose();
             }
@@ -175,7 +175,7 @@ export class Stoppa {
         });
         break;
 
-      case 'renderer':
+      case "renderer":
         if (resource.dispose) resource.dispose();
         if (resource.forceContextLoss) resource.forceContextLoss();
         if (resource.domElement && resource.domElement.parentNode) {
@@ -183,14 +183,14 @@ export class Stoppa {
         }
         break;
 
-      case 'audio':
+      case "audio":
         if (resource.pause) resource.pause();
-        if (resource.src) resource.src = '';
+        if (resource.src) resource.src = "";
         if (resource.remove) resource.remove();
         break;
 
       default:
-        if (resource.dispose && typeof resource.dispose === 'function') {
+        if (resource.dispose && typeof resource.dispose === "function") {
           resource.dispose();
         }
     }
@@ -278,14 +278,17 @@ export class Stoppa {
             id,
             type: entry.type,
             age: Math.round(age / 1000),
-            stackTrace: entry.stackTrace
+            stackTrace: entry.stackTrace,
           });
         }
       }
     }
 
     if (leaks.length > 0 && this.verbose) {
-      console.warn(`[Stoppa] Detected ${leaks.length} potential memory leaks:`, leaks);
+      console.warn(
+        `[Stoppa] Detected ${leaks.length} potential memory leaks:`,
+        leaks
+      );
     }
 
     return leaks;
@@ -302,7 +305,7 @@ export class Stoppa {
       disposedResources: 0,
       eventListeners: this.eventListeners.size,
       timers: this.timers.size,
-      animationFrames: this.animationFrames.size
+      animationFrames: this.animationFrames.size,
     };
 
     for (const entry of this.resources.values()) {
@@ -318,7 +321,7 @@ export class Stoppa {
       snapshot.memory = {
         used: performance.memory.usedJSHeapSize,
         total: performance.memory.totalJSHeapSize,
-        limit: performance.memory.jsHeapSizeLimit
+        limit: performance.memory.jsHeapSizeLimit,
       };
     }
 
@@ -343,7 +346,11 @@ export class Stoppa {
     const usage = used / limit;
 
     if (used > this.memoryThreshold || usage > 0.9) {
-      console.warn(`[Stoppa] High memory usage detected: ${Math.round(used / 1024 / 1024)}MB (${Math.round(usage * 100)}%)`);
+      console.warn(
+        `[Stoppa] High memory usage detected: ${Math.round(
+          used / 1024 / 1024
+        )}MB (${Math.round(usage * 100)}%)`
+      );
 
       if (this.autoCleanup) {
         this.performAutoCleanup();
@@ -386,7 +393,6 @@ export class Stoppa {
     }
 
     if (cleaned > 0) {
-      console.log(`[Stoppa] Auto-cleaned ${cleaned} old resources`);
     }
 
     // Force GC after cleanup
@@ -407,7 +413,6 @@ export class Stoppa {
       this.lastGCTime = now;
 
       if (this.verbose) {
-        console.log('[Stoppa] Forced garbage collection');
       }
     }
   }
@@ -448,7 +453,7 @@ export class Stoppa {
       disposedResources: 0,
       resourcesByType: {},
       memoryUsage: null,
-      leaks: []
+      leaks: [],
     };
 
     for (const entry of this.resources.values()) {
@@ -473,7 +478,7 @@ export class Stoppa {
       stats.memoryUsage = {
         used: Math.round(performance.memory.usedJSHeapSize / 1024 / 1024),
         total: Math.round(performance.memory.totalJSHeapSize / 1024 / 1024),
-        limit: Math.round(performance.memory.jsHeapSizeLimit / 1024 / 1024)
+        limit: Math.round(performance.memory.jsHeapSizeLimit / 1024 / 1024),
       };
     }
 
@@ -494,7 +499,9 @@ export class Stoppa {
    */
   getStackTrace() {
     const stack = new Error().stack;
-    return stack ? stack.split('\n').slice(2, 5).join('\n') : 'No stack trace available';
+    return stack
+      ? stack.split("\n").slice(2, 5).join("\n")
+      : "No stack trace available";
   }
 
   /**
@@ -531,7 +538,7 @@ export function trackThreeObject(object, type) {
   // Override dispose method to track disposal
   const originalDispose = object.dispose;
   if (originalDispose) {
-    object.dispose = function() {
+    object.dispose = function () {
       stoppa.dispose(id);
       originalDispose.call(this);
     };

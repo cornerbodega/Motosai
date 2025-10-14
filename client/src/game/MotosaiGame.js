@@ -60,12 +60,6 @@ export class MotosaiGame {
 
     // Make Stoppa accessible from console for debugging
     window.stoppa = this.stoppa;
-    console.log("🛡️ Stoppa Memory Manager initialized!");
-    console.log("Usage from console:");
-    console.log("  stoppa.getStats() - View memory statistics");
-    console.log("  stoppa.detectLeaks() - Check for memory leaks");
-    console.log("  stoppa.cleanup() - Force cleanup");
-    console.log("  stoppa.takeSnapshot() - Take memory snapshot");
 
     // Material tracking and aggressive memory cleanup
     this.materialTrackingInterval = setInterval(() => {
@@ -83,13 +77,20 @@ export class MotosaiGame {
 
       // Log memory stats
       if (performance.memory) {
-        const usedMB = (performance.memory.usedJSHeapSize / (1024 * 1024)).toFixed(1);
-        const totalMB = (performance.memory.totalJSHeapSize / (1024 * 1024)).toFixed(1);
-        console.log(`💾 Memory: ${usedMB}MB / ${totalMB}MB`);
+        const usedMB = (
+          performance.memory.usedJSHeapSize /
+          (1024 * 1024)
+        ).toFixed(1);
+        const totalMB = (
+          performance.memory.totalJSHeapSize /
+          (1024 * 1024)
+        ).toFixed(1);
 
         // Warn if memory usage is high
         if (performance.memory.usedJSHeapSize > 150 * 1024 * 1024) {
-          console.warn(`⚠️ HIGH MEMORY USAGE: ${usedMB}MB - Triggering cleanup`);
+          console.warn(
+            `⚠️ HIGH MEMORY USAGE: ${usedMB}MB - Triggering cleanup`
+          );
           this.performMemoryCleanup();
         }
       }
@@ -99,20 +100,6 @@ export class MotosaiGame {
     this.deviceInfo = DeviceDetection.getDeviceInfo();
     this.isMobile = this.deviceInfo.isMobile;
     this.performanceTier = DeviceDetection.getPerformanceTier();
-
-    console.log('🎮 Device Detection:', {
-      isMobile: this.isMobile,
-      isTablet: this.deviceInfo.isTablet,
-      performanceTier: this.performanceTier,
-      hasTouch: this.deviceInfo.hasTouch
-    });
-
-    // Show device mode on screen for debugging
-    if (this.isMobile) {
-      console.log('%c📱 MOBILE MODE - Touch controls will be shown', 'background: #00ff00; color: black; font-size: 20px; padding: 10px;');
-    } else {
-      console.log('%c🖥️ DESKTOP MODE - Use keyboard controls (WASD)', 'background: #0088ff; color: white; font-size: 20px; padding: 10px;');
-    }
 
     // Configuration options
     this.config = {
@@ -133,7 +120,7 @@ export class MotosaiGame {
     // UFO that follows player
     this.ufo = null;
     this.ufoController = null;
-    this.ufoState = 'following'; // 'following', 'flyingAway', 'returning'
+    this.ufoState = "following"; // 'following', 'flyingAway', 'returning'
     this.ufoFlyAwayProgress = 0;
 
     // Billboard system
@@ -200,9 +187,9 @@ export class MotosaiGame {
     this.manualSunControl = false; // Automatic control by default - sun moves through cycle
     this.dayCycleDuration = 120.0; // 120 seconds for full day
     this.dayCycleTime = 15; // Current time in the cycle (0-120) - start at mid-dawn (15s)
-    this.dayCycleTimeOfDay = 'day'; // Current time of day
-    this.currentTimeOfDay = 'day'; // Current calculated time of day (for billboard lights, etc.)
-    this.timesOfDay = ['dawn', 'day', 'dusk', 'night']; // Cycle order
+    this.dayCycleTimeOfDay = "day"; // Current time of day
+    this.currentTimeOfDay = "day"; // Current calculated time of day (for billboard lights, etc.)
+    this.timesOfDay = ["dawn", "day", "dusk", "night"]; // Cycle order
 
     // Pre-allocate reusable objects for updateCamera to prevent memory leaks
     this._cameraUpdateObjects = {
@@ -240,10 +227,12 @@ export class MotosaiGame {
       this.initPhysics();
 
       // Debug: Check if UFO exists
-      console.log('AT GAME START:', {
+      console.log("AT GAME START:", {
         ufoController: !!this.ufoController,
         ufo: !!this.ufo,
-        ufoControllerUfo: this.ufoController ? !!this.ufoController.ufo : 'no controller'
+        ufoControllerUfo: this.ufoController
+          ? !!this.ufoController.ufo
+          : "no controller",
       });
 
       // Position UFO same as respawn does
@@ -265,7 +254,6 @@ export class MotosaiGame {
         // Make sure UFO is in the scene (might have been removed during fly-away)
         if (!this.scene.children.includes(this.ufo)) {
           this.scene.add(this.ufo);
-          console.log('Re-added UFO to scene after fly-away');
         }
 
         // Make sure all UFO materials are visible - match respawn code exactly
@@ -276,14 +264,12 @@ export class MotosaiGame {
           if (child.material) {
             const isGlow = child.material.side === THREE.BackSide;
             child.material.opacity = isGlow ? 0.2 : 1.0;
-            child.material.transparent = true;  // respawn sets all to true
+            child.material.transparent = true; // respawn sets all to true
             child.material.needsUpdate = true;
           }
         });
-
-        console.log('UFO positioned at start:', this.ufo.position, 'visible:', this.ufo.visible, 'in scene:', this.scene.children.includes(this.ufo));
       } else {
-        console.error('NO UFO TO POSITION!');
+        console.error("NO UFO TO POSITION!");
       }
 
       this.initControls();
@@ -308,21 +294,21 @@ export class MotosaiGame {
       // Setup stats update interval (every 10 seconds)
       this.statsUpdateInterval = setInterval(() => {
         if (this.multiplayer?.socket && this.vehiclePassCounter) {
-          this.multiplayer.socket.emit('stats-update', {
-            stats: this.vehiclePassCounter.getSessionStats()
+          this.multiplayer.socket.emit("stats-update", {
+            stats: this.vehiclePassCounter.getSessionStats(),
           });
         }
       }, 10000);
 
       // Listen for leaderboard events
       if (this.multiplayer?.socket) {
-        this.multiplayer.socket.on('new-high-score', (data) => {
+        this.multiplayer.socket.on("new-high-score", (data) => {
           if (this.leaderboardUI) {
             this.leaderboardUI.onNewHighScore(data);
           }
         });
 
-        this.multiplayer.socket.on('player-stats-update', (data) => {
+        this.multiplayer.socket.on("player-stats-update", (data) => {
           if (this.leaderboardUI) {
             this.leaderboardUI.updateLiveEntry(
               data.playerId,
@@ -332,8 +318,7 @@ export class MotosaiGame {
           }
         });
 
-        this.multiplayer.socket.on('score-submitted', (result) => {
-          console.log('Score submitted result:', result);
+        this.multiplayer.socket.on("score-submitted", (result) => {
           if (this.vehiclePassCounter && this.vehiclePassCounter.isMobile) {
             this.vehiclePassCounter.fetchPlayerBest();
           }
@@ -431,7 +416,6 @@ export class MotosaiGame {
     };
 
     this.boundHandleContextRestored = () => {
-      console.log("WebGL context restored");
       this.initRenderer();
       this.isPaused = false;
       this.animate();
@@ -487,182 +471,183 @@ export class MotosaiGame {
 
     // Add heat haze effect controls
     this.devMenu.addEffect({
-      name: 'Heat Haze',
+      name: "Heat Haze",
       enabled: false,
       onChange: (enabled) => {
         this.heatHazePass.enabled = enabled;
       },
       parameters: [
         {
-          name: 'Distortion',
+          name: "Distortion",
           value: 0.05,
           min: 0,
           max: 0.3,
           step: 0.01,
           onChange: (value) => {
             this.heatHazePass.uniforms.distortionAmount.value = value;
-          }
+          },
         },
         {
-          name: 'Speed',
+          name: "Speed",
           value: 1.0,
           min: 0,
           max: 5.0,
           step: 0.1,
           onChange: (value) => {
             this.heatHazePass.uniforms.speed.value = value;
-          }
+          },
         },
         {
-          name: 'Scale',
+          name: "Scale",
           value: 2.0,
           min: 0.5,
           max: 10.0,
           step: 0.1,
           onChange: (value) => {
             this.heatHazePass.uniforms.scale.value = value;
-          }
+          },
         },
         {
-          name: 'Height',
+          name: "Height",
           value: 0.5,
           min: 0,
           max: 1.0,
           step: 0.05,
           onChange: (value) => {
             this.heatHazePass.uniforms.heightFactor.value = value;
-          }
-        }
-      ]
+          },
+        },
+      ],
     });
 
     // Add heat haze v2 effect controls
     this.devMenu.addEffect({
-      name: 'Heat Haze v2 (Horizontal)',
+      name: "Heat Haze v2 (Horizontal)",
       enabled: true,
       onChange: (enabled) => {
         this.heatHazeV2Pass.enabled = enabled;
       },
       parameters: [
         {
-          name: 'Distortion',
+          name: "Distortion",
           value: 0.03,
           min: 0,
           max: 0.2,
           step: 0.01,
           onChange: (value) => {
             this.heatHazeV2Pass.uniforms.distortionAmount.value = value;
-          }
+          },
         },
         {
-          name: 'Frequency',
+          name: "Frequency",
           value: 4.0,
           min: 1.0,
           max: 20.0,
           step: 0.5,
           onChange: (value) => {
             this.heatHazeV2Pass.uniforms.frequency.value = value;
-          }
+          },
         },
         {
-          name: 'Speed',
+          name: "Speed",
           value: 1.5,
           min: 0,
           max: 5.0,
           step: 0.1,
           onChange: (value) => {
             this.heatHazeV2Pass.uniforms.speed.value = value;
-          }
+          },
         },
         {
-          name: 'Height',
+          name: "Height",
           value: 0.5,
           min: 0,
           max: 1.0,
           step: 0.05,
           onChange: (value) => {
             this.heatHazeV2Pass.uniforms.heightFactor.value = value;
-          }
+          },
         },
         {
-          name: 'Bike Exclusion',
+          name: "Bike Exclusion",
           value: 0.15,
           min: 0,
           max: 0.5,
           step: 0.01,
           onChange: (value) => {
             this.heatHazeV2Pass.uniforms.bikeExclusionRadius.value = value;
-          }
-        }
-      ]
+          },
+        },
+      ],
     });
 
     // Add time of day controls
     this.devMenu.addSection({
-      name: 'Time of Day',
+      name: "Time of Day",
       buttons: [
         {
-          label: '🌅 Dawn',
+          label: "🌅 Dawn",
           onClick: () => {
             this.dayCycleEnabled = false; // Disable cycle when manually setting
             this.manualSunControl = true; // Use exact preset sun position
-            this.setTimeOfDay('dawn');
-          }
+            this.setTimeOfDay("dawn");
+          },
         },
         {
-          label: '☀️ Day',
+          label: "☀️ Day",
           onClick: () => {
             this.dayCycleEnabled = false;
             this.manualSunControl = true; // Use exact preset sun position
-            this.setTimeOfDay('day');
-          }
+            this.setTimeOfDay("day");
+          },
         },
         {
-          label: '🌇 Dusk',
+          label: "🌇 Dusk",
           onClick: () => {
             this.dayCycleEnabled = false;
             this.manualSunControl = true; // Use exact preset sun position
-            this.setTimeOfDay('dusk');
-          }
+            this.setTimeOfDay("dusk");
+          },
         },
         {
-          label: '🌙 Night',
+          label: "🌙 Night",
           onClick: () => {
             this.dayCycleEnabled = false;
             this.manualSunControl = true; // Use exact preset sun position
-            this.setTimeOfDay('night');
-          }
+            this.setTimeOfDay("night");
+          },
         },
         {
-          label: () => this.dayCycleEnabled ? '⏸️ Stop Cycle' : '▶️ Start Cycle (60s)',
+          label: () =>
+            this.dayCycleEnabled ? "⏸️ Stop Cycle" : "▶️ Start Cycle (60s)",
           onClick: () => {
             this.dayCycleEnabled = !this.dayCycleEnabled;
             if (this.dayCycleEnabled) {
               this.manualSunControl = false; // Allow automatic sun positioning
-              console.log('Day/night cycle started (60s per day)');
             } else {
-              console.log('Day/night cycle stopped');
             }
-          }
-        }
-      ]
+          },
+        },
+      ],
     });
 
     // Add debug options
     this.devMenu.addSection({
-      name: 'Debug Options',
+      name: "Debug Options",
       buttons: [
         {
-          label: () => this.trafficSystem?.debugBoundingBoxes ? '✅ Hide Collision Boxes' : '📦 Show Collision Boxes',
+          label: () =>
+            this.trafficSystem?.debugBoundingBoxes
+              ? "✅ Hide Collision Boxes"
+              : "📦 Show Collision Boxes",
           onClick: () => {
             if (this.trafficSystem) {
               const newState = !this.trafficSystem.debugBoundingBoxes;
               this.trafficSystem.setDebugBoundingBoxes(newState);
-              console.log(`Vehicle collision boxes: ${newState ? 'ON' : 'OFF'}`);
             }
-          }
-        }
-      ]
+          },
+        },
+      ],
     });
   }
 
@@ -775,7 +760,7 @@ export class MotosaiGame {
 
     // Main sun light - HIGH NOON position for blue sky start
     this.sunLight = new THREE.DirectionalLight(0xffffff, 2.2);
-    this.sunLight.position.set(0, 200, 100);  // High overhead for beautiful blue sky
+    this.sunLight.position.set(0, 200, 100); // High overhead for beautiful blue sky
     this.sunLight.castShadow = true;
 
     // Enhanced shadow settings for better quality
@@ -813,7 +798,9 @@ export class MotosaiGame {
     this._tempSunPosition[0] = this.sunLight.position.x;
     this._tempSunPosition[1] = this.sunLight.position.y;
     this._tempSunPosition[2] = this.sunLight.position.z;
-    const naturalLighting = this.calculateNaturalLighting(this._tempSunPosition);
+    const naturalLighting = this.calculateNaturalLighting(
+      this._tempSunPosition
+    );
 
     // Apply natural colors immediately for consistent appearance before player select
     this.ambientLight.color.setHex(naturalLighting.ambientColor);
@@ -831,8 +818,6 @@ export class MotosaiGame {
     // Update scene fog and background color to match sky
     this.scene.fog.color.setHex(naturalLighting.sky);
     this.renderer.setClearColor(naturalLighting.sky);
-
-    console.log('Initial lighting set naturally from sun position');
   }
 
   initPhysics() {
@@ -846,8 +831,6 @@ export class MotosaiGame {
     // Initialize input controller with mobile support
     // Note: Simple physics doesn't use InputController, only complex physics does
     this.inputController = new InputController({ isMobile: this.isMobile });
-
-    console.log('🎮 Physics initialized (Simple), Input controller ready for mobile:', this.isMobile);
 
     // Create motorcycle mesh (low poly)
     this.createMotorcycle();
@@ -871,17 +854,17 @@ export class MotosaiGame {
 
     if (isNight) {
       return {
-        sky: 0x050A1C,  // Much darker midnight blue
-        ambientColor: 0x1A2040,  // Very dark blue ambient
-        ambientIntensity: 0.04,  // VERY LOW - properly dark night
-        sunColor: 0x6B7FA8,  // Dim cool moonlight
-        sunIntensity: 0.15,  // Very subtle moonlight
-        hemiSky: 0x0D1528,  // Dark night sky
-        hemiGround: 0x020408,  // Nearly black ground
-        hemiIntensity: 0.08,  // Minimal hemisphere light
-        fillColor: 0x1A2545,  // Dark blue fill
-        fillIntensity: 0.03,  // Barely visible fill
-        starfieldVisible: true
+        sky: 0x050a1c, // Much darker midnight blue
+        ambientColor: 0x1a2040, // Very dark blue ambient
+        ambientIntensity: 0.04, // VERY LOW - properly dark night
+        sunColor: 0x6b7fa8, // Dim cool moonlight
+        sunIntensity: 0.15, // Very subtle moonlight
+        hemiSky: 0x0d1528, // Dark night sky
+        hemiGround: 0x020408, // Nearly black ground
+        hemiIntensity: 0.08, // Minimal hemisphere light
+        fillColor: 0x1a2545, // Dark blue fill
+        fillIntensity: 0.03, // Barely visible fill
+        starfieldVisible: true,
       };
     }
 
@@ -924,11 +907,11 @@ export class MotosaiGame {
         sunColor: sunColor,
         sunIntensity: sunIntensity,
         hemiSky: skyColor,
-        hemiGround: 0x4A3520,  // Warm brown ground
+        hemiGround: 0x4a3520, // Warm brown ground
         hemiIntensity: 0.35 + goldenHourStrength * 0.25,
         fillColor: ambientColor,
         fillIntensity: 0.25 + goldenHourStrength * 0.15,
-        starfieldVisible: false
+        starfieldVisible: false,
       };
     }
 
@@ -964,83 +947,87 @@ export class MotosaiGame {
       sunColor: sunColor,
       sunIntensity: sunIntensity,
       hemiSky: skyColor,
-      hemiGround: 0x7A6A55,  // Natural earth tone
+      hemiGround: 0x7a6a55, // Natural earth tone
       hemiIntensity: 0.3 + elevationNorm * 0.5,
       fillColor: ambientColor,
       fillIntensity: 0.15 + elevationNorm * 0.35,
-      starfieldVisible: false
+      starfieldVisible: false,
     };
   }
 
   setTimeOfDay(timeOfDay) {
     // Get current sun position (don't change it!)
-    const currentSunPosition = this.sunLight ?
-      [this.sunLight.position.x, this.sunLight.position.y, this.sunLight.position.z] :
-      [0, 200, 100];
+    const currentSunPosition = this.sunLight
+      ? [
+          this.sunLight.position.x,
+          this.sunLight.position.y,
+          this.sunLight.position.z,
+        ]
+      : [0, 200, 100];
 
     // EPIC STYLIZED LIGHTING PRESETS - exact colors you wanted!
     const presets = {
       dawn: {
         // EPIC GOLDEN SUNRISE - intense warm glow
-        sky: 0xFF6B4A,  // Vibrant orange-red
-        ambientColor: 0xFFB380,  // Warm peachy glow
+        sky: 0xff6b4a, // Vibrant orange-red
+        ambientColor: 0xffb380, // Warm peachy glow
         ambientIntensity: 0.35,
-        sunColor: 0xFFA040,  // Golden orange sun
+        sunColor: 0xffa040, // Golden orange sun
         sunIntensity: 2.5,
-        hemiSky: 0xFF8866,  // Warm orange sky
-        hemiGround: 0x4A3020,  // Dark warm earth
+        hemiSky: 0xff8866, // Warm orange sky
+        hemiGround: 0x4a3020, // Dark warm earth
         hemiIntensity: 0.6,
-        fillColor: 0xFFCC99,  // Soft golden fill
+        fillColor: 0xffcc99, // Soft golden fill
         fillIntensity: 0.4,
-        starfieldVisible: false
+        starfieldVisible: false,
       },
       day: {
         // BRILLIANT BLUE DAY - vibrant and saturated
-        sky: 0x4A9FFF,  // Rich saturated blue
-        ambientColor: 0xE0F0FF,  // Cool bright ambient
+        sky: 0x4a9fff, // Rich saturated blue
+        ambientColor: 0xe0f0ff, // Cool bright ambient
         ambientIntensity: 0.65,
-        sunColor: 0xFFFFF5,  // Brilliant white sun
-        sunIntensity: 5.5,  // INTENSE!
-        hemiSky: 0x5BB0FF,  // Bright sky blue
-        hemiGround: 0xB8A890,  // Natural earth
+        sunColor: 0xfffff5, // Brilliant white sun
+        sunIntensity: 5.5, // INTENSE!
+        hemiSky: 0x5bb0ff, // Bright sky blue
+        hemiGround: 0xb8a890, // Natural earth
         hemiIntensity: 0.9,
-        fillColor: 0xCCE5FF,  // Cool blue fill
+        fillColor: 0xcce5ff, // Cool blue fill
         fillIntensity: 0.55,
-        starfieldVisible: false
+        starfieldVisible: false,
       },
       dusk: {
         // EPIC SUNSET - dramatic purple and orange
-        sky: 0xFF4466,  // Deep red-orange
-        ambientColor: 0xFF8855,  // Fiery orange ambient
+        sky: 0xff4466, // Deep red-orange
+        ambientColor: 0xff8855, // Fiery orange ambient
         ambientIntensity: 0.28,
-        sunColor: 0xFF6633,  // Deep orange sun
+        sunColor: 0xff6633, // Deep orange sun
         sunIntensity: 2.2,
-        hemiSky: 0xCC4466,  // Purple-red sky
-        hemiGround: 0x332211,  // Dark earth
+        hemiSky: 0xcc4466, // Purple-red sky
+        hemiGround: 0x332211, // Dark earth
         hemiIntensity: 0.5,
-        fillColor: 0xFF9966,  // Warm orange fill
+        fillColor: 0xff9966, // Warm orange fill
         fillIntensity: 0.35,
-        starfieldVisible: false
+        starfieldVisible: false,
       },
       night: {
         // DRAMATIC DARK NIGHT - proper darkness
-        sky: 0x020510,  // Nearly black with blue tint
-        ambientColor: 0x0A1530,  // Very dark blue
-        ambientIntensity: 0.02,  // BARELY visible
-        sunColor: 0x4060A0,  // Dim moonlight
-        sunIntensity: 0.12,  // Very subtle
-        hemiSky: 0x050A18,  // Dark night
-        hemiGround: 0x000000,  // Pure black
+        sky: 0x020510, // Nearly black with blue tint
+        ambientColor: 0x0a1530, // Very dark blue
+        ambientIntensity: 0.02, // BARELY visible
+        sunColor: 0x4060a0, // Dim moonlight
+        sunIntensity: 0.12, // Very subtle
+        hemiSky: 0x050a18, // Dark night
+        hemiGround: 0x000000, // Pure black
         hemiIntensity: 0.05,
-        fillColor: 0x0A1525,  // Dark blue fill
+        fillColor: 0x0a1525, // Dark blue fill
         fillIntensity: 0.02,
-        starfieldVisible: true
-      }
+        starfieldVisible: true,
+      },
     };
 
     const preset = presets[timeOfDay];
     if (!preset) {
-      console.error('Unknown time of day:', timeOfDay);
+      console.error("Unknown time of day:", timeOfDay);
       return;
     }
 
@@ -1055,7 +1042,7 @@ export class MotosaiGame {
         progress: 0,
         duration: 3.0, // 3 seconds for beautiful cinematic transition
         from: null,
-        to: null
+        to: null,
       };
     }
 
@@ -1068,23 +1055,55 @@ export class MotosaiGame {
     // Capture current state as "from"
     this.timeOfDayTransition.from = {
       sky: this.skyDome ? this.skyDome.material.color.getHex() : fullPreset.sky,
-      ambientColor: this.ambientLight ? this.ambientLight.color.getHex() : fullPreset.ambientColor,
-      ambientIntensity: this.ambientLight ? this.ambientLight.intensity : fullPreset.ambientIntensity,
-      sunColor: this.sunLight ? this.sunLight.color.getHex() : fullPreset.sunColor,
-      sunIntensity: this.sunLight ? this.sunLight.intensity : fullPreset.sunIntensity,
-      sunPosition: this.sunLight ? [this.sunLight.position.x, this.sunLight.position.y, this.sunLight.position.z] : fullPreset.sunPosition,
-      hemiSky: this.hemiLight ? this.hemiLight.color.getHex() : fullPreset.hemiSky,
-      hemiGround: this.hemiLight ? this.hemiLight.groundColor.getHex() : fullPreset.hemiGround,
-      hemiIntensity: this.hemiLight ? this.hemiLight.intensity : fullPreset.hemiIntensity,
-      fillColor: this.fillLight ? this.fillLight.color.getHex() : fullPreset.fillColor,
-      fillIntensity: this.fillLight ? this.fillLight.intensity : fullPreset.fillIntensity,
-      starfieldVisible: this.backgrounds && this.backgrounds.starfield ? this.backgrounds.starfield.visible : false
+      ambientColor: this.ambientLight
+        ? this.ambientLight.color.getHex()
+        : fullPreset.ambientColor,
+      ambientIntensity: this.ambientLight
+        ? this.ambientLight.intensity
+        : fullPreset.ambientIntensity,
+      sunColor: this.sunLight
+        ? this.sunLight.color.getHex()
+        : fullPreset.sunColor,
+      sunIntensity: this.sunLight
+        ? this.sunLight.intensity
+        : fullPreset.sunIntensity,
+      sunPosition: this.sunLight
+        ? [
+            this.sunLight.position.x,
+            this.sunLight.position.y,
+            this.sunLight.position.z,
+          ]
+        : fullPreset.sunPosition,
+      hemiSky: this.hemiLight
+        ? this.hemiLight.color.getHex()
+        : fullPreset.hemiSky,
+      hemiGround: this.hemiLight
+        ? this.hemiLight.groundColor.getHex()
+        : fullPreset.hemiGround,
+      hemiIntensity: this.hemiLight
+        ? this.hemiLight.intensity
+        : fullPreset.hemiIntensity,
+      fillColor: this.fillLight
+        ? this.fillLight.color.getHex()
+        : fullPreset.fillColor,
+      fillIntensity: this.fillLight
+        ? this.fillLight.intensity
+        : fullPreset.fillIntensity,
+      starfieldVisible:
+        this.backgrounds && this.backgrounds.starfield
+          ? this.backgrounds.starfield.visible
+          : false,
     };
 
     // Calculate elevation for logging (without storing intermediate objects)
-    const sunDist = Math.sqrt(preset.sunPosition[0]**2 + preset.sunPosition[1]**2 + preset.sunPosition[2]**2);
-    const elevation = Math.round(Math.asin(preset.sunPosition[1] / sunDist) * 180 / Math.PI);
-    console.log(`Time of day transitioning to: ${timeOfDay} (sun elevation: ${elevation}°)`);
+    const sunDist = Math.sqrt(
+      preset.sunPosition[0] ** 2 +
+        preset.sunPosition[1] ** 2 +
+        preset.sunPosition[2] ** 2
+    );
+    const elevation = Math.round(
+      (Math.asin(preset.sunPosition[1] / sunDist) * 180) / Math.PI
+    );
   }
 
   createMotorcycle() {
@@ -1101,7 +1120,6 @@ export class MotosaiGame {
         acceleration: this.selectedBike.acceleration,
         handling: this.selectedBike.handling,
       };
-      console.log("Using selected bike:", this.selectedBike.name);
     } else {
       // Fallback to sessionStorage or default
       const selectedBikeData = sessionStorage.getItem("selectedBike");
@@ -1110,7 +1128,6 @@ export class MotosaiGame {
           const selectedBike = JSON.parse(selectedBikeData);
           bikeColor = selectedBike.color || 0xff0000;
           modelPath = selectedBike.modelPath || "/models/motor1.glb";
-          console.log("Using bike from sessionStorage:", selectedBike.name);
         } catch (e) {
           console.warn("Failed to parse selected bike data:", e);
         }
@@ -1141,7 +1158,7 @@ export class MotosaiGame {
         if (child.geometry) child.geometry.dispose();
         if (child.material) {
           if (Array.isArray(child.material)) {
-            child.material.forEach(m => {
+            child.material.forEach((m) => {
               if (m.map) m.map.dispose();
               if (m.normalMap) m.normalMap.dispose();
               if (m.roughnessMap) m.roughnessMap.dispose();
@@ -1151,8 +1168,10 @@ export class MotosaiGame {
           } else {
             if (child.material.map) child.material.map.dispose();
             if (child.material.normalMap) child.material.normalMap.dispose();
-            if (child.material.roughnessMap) child.material.roughnessMap.dispose();
-            if (child.material.metalnessMap) child.material.metalnessMap.dispose();
+            if (child.material.roughnessMap)
+              child.material.roughnessMap.dispose();
+            if (child.material.metalnessMap)
+              child.material.metalnessMap.dispose();
             child.material.dispose();
           }
         }
@@ -1162,11 +1181,13 @@ export class MotosaiGame {
     }
 
     // Try to reuse preloaded model to save memory
-    const preloadedModel = window.__PRELOADED_BIKE_MODELS__ && window.__PRELOADED_BIKE_MODELS__["motor1"];
+    const preloadedModel =
+      window.__PRELOADED_BIKE_MODELS__ &&
+      window.__PRELOADED_BIKE_MODELS__["motor1"];
 
     if (preloadedModel) {
       // Clone the model but SHARE geometries and textures to save memory
-      console.log("Reusing preloaded motor1 model (sharing geometries)");
+
       this.motorcycle = preloadedModel.clone(true); // deep clone
       this._setupMotorcycleModel(this.motorcycle, bikeColor);
     } else {
@@ -1177,7 +1198,6 @@ export class MotosaiGame {
         (gltf) => {
           this.motorcycle = gltf.scene || gltf.scenes[0];
 
-          console.log("GLB loaded fresh, checking for textures...");
           let textureCount = 0;
           gltf.scene.traverse((child) => {
             if (child.material) {
@@ -1185,7 +1205,6 @@ export class MotosaiGame {
               if (child.material.normalMap) textureCount++;
             }
           });
-          console.log(`Found ${textureCount} textures in GLB`);
 
           this._setupMotorcycleModel(this.motorcycle, bikeColor);
         },
@@ -1218,12 +1237,19 @@ export class MotosaiGame {
 
     // Prevent duplicate headlights
     if (this.headlight) {
-      console.warn('Headlight already exists, skipping');
+      console.warn("Headlight already exists, skipping");
       return;
     }
 
     // Add headlight (SpotLight) - conical beam angled down at road
-    this.headlight = new THREE.SpotLight(0xffffff, 10.0, 100, Math.PI / 3.5, 0.4, 1.0);
+    this.headlight = new THREE.SpotLight(
+      0xffffff,
+      10.0,
+      100,
+      Math.PI / 3.5,
+      0.4,
+      1.0
+    );
     this.headlight.position.set(0, 1.0, 2.0); // Front of bike, elevated
     this.headlight.target.position.set(0, -0.5, 20); // Point down at road ahead
     this.headlight.castShadow = false; // Disable shadows for performance
@@ -1237,7 +1263,7 @@ export class MotosaiGame {
     const bulbMaterial = new THREE.MeshBasicMaterial({
       color: 0xffffee,
       emissive: 0xffffee,
-      emissiveIntensity: 2.0
+      emissiveIntensity: 2.0,
     });
     const bulb = new THREE.Mesh(bulbGeometry, bulbMaterial);
     bulb.position.set(0, 1.0, 2.0);
@@ -1246,8 +1272,6 @@ export class MotosaiGame {
     // Store reference
     this.motorcycle.userData.headlight = this.headlight;
     this.motorcycle.userData.headlightBulb = bulb;
-
-    console.log('Headlight added - Intensity:', this.headlight.intensity);
   }
 
   // Shared function for applying color to motorcycles (used in game and preview)
@@ -1265,24 +1289,29 @@ export class MotosaiGame {
         child.receiveShadow = true;
 
         // Get material and mesh names for intelligent coloring
-        const materialName = child.material.name ? child.material.name.toLowerCase() : '';
-        const meshName = child.name ? child.name.toLowerCase() : '';
+        const materialName = child.material.name
+          ? child.material.name.toLowerCase()
+          : "";
+        const meshName = child.name ? child.name.toLowerCase() : "";
 
         let targetColor = null;
 
         // Determine which color to use based on part
-        if (materialName.includes('metal_red') || meshName.includes('tank')) {
+        if (materialName.includes("metal_red") || meshName.includes("tank")) {
           targetColor = tankColor; // Tank gets main bike color
-        } else if (materialName.includes('leather') || meshName.includes('seat')) {
+        } else if (
+          materialName.includes("leather") ||
+          meshName.includes("seat")
+        ) {
           targetColor = seatColor; // Seat gets seat color
-        } else if (materialName.includes('tire')) {
+        } else if (materialName.includes("tire")) {
           targetColor = tireColor; // Tires get tire color
         }
 
         // Apply color if we determined one
         if (child.material.color && targetColor !== null) {
           if (materialManager) {
-            const sharedMaterial = materialManager.getMaterial('standard', {
+            const sharedMaterial = materialManager.getMaterial("standard", {
               color: targetColor,
               metalness: child.material.metalness || 0.4,
               roughness: child.material.roughness || 0.3,
@@ -1348,35 +1377,27 @@ export class MotosaiGame {
   }
 
   initBillboards() {
-    console.log('[INIT] Creating BillboardSystem...');
     this.billboardSystem = new BillboardSystem(this.scene);
 
     // Create test billboards for development
     // TODO: Replace with Supabase data loading
     this.billboardSystem.createTestBillboards(10, 500);
-
-    console.log('[INIT] BillboardSystem created');
   }
 
   initBackgrounds() {
     try {
-      console.log("[INIT] Creating BackgroundSystem...");
       this.backgrounds = new BackgroundSystem(this.scene, this.camera);
-      console.log("[INIT] BackgroundSystem created successfully");
 
       // Update celestial positions based on current day cycle time (15s = mid-dawn)
       this.updateContinuousCelestialPositions();
 
-      console.log("[INIT] Sky color and sun position set from day cycle time:", this.dayCycleTime);
-
       // Test with initial location (Death Valley) - this should trigger segment 0
-      console.log("[INIT] Setting initial location to segment 0...");
+
       this.backgrounds.updateLocation(0, {
         lat: 36.4633,
         lng: -116.865,
         name: "Death Valley National Park",
       });
-      console.log("[INIT] Initial location set");
     } catch (error) {
       console.error("Error creating BackgroundSystem:", error);
       this.backgrounds = null; // Prevent crashes in render loop
@@ -1386,7 +1407,10 @@ export class MotosaiGame {
   waitForVehicleModels(callback) {
     // Poll until both sedan and semi models are loaded
     const checkInterval = setInterval(() => {
-      if (this.trafficSystem.sedanModelLoaded && this.trafficSystem.semiModelLoaded) {
+      if (
+        this.trafficSystem.sedanModelLoaded &&
+        this.trafficSystem.semiModelLoaded
+      ) {
         clearInterval(checkInterval);
         callback();
       }
@@ -1395,8 +1419,13 @@ export class MotosaiGame {
     // Timeout after 10 seconds and spawn anyway with fallback geometry
     setTimeout(() => {
       clearInterval(checkInterval);
-      if (!this.trafficSystem.sedanModelLoaded || !this.trafficSystem.semiModelLoaded) {
-        console.warn('Vehicle models took too long to load, using fallback geometry');
+      if (
+        !this.trafficSystem.sedanModelLoaded ||
+        !this.trafficSystem.semiModelLoaded
+      ) {
+        console.warn(
+          "Vehicle models took too long to load, using fallback geometry"
+        );
         callback();
       }
     }, 10000);
@@ -1423,21 +1452,21 @@ export class MotosaiGame {
     // Setup stats update interval (every 10 seconds)
     this.statsUpdateInterval = setInterval(() => {
       if (this.multiplayer?.socket && this.vehiclePassCounter) {
-        this.multiplayer.socket.emit('stats-update', {
-          stats: this.vehiclePassCounter.getSessionStats()
+        this.multiplayer.socket.emit("stats-update", {
+          stats: this.vehiclePassCounter.getSessionStats(),
         });
       }
     }, 10000);
 
     // Listen for leaderboard events
     if (this.multiplayer?.socket) {
-      this.multiplayer.socket.on('new-high-score', (data) => {
+      this.multiplayer.socket.on("new-high-score", (data) => {
         if (this.leaderboardUI) {
           this.leaderboardUI.onNewHighScore(data);
         }
       });
 
-      this.multiplayer.socket.on('player-stats-update', (data) => {
+      this.multiplayer.socket.on("player-stats-update", (data) => {
         if (this.leaderboardUI) {
           this.leaderboardUI.updateLiveEntry(
             data.playerId,
@@ -1448,9 +1477,7 @@ export class MotosaiGame {
       });
 
       // Listen for score submission result
-      this.multiplayer.socket.on('score-submitted', (result) => {
-        console.log('Score submitted result:', result);
-
+      this.multiplayer.socket.on("score-submitted", (result) => {
         // Update mobile stats display if on mobile
         if (this.vehiclePassCounter && this.vehiclePassCounter.isMobile) {
           this.vehiclePassCounter.fetchPlayerBest();
@@ -1482,7 +1509,6 @@ export class MotosaiGame {
 
       // Debug: Log throttle key presses
       if (e.code === "KeyW" || e.code === "ArrowUp") {
-        console.log('🎮 Throttle key pressed:', e.code, 'keys:', this.keys);
       }
 
       // Gear shifting
@@ -1519,31 +1545,27 @@ export class MotosaiGame {
   initTouchControls() {
     // Initialize mobile touch controls if on mobile device
     if (this.isMobile) {
-      console.log('📱 Initializing mobile touch controls');
-
       // Initialize mobile controller with joystick layout
       this.mobileController = new MobileTouchController(this.container, {
         enabled: true,
         hapticFeedback: true,
-        controlLayout: 'joystick', // or 'zones'
+        controlLayout: "joystick", // or 'zones'
         sensitivity: {
           lean: 1.3, // Increased to 1.3 to compensate for InputController smoothing and reach max lean
           throttle: 1.0,
-          brake: 1.0
+          brake: 1.0,
         },
         onInputChange: (inputs) => {
           // Update InputController with mobile inputs
           if (this.inputController) {
             this.inputController.updateFromMobile(inputs);
           }
-        }
+        },
       });
 
       // Prevent default touch behaviors
       DeviceDetection.preventZoom();
       DeviceDetection.preventScroll();
-
-      console.log('✅ Mobile controls initialized');
     } else {
       // Desktop fallback - basic touch support for testing
       let touchStartX = 0;
@@ -1648,8 +1670,6 @@ export class MotosaiGame {
 
     // Start intro animation - wait for user to click START GAME
     this.introAnimation.onStartGame = (selectedColor) => {
-      console.log("User clicked START GAME with color:", selectedColor);
-
       // Store selected rider color
       this.config.riderColor = selectedColor;
 
@@ -1688,12 +1708,10 @@ export class MotosaiGame {
       if (this.ufo) {
         // Use UFO from intro
         this.ufoController.ufo = this.ufo;
-        console.log('UFOController initialized with intro UFO');
 
         // Make sure UFO is in the scene
         if (!this.scene.children.includes(this.ufo)) {
           this.scene.add(this.ufo);
-          console.log('UFO was not in scene, adding it now');
         }
 
         // Apply colorful materials to UFO (match intro)
@@ -1719,7 +1737,7 @@ export class MotosaiGame {
               metalness: 0.9,
               roughness: 0.1,
               emissive: colorData.emissive,
-              emissiveIntensity: 0.5
+              emissiveIntensity: 0.5,
             });
             colorIndex++;
           }
@@ -1732,13 +1750,13 @@ export class MotosaiGame {
         // Add bright point light around UFO
         const ufoLight = new THREE.PointLight(0xffffff, 100, 500);
         ufoLight.position.set(0, 0, 0);
-        ufoLight.name = 'ufoMainLight';
+        ufoLight.name = "ufoMainLight";
         this.ufoController.ufo.add(ufoLight);
-        console.log('UFO light added:', {
+        console.log("UFO light added:", {
           intensity: ufoLight.intensity,
           color: ufoLight.color,
           distance: ufoLight.distance,
-          ufoChildren: this.ufoController.ufo.children.length
+          ufoChildren: this.ufoController.ufo.children.length,
         });
 
         // Scale it properly (smaller)
@@ -1749,15 +1767,16 @@ export class MotosaiGame {
         // Start UFO much closer (50 units ahead) so it's clearly visible at the start
         const playerSpawnZ = 0;
         const startDistance = 50; // Much closer than targetDistance (200) for visibility at start
-        this.ufoController.ufo.position.set(0, 35, playerSpawnZ + startDistance);
-        console.log('UFO positioned at start:', this.ufoController.ufo.position);
-        console.log('UFO in scene?', this.scene.children.includes(this.ufoController.ufo));
-        console.log('UFO scale:', this.ufoController.ufo.scale);
+        this.ufoController.ufo.position.set(
+          0,
+          35,
+          playerSpawnZ + startDistance
+        );
       } else {
         // Fallback: create UFO if intro didn't provide one
         this.ufoController.createFallbackUFO();
         this.ufo = this.ufoController.ufo;
-        console.warn('Intro UFO not found, using fallback');
+        console.warn("Intro UFO not found, using fallback");
       }
 
       // Show player selection on top of desert
@@ -1765,14 +1784,11 @@ export class MotosaiGame {
 
       // Spawn traffic during player selection (after models load)
       this.waitForVehicleModels(() => {
-        console.log('Vehicle models loaded, spawning traffic during selection');
         this.trafficSystem.spawn(this.currentConfig.maxVehicles);
       });
 
       // Set up selection callback
       this.playerSelection.onSelectionComplete = (selectedBike) => {
-        console.log("Selected bike:", selectedBike);
-
         // Store selected bike for motorcycle creation
         this.selectedBike = selectedBike;
 
@@ -1780,7 +1796,6 @@ export class MotosaiGame {
         this.playerSelection.hideSelectionUI();
 
         // UFO is already set up - just continue with game
-        console.log('UFO in scene?', this.scene.children.includes(this.ufoController.ufo));
 
         // Continue with game initialization
         callback();
@@ -1801,7 +1816,6 @@ export class MotosaiGame {
     try {
       // Connect with a default username for now
       const playerInfo = await this.multiplayer.connect();
-      console.log(`Connected to multiplayer as ${playerInfo.username}`);
 
       // Update minimap with correct player ID
       if (this.minimap && this.multiplayer.playerId) {
@@ -1809,11 +1823,11 @@ export class MotosaiGame {
       }
 
       // Refresh leaderboard with player ID
-      console.log('🔍 Checking leaderboard UI:', this.leaderboardUI, 'Player ID:', this.multiplayer.playerId);
+
       if (this.leaderboardUI) {
         this.leaderboardUI.onPlayerConnected();
       } else {
-        console.warn('⚠️ Leaderboard UI not found when player connected');
+        console.warn("⚠️ Leaderboard UI not found when player connected");
       }
 
       // Add multiplayer status to HUD
@@ -2069,7 +2083,8 @@ export class MotosaiGame {
 
     // Update button text based on mode
     const updateButtonText = () => {
-      startButton.textContent = modeSelect.value === "friend" ? "INVITE" : "START";
+      startButton.textContent =
+        modeSelect.value === "friend" ? "INVITE" : "START";
     };
     modeSelect.addEventListener("change", updateButtonText);
     updateButtonText();
@@ -2130,8 +2145,6 @@ export class MotosaiGame {
 
   sendRaceInvite(playerId, distance) {
     if (!this.multiplayer) return;
-
-    console.log('Sending race invite to:', playerId, 'distance:', distance);
 
     // Send race invite via multiplayer
     this.multiplayer.sendMessage({
@@ -2606,7 +2619,7 @@ export class MotosaiGame {
   updateControls(deltaTime) {
     // Simple direct controls for our new physics
     if (!this.physics) {
-      console.warn('⚠️ updateControls called but physics not initialized');
+      console.warn("⚠️ updateControls called but physics not initialized");
       return;
     }
 
@@ -2628,19 +2641,25 @@ export class MotosaiGame {
 
       controls.throttle = smoothedInputs.throttle || 0;
       // Use the maximum of front and rear brake for the combined brake value
-      controls.brake = Math.max(smoothedInputs.frontBrake || 0, smoothedInputs.rearBrake || 0);
+      controls.brake = Math.max(
+        smoothedInputs.frontBrake || 0,
+        smoothedInputs.rearBrake || 0
+      );
       controls.steer = smoothedInputs.steer || smoothedInputs.lean || 0;
 
       // Debug: Log when steering is applied
       if (Math.abs(controls.steer) > 0.1 && Math.random() < 0.05) {
-        console.log('🎮 Applying steer:', controls.steer.toFixed(2), 'from smoothed:', (smoothedInputs.steer || 0).toFixed(2), 'lean:', (smoothedInputs.lean || 0).toFixed(2));
       }
     } else {
       // Desktop keyboard controls
 
       // Check throttle and brake - if both pressed, brake wins (safety first)
       const throttlePressed = this.keys["KeyW"] || this.keys["ArrowUp"];
-      const brakePressed = this.keys["KeyS"] || this.keys["ArrowDown"] || this.keys["ShiftLeft"] || this.keys["ShiftRight"];
+      const brakePressed =
+        this.keys["KeyS"] ||
+        this.keys["ArrowDown"] ||
+        this.keys["ShiftLeft"] ||
+        this.keys["ShiftRight"];
 
       // Brake has priority over throttle (safety first)
       if (brakePressed) {
@@ -2715,16 +2734,13 @@ export class MotosaiGame {
 
   updateUFO(deltaTime, state) {
     if (!this.ufoController || !this.ufo) {
-      console.log('UFO update skipped:', { ufoController: !!this.ufoController, ufo: !!this.ufo });
       return;
     }
 
     // Use UFOController's update method
     // state.velocity is {x, y, z}, calculate magnitude manually
     const speed = Math.sqrt(
-      state.velocity.x ** 2 +
-      state.velocity.y ** 2 +
-      state.velocity.z ** 2
+      state.velocity.x ** 2 + state.velocity.y ** 2 + state.velocity.z ** 2
     );
     this.ufoController.update(deltaTime, state.position, speed);
   }
@@ -2759,8 +2775,8 @@ export class MotosaiGame {
 
     // Orbit parameters
     const orbitRadius = 1400;
-    const horizonHeight = 30;  // Height at horizon
-    const zenithHeight = 180;  // Height at zenith
+    const horizonHeight = 30; // Height at horizon
+    const zenithHeight = 180; // Height at zenith
 
     // Calculate sun position with more realistic elliptical arc
     // Camera faces west (negative Z), so:
@@ -2784,16 +2800,16 @@ export class MotosaiGame {
     const moonAboveHorizon = moonY > -50;
 
     if (t < 30) {
-      currentPeriod = 'dawn';
+      currentPeriod = "dawn";
       blendFactor = t / 30;
     } else if (t < 60) {
-      currentPeriod = 'day';
+      currentPeriod = "day";
       blendFactor = (t - 30) / 30;
     } else if (t < 90) {
-      currentPeriod = 'dusk';
+      currentPeriod = "dusk";
       blendFactor = (t - 60) / 30;
     } else {
-      currentPeriod = 'night';
+      currentPeriod = "night";
       blendFactor = (t - 90) / 30;
     }
 
@@ -2812,11 +2828,13 @@ export class MotosaiGame {
 
     // Update background system with both sun and moon positions
     if (this.backgrounds) {
-      this.backgrounds.setSunMoonPosition(
-        [sunX, sunY, sunZ],
-        currentPeriod,
-        { moonX, moonY, moonZ, sunAboveHorizon, moonAboveHorizon }
-      );
+      this.backgrounds.setSunMoonPosition([sunX, sunY, sunZ], currentPeriod, {
+        moonX,
+        moonY,
+        moonZ,
+        sunAboveHorizon,
+        moonAboveHorizon,
+      });
     }
 
     // Smoothly blend lighting colors based on current period (only if not manually controlled)
@@ -2829,60 +2847,60 @@ export class MotosaiGame {
     // EPIC PRESET COLORS - same as the buttons!
     const presets = {
       dawn: {
-        sky: 0xFF6B4A,
-        ambientColor: 0xFFB380,
+        sky: 0xff6b4a,
+        ambientColor: 0xffb380,
         ambientIntensity: 0.35,
-        sunColor: 0xFFA040,
+        sunColor: 0xffa040,
         sunIntensity: 2.5,
-        hemiSky: 0xFF8866,
-        hemiGround: 0x4A3020,
+        hemiSky: 0xff8866,
+        hemiGround: 0x4a3020,
         hemiIntensity: 0.6,
-        fillColor: 0xFFCC99,
+        fillColor: 0xffcc99,
         fillIntensity: 0.4,
-        starfieldVisible: false
+        starfieldVisible: false,
       },
       day: {
-        sky: 0x4A9FFF,
-        ambientColor: 0xE0F0FF,
+        sky: 0x4a9fff,
+        ambientColor: 0xe0f0ff,
         ambientIntensity: 0.65,
-        sunColor: 0xFFFFF5,
+        sunColor: 0xfffff5,
         sunIntensity: 5.5,
-        hemiSky: 0x5BB0FF,
-        hemiGround: 0xB8A890,
+        hemiSky: 0x5bb0ff,
+        hemiGround: 0xb8a890,
         hemiIntensity: 0.9,
-        fillColor: 0xCCE5FF,
+        fillColor: 0xcce5ff,
         fillIntensity: 0.55,
-        starfieldVisible: false
+        starfieldVisible: false,
       },
       dusk: {
-        sky: 0xFF8833,          // Epic bright orange sky
-        ambientColor: 0xFFAA55, // Golden orange ambient
+        sky: 0xff8833, // Epic bright orange sky
+        ambientColor: 0xffaa55, // Golden orange ambient
         ambientIntensity: 0.32,
-        sunColor: 0xFF6600,     // Deep epic orange sun
-        sunIntensity: 2.8,      // Brighter for more drama
-        hemiSky: 0xFF9944,      // Warm orange hemisphere
-        hemiGround: 0x4A3020,   // Warm brown ground
+        sunColor: 0xff6600, // Deep epic orange sun
+        sunIntensity: 2.8, // Brighter for more drama
+        hemiSky: 0xff9944, // Warm orange hemisphere
+        hemiGround: 0x4a3020, // Warm brown ground
         hemiIntensity: 0.6,
-        fillColor: 0xFFBB66,    // Light golden orange fill
+        fillColor: 0xffbb66, // Light golden orange fill
         fillIntensity: 0.4,
-        starfieldVisible: false
+        starfieldVisible: false,
       },
       night: {
         sky: 0x020510,
-        ambientColor: 0x0A1530,
+        ambientColor: 0x0a1530,
         ambientIntensity: 0.02,
-        sunColor: 0x4060A0,
+        sunColor: 0x4060a0,
         sunIntensity: 0.12,
-        hemiSky: 0x050A18,
+        hemiSky: 0x050a18,
         hemiGround: 0x000000,
         hemiIntensity: 0.05,
-        fillColor: 0x0A1525,
+        fillColor: 0x0a1525,
         fillIntensity: 0.02,
-        starfieldVisible: true
-      }
+        starfieldVisible: true,
+      },
     };
 
-    const periodOrder = ['dawn', 'day', 'dusk', 'night'];
+    const periodOrder = ["dawn", "day", "dusk", "night"];
     const currentIndex = periodOrder.indexOf(period);
     const nextIndex = (currentIndex + 1) % periodOrder.length;
 
@@ -2894,23 +2912,56 @@ export class MotosaiGame {
 
     // Blend ALL the colors for EPIC transitions
     const skyColor = this._lerpColor(current.sky, next.sky, easedBlend);
-    const ambientColor = this._lerpColor(current.ambientColor, next.ambientColor, easedBlend);
-    const sunColor = this._lerpColor(current.sunColor, next.sunColor, easedBlend);
+    const ambientColor = this._lerpColor(
+      current.ambientColor,
+      next.ambientColor,
+      easedBlend
+    );
+    const sunColor = this._lerpColor(
+      current.sunColor,
+      next.sunColor,
+      easedBlend
+    );
     const hemiSky = this._lerpColor(current.hemiSky, next.hemiSky, easedBlend);
-    const hemiGround = this._lerpColor(current.hemiGround, next.hemiGround, easedBlend);
-    const fillColor = this._lerpColor(current.fillColor, next.fillColor, easedBlend);
+    const hemiGround = this._lerpColor(
+      current.hemiGround,
+      next.hemiGround,
+      easedBlend
+    );
+    const fillColor = this._lerpColor(
+      current.fillColor,
+      next.fillColor,
+      easedBlend
+    );
 
-    const ambientIntensity = this._lerp(current.ambientIntensity, next.ambientIntensity, easedBlend);
-    const sunIntensity = this._lerp(current.sunIntensity, next.sunIntensity, easedBlend);
-    const hemiIntensity = this._lerp(current.hemiIntensity, next.hemiIntensity, easedBlend);
-    const fillIntensity = this._lerp(current.fillIntensity, next.fillIntensity, easedBlend);
+    const ambientIntensity = this._lerp(
+      current.ambientIntensity,
+      next.ambientIntensity,
+      easedBlend
+    );
+    const sunIntensity = this._lerp(
+      current.sunIntensity,
+      next.sunIntensity,
+      easedBlend
+    );
+    const hemiIntensity = this._lerp(
+      current.hemiIntensity,
+      next.hemiIntensity,
+      easedBlend
+    );
+    const fillIntensity = this._lerp(
+      current.fillIntensity,
+      next.fillIntensity,
+      easedBlend
+    );
 
     // Apply to scene
     if (this.backgrounds) {
       this.backgrounds.setSkyColor(skyColor);
 
       // Starfield visibility
-      const starfieldVisible = period === 'night' || (period === 'dusk' && blendFactor > 0.7);
+      const starfieldVisible =
+        period === "night" || (period === "dusk" && blendFactor > 0.7);
       this.backgrounds.setStarfieldVisible(starfieldVisible);
     }
 
@@ -2953,13 +3004,13 @@ export class MotosaiGame {
 
   // Helper method to lerp between two hex colors (avoid recreating function each frame)
   _lerpColor(color1, color2, t) {
-    const r1 = (color1 >> 16) & 0xFF;
-    const g1 = (color1 >> 8) & 0xFF;
-    const b1 = color1 & 0xFF;
+    const r1 = (color1 >> 16) & 0xff;
+    const g1 = (color1 >> 8) & 0xff;
+    const b1 = color1 & 0xff;
 
-    const r2 = (color2 >> 16) & 0xFF;
-    const g2 = (color2 >> 8) & 0xFF;
-    const b2 = color2 & 0xFF;
+    const r2 = (color2 >> 16) & 0xff;
+    const g2 = (color2 >> 8) & 0xff;
+    const b2 = color2 & 0xff;
 
     const r = Math.round(r1 + (r2 - r1) * t);
     const g = Math.round(g1 + (g2 - g1) * t);
@@ -3010,16 +3061,28 @@ export class MotosaiGame {
 
     // Update ambient light
     if (this.ambientLight) {
-      const ambientColor = this._lerpColor(from.ambientColor, to.ambientColor, eased);
+      const ambientColor = this._lerpColor(
+        from.ambientColor,
+        to.ambientColor,
+        eased
+      );
       this.ambientLight.color.setHex(ambientColor);
-      this.ambientLight.intensity = this._lerp(from.ambientIntensity, to.ambientIntensity, eased);
+      this.ambientLight.intensity = this._lerp(
+        from.ambientIntensity,
+        to.ambientIntensity,
+        eased
+      );
     }
 
     // Update sun/moon light
     if (this.sunLight) {
       const sunColor = this._lerpColor(from.sunColor, to.sunColor, eased);
       this.sunLight.color.setHex(sunColor);
-      this.sunLight.intensity = this._lerp(from.sunIntensity, to.sunIntensity, eased);
+      this.sunLight.intensity = this._lerp(
+        from.sunIntensity,
+        to.sunIntensity,
+        eased
+      );
 
       // Lerp sun position
       this.sunLight.position.set(
@@ -3035,21 +3098,37 @@ export class MotosaiGame {
       const hemiGround = this._lerpColor(from.hemiGround, to.hemiGround, eased);
       this.hemiLight.color.setHex(hemiSky);
       this.hemiLight.groundColor.setHex(hemiGround);
-      this.hemiLight.intensity = this._lerp(from.hemiIntensity, to.hemiIntensity, eased);
+      this.hemiLight.intensity = this._lerp(
+        from.hemiIntensity,
+        to.hemiIntensity,
+        eased
+      );
     }
 
     // Update fill light
     if (this.fillLight) {
       const fillColor = this._lerpColor(from.fillColor, to.fillColor, eased);
       this.fillLight.color.setHex(fillColor);
-      this.fillLight.intensity = this._lerp(from.fillIntensity, to.fillIntensity, eased);
+      this.fillLight.intensity = this._lerp(
+        from.fillIntensity,
+        to.fillIntensity,
+        eased
+      );
     }
 
     // Update rim light
     if (this.rimLight) {
-      const rimColor = this._lerpColor(from.rimColor || from.fillColor, to.rimColor || to.fillColor, eased);
+      const rimColor = this._lerpColor(
+        from.rimColor || from.fillColor,
+        to.rimColor || to.fillColor,
+        eased
+      );
       this.rimLight.color.setHex(rimColor);
-      this.rimLight.intensity = this._lerp(from.rimIntensity || 0.5, to.rimIntensity || 0.5, eased);
+      this.rimLight.intensity = this._lerp(
+        from.rimIntensity || 0.5,
+        to.rimIntensity || 0.5,
+        eased
+      );
     }
 
     // Smooth starfield fade in/out
@@ -3061,17 +3140,19 @@ export class MotosaiGame {
         const starAlpha = Math.max(0, (eased - 0.5) * 2);
         this.backgrounds.setStarfieldVisible(starAlpha > 0);
         if (this.backgrounds.starfield && this.backgrounds.starfield.material) {
-          this.backgrounds.starfield.material.uniforms.opacity.value = starAlpha;
+          this.backgrounds.starfield.material.uniforms.opacity.value =
+            starAlpha;
         }
         if (this.backgrounds.milkyWay && this.backgrounds.milkyWay.material) {
           this.backgrounds.milkyWay.material.opacity = 0.6 * starAlpha;
         }
       } else if (!to.starfieldVisible && from.starfieldVisible) {
         // Fading out - end at 50% progress
-        const starAlpha = Math.max(0, 1 - (eased * 2));
+        const starAlpha = Math.max(0, 1 - eased * 2);
         this.backgrounds.setStarfieldVisible(starAlpha > 0);
         if (this.backgrounds.starfield && this.backgrounds.starfield.material) {
-          this.backgrounds.starfield.material.uniforms.opacity.value = starAlpha;
+          this.backgrounds.starfield.material.uniforms.opacity.value =
+            starAlpha;
         }
         if (this.backgrounds.milkyWay && this.backgrounds.milkyWay.material) {
           this.backgrounds.milkyWay.material.opacity = 0.6 * starAlpha;
@@ -3079,7 +3160,11 @@ export class MotosaiGame {
       } else {
         // No transition needed
         this.backgrounds.setStarfieldVisible(to.starfieldVisible);
-        if (to.starfieldVisible && this.backgrounds.starfield && this.backgrounds.starfield.material) {
+        if (
+          to.starfieldVisible &&
+          this.backgrounds.starfield &&
+          this.backgrounds.starfield.material
+        ) {
           this.backgrounds.starfield.material.uniforms.opacity.value = 1.0;
         }
       }
@@ -3088,9 +3173,12 @@ export class MotosaiGame {
       const currentSunPos = [
         this._lerp(from.sunPosition[0], to.sunPosition[0], eased),
         this._lerp(from.sunPosition[1], to.sunPosition[1], eased),
-        this._lerp(from.sunPosition[2], to.sunPosition[2], eased)
+        this._lerp(from.sunPosition[2], to.sunPosition[2], eased),
       ];
-      this.backgrounds.setSunMoonPosition(currentSunPos, transition.toTimeOfDay);
+      this.backgrounds.setSunMoonPosition(
+        currentSunPos,
+        transition.toTimeOfDay
+      );
 
       // Update road reflectivity based on time of day
       // Only 'day' is reflective, dawn/dusk/night are not reflective
@@ -3344,7 +3432,6 @@ export class MotosaiGame {
     if (this.hud) {
       this.hud.style.display = this.showDevHUD ? "block" : "none";
     }
-    console.log(`Dev HUD ${this.showDevHUD ? "shown" : "hidden"}`);
   }
 
   toggleCameraMode() {
@@ -3354,11 +3441,9 @@ export class MotosaiGame {
     if (this.isFirstPerson) {
       this.cameraOffset = this.firstPersonOffset.clone();
       this.cameraLookOffset = this.firstPersonLookOffset.clone();
-      console.log("Switched to First Person view");
     } else {
       this.cameraOffset = this.thirdPersonOffset.clone();
       this.cameraLookOffset = this.thirdPersonLookOffset.clone();
-      console.log("Switched to Third Person view");
     }
   }
 
@@ -3368,8 +3453,6 @@ export class MotosaiGame {
     // Toggle the audio state
     const isEnabled = !this.audioManager.isEnabled;
     this.audioManager.setEnabled(isEnabled);
-
-    console.log(`Sound ${isEnabled ? "enabled" : "muted"}`);
 
     // HUD will update automatically in updateHUD()
   }
@@ -3381,12 +3464,6 @@ export class MotosaiGame {
     const leaks = stats.leaks;
 
     // Log to console
-    console.log("═══════════════════════════════════════");
-    console.log("🛡️ STOPPA MEMORY STATISTICS");
-    console.log("═══════════════════════════════════════");
-    console.log(`Total Resources: ${stats.totalResources}`);
-    console.log(`Active Resources: ${stats.activeResources}`);
-    console.log(`Disposed Resources: ${stats.disposedResources}`);
 
     if (stats.memoryUsage) {
       console.log(
@@ -3396,10 +3473,8 @@ export class MotosaiGame {
         (stats.memoryUsage.used / stats.memoryUsage.limit) *
         100
       ).toFixed(1);
-      console.log(`Memory Usage: ${percentage}%`);
     }
 
-    console.log("\n📊 Resources by Type:");
     Object.entries(stats.resourcesByType).forEach(([type, counts]) => {
       console.log(
         `  ${type}: ${counts.active} active, ${counts.disposed} disposed`
@@ -3407,15 +3482,9 @@ export class MotosaiGame {
     });
 
     if (leaks.length > 0) {
-      console.log("\n⚠️ POTENTIAL MEMORY LEAKS:");
-      leaks.forEach((leak) => {
-        console.log(`  - ${leak.type} (ID: ${leak.id}) - Age: ${leak.age}s`);
-      });
+      leaks.forEach((leak) => {});
     } else {
-      console.log("\n✅ No memory leaks detected");
     }
-
-    console.log("═══════════════════════════════════════");
 
     // Show in-game message
     const memUsage = stats.memoryUsage
@@ -3434,20 +3503,14 @@ export class MotosaiGame {
     this.isDead = true;
 
     // Submit final score to leaderboard
-    console.log('🎯 Death triggered - checking submission conditions:');
-    console.log('  multiplayer exists:', !!this.multiplayer);
-    console.log('  socket exists:', !!this.multiplayer?.socket);
-    console.log('  socket connected:', this.multiplayer?.socket?.connected);
-    console.log('  vehiclePassCounter exists:', !!this.vehiclePassCounter);
 
     if (this.vehiclePassCounter) {
       const finalStats = this.vehiclePassCounter.getSessionStats();
 
       // Try socket first, fall back to REST API
       if (this.multiplayer?.socket?.connected) {
-        console.log('✅ Submitting score via WebSocket:', finalStats);
-        this.multiplayer.socket.emit('submit-score', {
-          stats: finalStats
+        this.multiplayer.socket.emit("submit-score", {
+          stats: finalStats,
         });
 
         // Refresh leaderboard after a short delay
@@ -3461,18 +3524,16 @@ export class MotosaiGame {
         }, 1000);
       } else {
         // Fallback: Submit via REST API
-        console.log('⚠️ WebSocket not available, using REST API fallback');
+
         this.submitScoreViaAPI(finalStats);
       }
     } else {
-      console.error('❌ Score NOT submitted - missing vehiclePassCounter');
+      console.error("❌ Score NOT submitted - missing vehiclePassCounter");
     }
 
     // Trigger UFO escape animation
     if (this.ufoController) {
-      this.ufoController.playEscapeAnimation(() => {
-        console.log('UFO escape animation completed');
-      });
+      this.ufoController.playEscapeAnimation(() => {});
     }
 
     // Store race state for later (after death animation completes)
@@ -3525,35 +3586,34 @@ export class MotosaiGame {
       // Get server URL (same logic as LeaderboardUI)
       let serverUrl = import.meta.env.VITE_SERVER_URL;
       if (!serverUrl) {
-        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-          serverUrl = 'http://localhost:8080';
+        if (
+          window.location.hostname === "localhost" ||
+          window.location.hostname === "127.0.0.1"
+        ) {
+          serverUrl = "http://localhost:8080";
         } else {
           serverUrl = window.location.origin;
         }
       }
 
       // Get player ID from localStorage (same as MultiplayerManager does)
-      const playerId = localStorage.getItem('motosai_player_id');
+      const playerId = localStorage.getItem("motosai_player_id");
       if (!playerId) {
-        console.error('❌ No player ID found in localStorage');
+        console.error("❌ No player ID found in localStorage");
         return;
       }
 
-      console.log('📡 Submitting score via REST API:', { playerId, stats });
-
       const response = await fetch(`${serverUrl}/api/leaderboard/submit`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           playerId: playerId,
-          stats: stats
-        })
+          stats: stats,
+        }),
       });
 
       const data = await response.json();
       if (data.success) {
-        console.log('✅ Score submitted successfully via REST API:', data);
-
         // Refresh leaderboard and mobile counter after submission
         setTimeout(() => {
           if (this.leaderboardUI) {
@@ -3564,28 +3624,25 @@ export class MotosaiGame {
           }
         }, 1000);
       } else {
-        console.error('❌ Score submission failed:', data.error);
+        console.error("❌ Score submission failed:", data.error);
       }
     } catch (error) {
-      console.error('❌ Error submitting score via REST API:', error);
+      console.error("❌ Error submitting score via REST API:", error);
     }
   }
 
   positionUFOForRaceStart() {
     // EXACT COPY from respawnPlayer() lines 3108-3181
     if (this.ufoController && this.ufo) {
-      console.log('UFO exists, resetting...');
-
       // Make sure ufoController and game both reference the same UFO
       if (this.ufoController.ufo !== this.ufo) {
-        console.warn('UFO reference mismatch! Syncing...');
+        console.warn("UFO reference mismatch! Syncing...");
         this.ufoController.ufo = this.ufo;
       }
 
       // Cancel any running escape animation and reset escape state
       this.ufoController.escapeAnimationRunning = false;
       this.ufoController.isEscaping = false;
-      console.log('Cancelled escape animation and reset escape state');
 
       // Reset material opacity in case escape animation faded it
       let materialsReset = 0;
@@ -3599,7 +3656,6 @@ export class MotosaiGame {
           child.material.needsUpdate = true;
           materialsReset++;
           if (oldOpacity < 0.1) {
-            console.log('Reset material from', oldOpacity, 'to', child.material.opacity, 'isGlow:', isGlow);
           }
         }
       });
@@ -3609,13 +3665,11 @@ export class MotosaiGame {
         this.ufoController.particleSystem.material.opacity = 0.6;
         this.ufoController.particleSystem.material.needsUpdate = true;
       }
-
-      console.log('UFO materials reset:', materialsReset, 'will be positioned next');
     } else {
-      console.error('UFO or UFOController is null during respawn!', {
+      console.error("UFO or UFOController is null during respawn!", {
         ufoController: !!this.ufoController,
         ufo: !!this.ufo,
-        ufoInScene: this.ufo ? this.scene.children.includes(this.ufo) : false
+        ufoInScene: this.ufo ? this.scene.children.includes(this.ufo) : false,
       });
     }
 
@@ -3623,17 +3677,14 @@ export class MotosaiGame {
     if (this.ufo) {
       this.ufo.position.set(
         this.physics.position.x,
-        30,  // Higher up for more floaty feel
-        this.physics.position.z + 200  // Further ahead
+        30, // Higher up for more floaty feel
+        this.physics.position.z + 200 // Further ahead
       );
       this.ufo.rotation.set(0, 0, 0);
-      console.log('UFO positioned at:', this.ufo.position, 'Player at:', this.physics.position);
     }
   }
 
   respawnPlayer() {
-    console.log('RESPAWNING PLAYER');
-
     // Set isDead to false FIRST to prevent re-triggering
     this.isDead = false;
 
@@ -3683,18 +3734,15 @@ export class MotosaiGame {
     // Reset UFO position AFTER physics reset (so we know player's new position)
     // This needs to happen after all the resets above
     if (this.ufoController && this.ufo) {
-      console.log('UFO exists, resetting...');
-
       // Make sure ufoController and game both reference the same UFO
       if (this.ufoController.ufo !== this.ufo) {
-        console.warn('UFO reference mismatch! Syncing...');
+        console.warn("UFO reference mismatch! Syncing...");
         this.ufoController.ufo = this.ufo;
       }
 
       // Cancel any running escape animation and reset escape state
       this.ufoController.escapeAnimationRunning = false;
       this.ufoController.isEscaping = false;
-      console.log('Cancelled escape animation and reset escape state');
 
       // Reset material opacity in case escape animation faded it
       let materialsReset = 0;
@@ -3708,7 +3756,6 @@ export class MotosaiGame {
           child.material.needsUpdate = true;
           materialsReset++;
           if (oldOpacity < 0.1) {
-            console.log('Reset material from', oldOpacity, 'to', child.material.opacity, 'isGlow:', isGlow);
           }
         }
       });
@@ -3718,13 +3765,11 @@ export class MotosaiGame {
         this.ufoController.particleSystem.material.opacity = 0.6;
         this.ufoController.particleSystem.material.needsUpdate = true;
       }
-
-      console.log('UFO materials reset:', materialsReset, 'will be positioned next');
     } else {
-      console.error('UFO or UFOController is null during respawn!', {
+      console.error("UFO or UFOController is null during respawn!", {
         ufoController: !!this.ufoController,
         ufo: !!this.ufo,
-        ufoInScene: this.ufo ? this.scene.children.includes(this.ufo) : false
+        ufoInScene: this.ufo ? this.scene.children.includes(this.ufo) : false,
       });
     }
 
@@ -3750,11 +3795,10 @@ export class MotosaiGame {
     if (this.ufo) {
       this.ufo.position.set(
         this.physics.position.x,
-        30,  // Higher up for more floaty feel
-        this.physics.position.z + 200  // Further ahead
+        30, // Higher up for more floaty feel
+        this.physics.position.z + 200 // Further ahead
       );
       this.ufo.rotation.set(0, 0, 0);
-      console.log('UFO positioned at:', this.ufo.position, 'Player at:', this.physics.position);
     }
 
     // Clear collision state
@@ -3780,8 +3824,6 @@ export class MotosaiGame {
     if (this.audioManager) {
       this.audioManager.play("revEngine", { clone: true, volume: 0.4 });
     }
-
-    console.log("Player respawned!");
   }
 
   handleBarrierCollision(collision) {
@@ -3850,7 +3892,6 @@ export class MotosaiGame {
 
   handlePerformanceChange(event) {
     const { level, previousLevel } = event.detail;
-    console.log(`Performance level changed from ${previousLevel} to ${level}`);
 
     // Update current config
     this.currentConfig = this.performanceManager.getConfig();
@@ -3919,18 +3960,18 @@ export class MotosaiGame {
       this.useV2Physics = false;
       this.physics = new MotorcyclePhysics();
       this.inputController = new InputController();
-      console.log('Switched to Physics V1 (Original Complex)');
+
     } else if (!this.useV2Physics) {
       this.useV2Physics = true;
       this.physics = new MotorcyclePhysicsV2();
       this.inputController = new InputController();
-      console.log('Switched to Physics V2 (Improved Complex)');
+
     } else {
       this.useSimplePhysics = true;
       this.useV2Physics = false;
       this.physics = new SimpleBikePhysics();
       this.inputController = null;
-      console.log('Switched to Simple Physics (Working)');
+
     }
     
     // Restore position and velocity
@@ -4291,7 +4332,11 @@ export class MotosaiGame {
 
         // Update billboard system (distance-based loading/unloading)
         if (this.billboardSystem) {
-          this.billboardSystem.update(deltaTime, state.position, this.currentTimeOfDay);
+          this.billboardSystem.update(
+            deltaTime,
+            state.position,
+            this.currentTimeOfDay
+          );
         }
 
         // Update HUD
@@ -4363,7 +4408,6 @@ export class MotosaiGame {
       try {
         // Only cleanup if we have WAY too many vehicles
         if (this.traffic && this.traffic.vehicles.length > 25) {
-          console.log("Gentle traffic cleanup:", this.traffic.vehicles.length);
           // Only remove vehicles that are far from player
           const playerZ = this.physics.getState().position.z;
           this.traffic.vehicles = this.traffic.vehicles.filter((vehicle) => {
@@ -4430,14 +4474,14 @@ export class MotosaiGame {
   }
 
   performMemoryCleanup() {
-    console.log('🧹 Performing aggressive memory cleanup...');
-
     // Cleanup old blood tracks
     if (this.bloodTrackSystem) {
       const trackCount = this.bloodTrackSystem.bloodTracks.length;
       if (trackCount > this.bloodTrackSystem.maxTracks * 0.5) {
-        console.log(`Cleaning up ${trackCount} blood tracks`);
-        while (this.bloodTrackSystem.bloodTracks.length > this.bloodTrackSystem.maxTracks * 0.3) {
+        while (
+          this.bloodTrackSystem.bloodTracks.length >
+          this.bloodTrackSystem.maxTracks * 0.3
+        ) {
           const oldTrack = this.bloodTrackSystem.bloodTracks.shift();
           if (oldTrack && oldTrack.mesh) {
             this.scene.remove(oldTrack.mesh);
@@ -4452,7 +4496,6 @@ export class MotosaiGame {
     if (this.traffic) {
       const vehicleCount = this.traffic.vehicles.length;
       if (vehicleCount > 15) {
-        console.log(`Reducing vehicles from ${vehicleCount} to 15`);
         while (this.traffic.vehicles.length > 15) {
           const vehicle = this.traffic.vehicles.pop();
           if (vehicle && vehicle.mesh) {
@@ -4467,8 +4510,6 @@ export class MotosaiGame {
     if (this.stoppa) {
       this.stoppa.cleanup();
     }
-
-    console.log('✅ Memory cleanup complete');
   }
 
   pause() {
@@ -4800,7 +4841,7 @@ export class MotosaiGame {
     // Use Stoppa to clean up any remaining resources
     if (this.stoppa) {
       const stats = this.stoppa.getStats();
-      console.log("[Stoppa] Final cleanup stats:", stats);
+
       this.stoppa.cleanup();
     }
   }

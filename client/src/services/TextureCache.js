@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import * as THREE from "three";
 
 /**
  * Shared texture cache with reference counting and LRU eviction
@@ -20,7 +20,7 @@ export class TextureCache {
       misses: 0,
       evictions: 0,
       loads: 0,
-      errors: 0
+      errors: 0,
     };
   }
 
@@ -36,13 +36,13 @@ export class TextureCache {
       entry.refCount++;
       entry.lastUsed = Date.now();
       this.stats.hits++;
-      console.log(`TextureCache HIT: ${url} (refs: ${entry.refCount})`);
+
       return entry.texture;
     }
 
     // Cache miss - load new texture
     this.stats.misses++;
-    console.log(`TextureCache MISS: ${url} - loading...`);
+
     return this.load(url);
   }
 
@@ -69,8 +69,15 @@ export class TextureCache {
           const size = this.estimateTextureSize(texture);
 
           // Check if we need to evict textures to make room
-          while (this.currentSize + size > this.maxCacheSize && this.cache.size > 0) {
-            console.warn(`TextureCache full (${this.formatBytes(this.currentSize)}/${this.formatBytes(this.maxCacheSize)}) - evicting LRU`);
+          while (
+            this.currentSize + size > this.maxCacheSize &&
+            this.cache.size > 0
+          ) {
+            console.warn(
+              `TextureCache full (${this.formatBytes(
+                this.currentSize
+              )}/${this.formatBytes(this.maxCacheSize)}) - evicting LRU`
+            );
             this.evictLRU();
           }
 
@@ -79,13 +86,12 @@ export class TextureCache {
             texture,
             refCount: 1,
             lastUsed: Date.now(),
-            size
+            size,
           });
 
           this.currentSize += size;
           this.stats.loads++;
 
-          console.log(`TextureCache loaded: ${url} (${this.formatBytes(size)}) - Total: ${this.formatBytes(this.currentSize)}`);
           resolve(texture);
         },
         (progress) => {
@@ -106,14 +112,14 @@ export class TextureCache {
    */
   release(url) {
     if (!this.cache.has(url)) {
-      console.warn(`TextureCache: Attempted to release non-cached texture: ${url}`);
+      console.warn(
+        `TextureCache: Attempted to release non-cached texture: ${url}`
+      );
       return;
     }
 
     const entry = this.cache.get(url);
     entry.refCount--;
-
-    console.log(`TextureCache RELEASE: ${url} (refs: ${entry.refCount})`);
 
     // If no more references, dispose immediately
     if (entry.refCount <= 0) {
@@ -140,8 +146,6 @@ export class TextureCache {
     // Update memory tracking
     this.currentSize -= entry.size;
     this.cache.delete(url);
-
-    console.log(`TextureCache DISPOSED: ${url} (${this.formatBytes(entry.size)}) - Total: ${this.formatBytes(this.currentSize)}`);
   }
 
   /**
@@ -162,11 +166,12 @@ export class TextureCache {
     }
 
     if (oldestUrl) {
-      console.log(`TextureCache EVICTING LRU: ${oldestUrl}`);
       this.dispose(oldestUrl);
       this.stats.evictions++;
     } else {
-      console.warn('TextureCache: Cannot evict - all textures have active references!');
+      console.warn(
+        "TextureCache: Cannot evict - all textures have active references!"
+      );
     }
   }
 
@@ -196,15 +201,19 @@ export class TextureCache {
       cachedTextures: this.cache.size,
       memoryUsed: this.currentSize,
       memoryMax: this.maxCacheSize,
-      memoryPercent: (this.currentSize / this.maxCacheSize * 100).toFixed(1),
+      memoryPercent: ((this.currentSize / this.maxCacheSize) * 100).toFixed(1),
       hits: this.stats.hits,
       misses: this.stats.misses,
-      hitRate: this.stats.hits + this.stats.misses > 0
-        ? (this.stats.hits / (this.stats.hits + this.stats.misses) * 100).toFixed(1)
-        : 0,
+      hitRate:
+        this.stats.hits + this.stats.misses > 0
+          ? (
+              (this.stats.hits / (this.stats.hits + this.stats.misses)) *
+              100
+            ).toFixed(1)
+          : 0,
       evictions: this.stats.evictions,
       loads: this.stats.loads,
-      errors: this.stats.errors
+      errors: this.stats.errors,
     };
   }
 
@@ -213,14 +222,16 @@ export class TextureCache {
    */
   logStats() {
     const stats = this.getStats();
-    console.log('📊 TextureCache Stats:', {
+    console.log("📊 TextureCache Stats:", {
       cached: stats.cachedTextures,
-      memory: `${this.formatBytes(stats.memoryUsed)} / ${this.formatBytes(stats.memoryMax)} (${stats.memoryPercent}%)`,
+      memory: `${this.formatBytes(stats.memoryUsed)} / ${this.formatBytes(
+        stats.memoryMax
+      )} (${stats.memoryPercent}%)`,
       hitRate: `${stats.hitRate}%`,
       hits: stats.hits,
       misses: stats.misses,
       evictions: stats.evictions,
-      errors: stats.errors
+      errors: stats.errors,
     });
   }
 
@@ -230,9 +241,9 @@ export class TextureCache {
    * @returns {string}
    */
   formatBytes(bytes) {
-    if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
   }
 
   /**
@@ -244,7 +255,6 @@ export class TextureCache {
     }
     this.cache.clear();
     this.currentSize = 0;
-    console.log('TextureCache cleared');
   }
 }
 
@@ -256,10 +266,8 @@ export function getTextureCache() {
     instance = new TextureCache();
 
     // Make available for debugging
-    if (typeof window !== 'undefined') {
+    if (typeof window !== "undefined") {
       window.textureCache = instance;
-      console.log('💾 TextureCache initialized (15MB limit)');
-      console.log('Debug: window.textureCache.logStats()');
     }
   }
   return instance;
