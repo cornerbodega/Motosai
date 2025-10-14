@@ -79,9 +79,11 @@ export class UFORaceIntro {
 
   async loadEarth() {
     // Create realistic Earth with textures
-    const earthColorTexture = this.textureLoader.load("/textures/earth/earth_color_10K.png");
-    const earthRoughnessMap = this.textureLoader.load("/textures/earth/earth_landocean_4K.png");
-    const earthHeightMap = this.textureLoader.load("/textures/earth/topography_5K.png");
+    // Load large textures from GCS to avoid Cloud Run memory limits
+    const GCS_BASE = "https://storage.googleapis.com/motosai-app";
+    const earthColorTexture = this.textureLoader.load(`${GCS_BASE}/textures/earth/earth_color_10K.png`);
+    const earthRoughnessMap = this.textureLoader.load(`${GCS_BASE}/textures/earth/earth_landocean_4K.png`);
+    const earthHeightMap = this.textureLoader.load(`${GCS_BASE}/textures/earth/topography_5K.png`);
 
     // Track textures for disposal
     this.textures.push(earthColorTexture, earthRoughnessMap, earthHeightMap);

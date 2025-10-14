@@ -293,8 +293,15 @@ export class MotosaiGame {
       this.initMinimap();
       // Powerup system removed
 
-      // Initialize vehicle pass counter, leaderboard, and account modal AFTER player selection
+      // Initialize vehicle pass counter BEFORE multiplayer
       this.vehiclePassCounter = new VehiclePassCounter(this);
+
+      // Initialize multiplayer (traffic already initialized during intro->selection transition)
+      if (this.isMultiplayerEnabled) {
+        this.initMultiplayer();
+      }
+
+      // Initialize leaderboard and account modal AFTER multiplayer
       this.leaderboardUI = new LeaderboardUI(this);
       this.accountModal = new AccountModal(this);
 
@@ -331,11 +338,6 @@ export class MotosaiGame {
             this.vehiclePassCounter.fetchPlayerBest();
           }
         });
-      }
-
-      // Initialize multiplayer (traffic already initialized during intro->selection transition)
-      if (this.isMultiplayerEnabled) {
-        this.initMultiplayer();
       }
 
       this.gameStarted = true;
@@ -764,10 +766,8 @@ export class MotosaiGame {
           : "https://motosai-websocket-9z3mknbcfa-uw.a.run.app",
     };
 
-    // 🚨 EMERGENCY: Memory Profiler disabled - may be causing its own leak
-    console.error("🚨 MemoryProfiler DISABLED due to catastrophic leak");
+    // Memory Profiler disabled - can be re-enabled for debugging if needed
     // this.memoryProfiler = new MemoryProfiler(this.renderer, this.scene, this.camera, profilerConfig);
-    console.log("%c📡 Real-time monitoring enabled", "color: #00ff00");
 
     // Ambient light (color will be set by natural lighting calculation)
     this.ambientLight = new THREE.AmbientLight(0xffffff, 0.35);
@@ -1842,18 +1842,9 @@ export class MotosaiGame {
     }
 
     const players = this.multiplayer.getPlayerList();
-    const playerListHTML = players
-      .map(
-        (p) =>
-          `<div style="color: ${
-            p.id === this.multiplayer.playerId ? "#00ff00" : "white"
-          }">${p.username}</div>`
-      )
-      .join("");
 
     this.multiplayerHUD.innerHTML = `
       <div style="font-size: 14px; margin-bottom: 5px;">🏍️ Online Players (${players.length})</div>
-      ${playerListHTML}
     `;
   }
 
@@ -3449,26 +3440,32 @@ export class MotosaiGame {
     console.log('  socket connected:', this.multiplayer?.socket?.connected);
     console.log('  vehiclePassCounter exists:', !!this.vehiclePassCounter);
 
-    if (this.multiplayer?.socket && this.vehiclePassCounter) {
+    if (this.vehiclePassCounter) {
       const finalStats = this.vehiclePassCounter.getSessionStats();
-      console.log('✅ Submitting final score:', finalStats);
-      this.multiplayer.socket.emit('submit-score', {
-        stats: finalStats
-      });
 
-      // Refresh leaderboard after a short delay to show updated rankings
-      setTimeout(() => {
-        if (this.leaderboardUI) {
-          this.leaderboardUI.fetchLeaderboard();
-        }
-      }, 1000);
+      // Try socket first, fall back to REST API
+      if (this.multiplayer?.socket?.connected) {
+        console.log('✅ Submitting score via WebSocket:', finalStats);
+        this.multiplayer.socket.emit('submit-score', {
+          stats: finalStats
+        });
+
+        // Refresh leaderboard after a short delay
+        setTimeout(() => {
+          if (this.leaderboardUI) {
+            this.leaderboardUI.fetchLeaderboard();
+          }
+          if (this.vehiclePassCounter && this.vehiclePassCounter.isMobile) {
+            this.vehiclePassCounter.fetchPlayerBest();
+          }
+        }, 1000);
+      } else {
+        // Fallback: Submit via REST API
+        console.log('⚠️ WebSocket not available, using REST API fallback');
+        this.submitScoreViaAPI(finalStats);
+      }
     } else {
-      console.error('❌ Score NOT submitted - missing requirements:', {
-        hasMultiplayer: !!this.multiplayer,
-        hasSocket: !!this.multiplayer?.socket,
-        socketConnected: this.multiplayer?.socket?.connected,
-        hasVehicleCounter: !!this.vehiclePassCounter
-      });
+      console.error('❌ Score NOT submitted - missing vehiclePassCounter');
     }
 
     // Trigger UFO escape animation
@@ -3521,6 +3518,57 @@ export class MotosaiGame {
     // Stop the bike completely
     this.physics.velocity = { x: 0, y: 0, z: 0 };
     this.physics.speed = 0;
+  }
+
+  async submitScoreViaAPI(stats) {
+    try {
+      // Get server URL (same logic as LeaderboardUI)
+      let serverUrl = import.meta.env.VITE_SERVER_URL;
+      if (!serverUrl) {
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+          serverUrl = 'http://localhost:8080';
+        } else {
+          serverUrl = window.location.origin;
+        }
+      }
+
+      // Get player ID from localStorage (same as MultiplayerManager does)
+      const playerId = localStorage.getItem('motosai_player_id');
+      if (!playerId) {
+        console.error('❌ No player ID found in localStorage');
+        return;
+      }
+
+      console.log('📡 Submitting score via REST API:', { playerId, stats });
+
+      const response = await fetch(`${serverUrl}/api/leaderboard/submit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          playerId: playerId,
+          stats: stats
+        })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        console.log('✅ Score submitted successfully via REST API:', data);
+
+        // Refresh leaderboard and mobile counter after submission
+        setTimeout(() => {
+          if (this.leaderboardUI) {
+            this.leaderboardUI.fetchLeaderboard();
+          }
+          if (this.vehiclePassCounter && this.vehiclePassCounter.isMobile) {
+            this.vehiclePassCounter.fetchPlayerBest();
+          }
+        }, 1000);
+      } else {
+        console.error('❌ Score submission failed:', data.error);
+      }
+    } catch (error) {
+      console.error('❌ Error submitting score via REST API:', error);
+    }
   }
 
   positionUFOForRaceStart() {

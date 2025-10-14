@@ -23,6 +23,7 @@ export class VehiclePassCounter {
     // Player best score
     this.playerBest = null;
     this.playerRank = null;
+    this.playerName = null;
 
     // Detect mobile
     this.isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
@@ -50,8 +51,10 @@ export class VehiclePassCounter {
 
     // Show high score and rank on mobile (since leaderboard is hidden)
     const mobileStatsHTML = this.isMobile ? `
-      <div id="player-best" style="font-size: 14px; color: #aaa; margin-top: 10px;">
-        Best: -- | Rank: --
+      <div id="player-best" style="font-size: 14px; margin-top: 10px; display: flex; flex-direction: column; align-items: flex-end; gap: 2px;">
+        <div id="player-name" style="color: white; margin-bottom: 5px;">--</div>
+        <div style="color: #ffa500;">Best: <span id="best-value" style="color: white; font-weight: bold;">--</span></div>
+        <div style="color: #ffa500;">Rank: <span id="rank-value" style="color: white; font-weight: bold;">--</span></div>
       </div>
     ` : '';
 
@@ -252,6 +255,10 @@ export class VehiclePassCounter {
         return;
       }
 
+      // Get username from multiplayer manager (same as desktop)
+      const username = this.game.multiplayerManager?.username || this.game.multiplayer?.username;
+      this.playerName = username || playerId.substring(0, 8); // Show first 8 chars of ID if no username
+
       const serverUrl = this.game.multiplayerManager?.serverUrl || this.game.multiplayer?.serverUrl || 'http://localhost:8080';
 
       // Fetch player's best score
@@ -279,10 +286,24 @@ export class VehiclePassCounter {
   updateBestScoreDisplay() {
     if (!this.bestScoreElement) return;
 
+    const nameText = this.playerName || '--';
     const bestText = this.playerBest !== null ? this.playerBest : '--';
-    const rankText = this.playerRank !== null ? this.playerRank : '--';
+    const rankText = this.playerRank !== null ? `#${this.playerRank}` : '--';
 
-    this.bestScoreElement.innerHTML = `Best: <span style="color: #00ff00;">${bestText}</span> | Rank: <span style="color: #ffa500;">#${rankText}</span>`;
+    // Update the individual span elements
+    const playerNameElement = document.getElementById('player-name');
+    const bestValueElement = document.getElementById('best-value');
+    const rankValueElement = document.getElementById('rank-value');
+
+    if (playerNameElement) {
+      playerNameElement.textContent = nameText;
+    }
+    if (bestValueElement) {
+      bestValueElement.textContent = bestText;
+    }
+    if (rankValueElement) {
+      rankValueElement.textContent = rankText;
+    }
   }
 
   dispose() {

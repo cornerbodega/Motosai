@@ -1,7 +1,19 @@
 export class LeaderboardUI {
   constructor(game) {
     this.game = game;
-    this.serverUrl = import.meta.env.VITE_SERVER_URL || 'http://localhost:8080';
+    // Use environment variable, or hardcoded backend URL as fallback
+    let serverUrl = import.meta.env.VITE_SERVER_URL;
+    if (!serverUrl) {
+      // If no env var, check if we're on localhost or deployed
+      if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+        serverUrl = 'http://localhost:8080';
+      } else {
+        // In production, use the backend API server (not the same origin as frontend)
+        serverUrl = 'https://motosai-680702586477.us-central1.run.app';
+      }
+    }
+    this.serverUrl = serverUrl;
+    console.log('LeaderboardUI: Using server URL:', this.serverUrl);
 
     // Separate data storage for each leaderboard type
     this.leaderboardData = {
@@ -32,12 +44,16 @@ export class LeaderboardUI {
     }
 
     this.createUI();
-    this.fetchLeaderboard();
+    // Don't fetch immediately - wait for multiplayer to connect
+    // this.fetchLeaderboard();
     this.setupKeyboardControls();
 
-    // Auto-update leaderboard
+    // Auto-update leaderboard (only if connected)
     this.updateTimer = setInterval(() => {
-      this.fetchLeaderboard();
+      // Only fetch if multiplayer is connected
+      if (this.game.multiplayerManager?.playerId || this.game.multiplayer?.playerId) {
+        this.fetchLeaderboard();
+      }
     }, this.updateInterval);
   }
 
@@ -281,7 +297,6 @@ export class LeaderboardUI {
       .leaderboard-entry.current-player {
         border: 2px solid #00ff00;
         background: rgba(0, 255, 0, 0.1);
-        font-weight: bold;
       }
 
       .rank-medal {
@@ -346,6 +361,11 @@ export class LeaderboardUI {
   }
 
   async fetchLeaderboard() {
+    // Skip if on mobile (UI not initialized)
+    if (this.isMobile) {
+      return;
+    }
+
     try {
       // Show loading
       this.loadingElement.style.display = 'block';
@@ -369,6 +389,12 @@ export class LeaderboardUI {
           fetch(`${this.serverUrl}/api/leaderboard/context-speed/${playerId}?daily=true`),
           fetch(`${this.serverUrl}/api/leaderboard/player/${playerId}`)
         ]);
+
+        // Check if responses are OK before parsing
+        if (!carsResponse.ok || !speedResponse.ok || !dailyCarsResponse.ok ||
+            !dailySpeedResponse.ok || !playerResponse.ok) {
+          throw new Error('Server returned error response');
+        }
 
         // Parse all responses
         const carsData = await carsResponse.json();
@@ -406,6 +432,11 @@ export class LeaderboardUI {
           fetch(`${this.serverUrl}/api/leaderboard/daily-speed?limit=3`)
         ]);
 
+        // Check if responses are OK before parsing
+        if (!carsResponse.ok || !speedResponse.ok || !dailyCarsResponse.ok || !dailySpeedResponse.ok) {
+          throw new Error('Server returned error response');
+        }
+
         // Parse all responses
         const carsData = await carsResponse.json();
         const speedData = await speedResponse.json();
@@ -440,6 +471,11 @@ export class LeaderboardUI {
   }
 
   updateDisplay() {
+    // Skip if on mobile (UI not initialized)
+    if (this.isMobile) {
+      return;
+    }
+
     const dataSource = this.showDaily ? this.dailyLeaderboardData : this.leaderboardData;
     const data = dataSource[this.leaderboardType];
 
@@ -495,7 +531,7 @@ export class LeaderboardUI {
 
       rankSection.innerHTML = `
         ${medal ? `<span class="rank-medal">${medal}</span>` : ''}
-        <span style="color: ${isCurrentPlayer ? 'white' : 'rgba(255, 255, 255, 0.6)'}; font-size: 10px; ${isCurrentPlayer ? 'font-weight: bold !important;' : ''}">#${rank}</span>
+        <span style="color: ${isCurrentPlayer ? 'white' : 'rgba(255, 255, 255, 0.6)'}; font-size: 10px;">#${rank}</span>
       `;
 
       // Player name
@@ -507,25 +543,8 @@ export class LeaderboardUI {
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-        ${isCurrentPlayer ? 'font-weight: bold !important; cursor: pointer; text-decoration: underline;' : ''}
       `;
       nameSection.textContent = entry.username || 'Anonymous';
-
-      // Make current player's name clickable
-      if (isCurrentPlayer) {
-        nameSection.title = 'Click to manage your account';
-        nameSection.onclick = () => {
-          if (this.game.accountModal) {
-            this.game.accountModal.show();
-          }
-        };
-        nameSection.onmouseover = () => {
-          nameSection.style.color = '#aaaaaa';
-        };
-        nameSection.onmouseout = () => {
-          nameSection.style.color = 'white';
-        };
-      }
 
       // Score section - display different metric based on type
       const scoreSection = document.createElement('div');
@@ -533,7 +552,6 @@ export class LeaderboardUI {
         font-size: ${isCurrentPlayer ? '14px' : '12px'};
         font-weight: bold;
         color: white;
-        ${isCurrentPlayer ? 'font-weight: 900 !important;' : ''}
       `;
 
       // Format the score based on leaderboard type

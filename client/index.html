@@ -387,6 +387,12 @@
       let pauseHandler = null;
 
       window.startGame = function () {
+        // Hide the dev log button when game starts
+        const devLogButton = document.getElementById("devLogButton");
+        if (devLogButton) {
+          devLogButton.style.display = "none";
+        }
+
         // Dispose of any existing game first
         if (game && game.dispose) {
           game.dispose();

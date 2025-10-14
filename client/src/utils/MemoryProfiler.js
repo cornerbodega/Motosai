@@ -199,17 +199,22 @@ export class MemoryProfiler {
 
         // Track when texture is first used
         const originalNeedsUpdate = Object.getOwnPropertyDescriptor(THREE[type].prototype, 'needsUpdate');
-        if (originalNeedsUpdate) {
-          Object.defineProperty(THREE[type].prototype, 'needsUpdate', {
-            get: originalNeedsUpdate.get,
-            set: function(value) {
-              if (!this._memoryTracked && value) {
-                this._memoryTracked = true;
-                self.trackAllocation('texture', this.uuid, this, type);
-              }
-              return originalNeedsUpdate.set.call(this, value);
-            }
-          });
+        if (originalNeedsUpdate && originalNeedsUpdate.configurable) {
+          try {
+            Object.defineProperty(THREE[type].prototype, 'needsUpdate', {
+              get: originalNeedsUpdate.get,
+              set: function(value) {
+                if (!this._memoryTracked && value) {
+                  this._memoryTracked = true;
+                  self.trackAllocation('texture', this.uuid, this, type);
+                }
+                return originalNeedsUpdate.set.call(this, value);
+              },
+              configurable: true
+            });
+          } catch (e) {
+            console.warn(`Could not patch ${type}.needsUpdate (Safari):`, e.message);
+          }
         }
       }
     });

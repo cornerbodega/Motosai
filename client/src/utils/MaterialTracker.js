@@ -47,6 +47,13 @@ export class MaterialTracker {
         this.originalConstructors[materialType] = OriginalConstructor;
 
         try {
+          // Check if the property is configurable (Safari compatibility)
+          const descriptor = Object.getOwnPropertyDescriptor(THREE, materialType);
+          if (descriptor && !descriptor.configurable) {
+            console.warn(`Could not patch ${materialType}: property is not configurable (Safari)`);
+            return;
+          }
+
           // Create a Proxy that intercepts constructor calls
           const ProxyConstructor = new Proxy(OriginalConstructor, {
             construct(target, args) {
@@ -337,10 +344,12 @@ export class MaterialTracker {
   }
 }
 
-// Auto-start tracking with error handling
-try {
-  new MaterialTracker();
-} catch (error) {
-  console.warn('Material tracking failed to start:', error.message);
-  console.log('Falling back to manual tracking via MaterialManager');
-}
+// Auto-start tracking disabled to prevent WebGL initialization issues in Firefox/Safari
+// The MaterialTracker Proxy wrapping can interfere with WebGL context creation
+// To enable: import and call new MaterialTracker() manually after WebGL is initialized
+// try {
+//   new MaterialTracker();
+// } catch (error) {
+//   console.warn('Material tracking failed to start:', error.message);
+//   console.log('Falling back to manual tracking via MaterialManager');
+// }
