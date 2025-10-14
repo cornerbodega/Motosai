@@ -1379,12 +1379,11 @@ export class MotosaiGame {
   initBillboards() {
     this.billboardSystem = new BillboardSystem(this.scene);
 
-    // Create billboards with new textures
-    // Using random selection from all available textures (including your new ones)
+    // Create billboards with random selection from all textures
     this.billboardSystem.createTestBillboards(10, 500);
 
     // Alternative options you can use:
-    // Option 1: Use all new textures in sequence
+    // Option 1: Use all available textures in sequence
     // const allTextures = this.billboardSystem.getAvailableTextures();
     // this.billboardSystem.createBillboardsWithTextures(allTextures, 500, 100);
 

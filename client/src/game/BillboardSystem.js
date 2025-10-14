@@ -305,9 +305,10 @@ export class BillboardSystem {
     const sides = ["left", "right"];
     const types = ["large-dual", "large-single", "small"]; // Billboard types
 
-    // Array of available billboard textures
+    // Hardcoded array of all available billboard textures
     const billboardTextures = [
       "ai-slop-mag.jpg",
+      "balding-flaming-hairspray.jpg",
       "hungry.jpg",
       "injury.jpg",
       "marker.jpg",
@@ -421,6 +422,7 @@ export class BillboardSystem {
   getAvailableTextures() {
     return [
       "ai-slop-mag.jpg",
+      "balding-flaming-hairspray.jpg",
       "hungry.jpg",
       "injury.jpg",
       "marker.jpg",

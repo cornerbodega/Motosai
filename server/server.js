@@ -58,6 +58,55 @@ app.get("/api/hello", (req, res) => {
   });
 });
 
+// Billboard textures endpoint - dynamically scan available textures
+app.get("/api/billboards/textures", (req, res) => {
+  try {
+    // Path to billboard textures - they are in the client/public folder
+    const billboardsPath = path.join(__dirname, "..", "client", "public", "textures", "billboards");
+
+    // Check if directory exists
+    if (!fs.existsSync(billboardsPath)) {
+      console.warn("Billboard textures directory not found:", billboardsPath);
+      return res.json({
+        success: true,
+        textures: ["default.png"],
+        message: "Using default texture only"
+      });
+    }
+
+    // Read all files in the directory
+    const files = fs.readdirSync(billboardsPath);
+
+    // Filter for image files (jpg, jpeg, png)
+    const textureFiles = files.filter(file => {
+      const ext = path.extname(file).toLowerCase();
+      return ['.jpg', '.jpeg', '.png'].includes(ext);
+    });
+
+    // Sort alphabetically but keep default.png at the end
+    textureFiles.sort((a, b) => {
+      if (a === 'default.png') return 1;
+      if (b === 'default.png') return -1;
+      return a.localeCompare(b);
+    });
+
+    console.log(`Found ${textureFiles.length} billboard textures:`, textureFiles);
+
+    res.json({
+      success: true,
+      textures: textureFiles,
+      count: textureFiles.length
+    });
+  } catch (error) {
+    console.error("Error scanning billboard textures:", error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      textures: ["default.png"]
+    });
+  }
+});
+
 // Session tracking - each page load creates a new session record
 const activeSessions = new Map(); // socketId -> sessionRecord
 
