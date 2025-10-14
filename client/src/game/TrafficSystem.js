@@ -149,6 +149,35 @@ export class TrafficSystem {
     }
   }
 
+  // Helper method to validate that a lane change is to an adjacent lane
+  isAdjacentLane(currentLane, targetLane) {
+    // Lanes are 0, 1, 2
+    // Adjacent means the difference is exactly 1
+    return Math.abs(targetLane - currentLane) === 1;
+  }
+
+  // Helper method to validate and correct lane assignments
+  validateLaneChange(currentLane, targetLane) {
+    // If target is same as current, no change needed
+    if (targetLane === currentLane) return targetLane;
+
+    // Ensure lanes are within valid range (0-2)
+    if (targetLane < 0) return 0;
+    if (targetLane > 2) return 2;
+
+    // If trying to move more than one lane, limit to adjacent lane
+    if (Math.abs(targetLane - currentLane) > 1) {
+      // Move only one lane in the intended direction
+      if (targetLane > currentLane) {
+        return Math.min(currentLane + 1, 2); // Move right by one lane
+      } else {
+        return Math.max(currentLane - 1, 0); // Move left by one lane
+      }
+    }
+
+    return targetLane; // Valid adjacent lane change
+  }
+
   // Helper methods for advanced AI
   isLaneClearAhead(vehicle, lane, distance) {
     for (const other of this.vehicles) {
@@ -397,16 +426,21 @@ export class TrafficSystem {
       const type =
         this.vehicleTypes.find((t) => t.type === vehicleData.type) ||
         this.vehicleTypes[0];
+
+      // Validate lanes to ensure they are within bounds
+      const validatedLane = Math.max(0, Math.min(2, vehicleData.lane || 0));
+      const validatedTargetLane = this.validateLaneChange(validatedLane, vehicleData.targetLane || validatedLane);
+
       vehicle = {
         id: vehicleData.id,
         type: vehicleData.type,
         mesh: this.createVehicleMesh(type),
-        lane: vehicleData.lane,
+        lane: validatedLane,
         subLane:
           vehicleData.subLane !== undefined
             ? vehicleData.subLane
             : Math.floor(Math.random() * 3), // Random default if not specified
-        targetLane: vehicleData.targetLane,
+        targetLane: validatedTargetLane,
         targetSubLane:
           vehicleData.targetSubLane !== undefined
             ? vehicleData.targetSubLane
@@ -1433,25 +1467,32 @@ export class TrafficSystem {
   }
 
   attemptLaneChange(vehicle, targetLane = null, requiredGap = null) {
-    // If target lane specified, use it; otherwise pick randomly
+    // If target lane specified, validate it; otherwise pick randomly from adjacent lanes
     if (targetLane === null) {
-      // Determine possible lanes (0-2)
+      // Determine possible ADJACENT lanes only
       const possibleLanes = [];
 
-      if (vehicle.lane === 0) possibleLanes.push(1); // Can move right
+      if (vehicle.lane === 0) possibleLanes.push(1); // Can move right to adjacent lane
       if (vehicle.lane === 1) {
-        possibleLanes.push(0); // Can move left
-        possibleLanes.push(2); // Can move right
+        possibleLanes.push(0); // Can move left to adjacent lane
+        possibleLanes.push(2); // Can move right to adjacent lane
       }
-      if (vehicle.lane === 2) possibleLanes.push(1); // Can move left
+      if (vehicle.lane === 2) possibleLanes.push(1); // Can move left to adjacent lane
 
       if (possibleLanes.length === 0) return false;
       targetLane =
         possibleLanes[Math.floor(Math.random() * possibleLanes.length)];
+    } else {
+      // Validate that the target lane is adjacent
+      if (!this.isAdjacentLane(vehicle.lane, targetLane)) {
+        // If not adjacent, adjust to the closest adjacent lane
+        targetLane = this.validateLaneChange(vehicle.lane, targetLane);
+      }
     }
 
-    // Check if lane change is safe
-    if (targetLane >= 0 && targetLane <= 2 && targetLane !== vehicle.lane) {
+    // Check if lane change is safe and valid (adjacent only)
+    if (targetLane >= 0 && targetLane <= 2 && targetLane !== vehicle.lane &&
+        this.isAdjacentLane(vehicle.lane, targetLane)) {
       // Pick a random sublane when changing lanes for more variety
       let targetSubLane = Math.floor(Math.random() * 3); // Random sublane 0, 1, or 2
 
@@ -1802,9 +1843,16 @@ export class TrafficSystem {
           update.velocity.z
         );
 
-        // Update lane info
-        vehicle.lane = update.lane;
-        vehicle.targetLane = update.targetLane;
+        // Update lane info with validation to ensure only adjacent lane changes
+        const validatedLane = Math.max(0, Math.min(2, update.lane));
+        const validatedTargetLane = this.validateLaneChange(vehicle.lane, update.targetLane);
+
+        // Only update lane if it's a valid change (adjacent or same)
+        if (this.isAdjacentLane(vehicle.lane, validatedLane) || vehicle.lane === validatedLane) {
+          vehicle.lane = validatedLane;
+        }
+
+        vehicle.targetLane = validatedTargetLane;
         vehicle.laneChangeProgress = update.laneChangeProgress;
         vehicle.speed = update.speed;
         vehicle.isBraking = update.isBraking;
