@@ -81,18 +81,50 @@ export class UFORaceIntro {
     // Create realistic Earth with textures
     // Load large textures from GCS to avoid Cloud Run memory limits
     const GCS_BASE = "https://storage.googleapis.com/motosai-app";
-    const earthColorTexture = this.textureLoader.load(
-      `${GCS_BASE}/textures/earth/earth_color_10K.png`
-    );
-    const earthRoughnessMap = this.textureLoader.load(
-      `${GCS_BASE}/textures/earth/earth_landocean_4K.png`
-    );
-    const earthHeightMap = this.textureLoader.load(
-      `${GCS_BASE}/textures/earth/topography_5K.png`
-    );
+
+    // Create promises for texture loading
+    const loadTexture = (url) => {
+      return new Promise((resolve, reject) => {
+        console.log(`Loading texture: ${url}`);
+        this.textureLoader.load(
+          url,
+          (texture) => {
+            console.log(`Loaded texture: ${url}`);
+            resolve(texture);
+          },
+          (progress) => {
+            // Log loading progress for large textures
+            if (progress.lengthComputable) {
+              const percentComplete = (progress.loaded / progress.total) * 100;
+              console.log(`Loading ${url}: ${percentComplete.toFixed(1)}%`);
+            }
+          },
+          (error) => {
+            console.error(`Failed to load texture: ${url}`, error);
+            // Resolve with a default texture instead of rejecting
+            const defaultTexture = new THREE.Texture();
+            defaultTexture.image = new Image();
+            defaultTexture.image.width = 1;
+            defaultTexture.image.height = 1;
+            resolve(defaultTexture);
+          }
+        );
+      });
+    };
+
+    // Load all Earth textures in parallel and wait for them
+    // Including atmosphere texture in the same batch
+    const [earthColorTexture, earthRoughnessMap, earthHeightMap, atmosphereTexture] = await Promise.all([
+      loadTexture(`${GCS_BASE}/textures/earth/earth_color_10K.png`),
+      loadTexture(`${GCS_BASE}/textures/earth/earth_landocean_4K.png`),
+      loadTexture(`${GCS_BASE}/textures/earth/topography_5K.png`),
+      loadTexture("/textures/smoke/fog3.png")
+    ]);
+
+    console.log("All Earth textures loaded successfully");
 
     // Track textures for disposal
-    this.textures.push(earthColorTexture, earthRoughnessMap, earthHeightMap);
+    this.textures.push(earthColorTexture, earthRoughnessMap, earthHeightMap, atmosphereTexture);
 
     const earthGeometry = new THREE.SphereGeometry(1, 64, 64);
     const earthMaterial = new THREE.MeshStandardMaterial({
@@ -111,11 +143,6 @@ export class UFORaceIntro {
     this.scene.add(this.earthModel);
 
     // Create atmosphere layer - match RhymeWithUs exactly
-    const atmosphereTexture = this.textureLoader.load(
-      "/textures/smoke/fog3.png"
-    );
-    this.textures.push(atmosphereTexture);
-
     const atmosphereGeometry = new THREE.SphereGeometry(1, 1024, 256);
     const atmosphereMaterial = new THREE.MeshStandardMaterial({
       transparent: true,

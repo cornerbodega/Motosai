@@ -259,10 +259,6 @@
       </div>
 
       <div id="startScreen">
-        <div style="color: white; font-size: 14px; margin-bottom: 20px; opacity: 0.7;">
-          <div>Visitors: <span id="visitor-count-start">...</span></div>
-          <div>Visits: <span id="visit-count-start">...</span></div>
-        </div>
         <img src="/mt logo-brown-green.png" alt="Motosai Logo" class="logo" />
         <h1>🏍️ MOTOSAI</h1>
         <p style="color: white; font-size: 18px; margin-bottom: 10px; opacity: 0.9;">by marvin.technology</p>
@@ -344,24 +340,20 @@
       }
 
       function updateCounts(visitors, visits) {
-        // Update visitor count
+        // Update visitor count on loading screen only
         const visitorElement = document.getElementById('visitor-count');
-        const visitorElementStart = document.getElementById('visitor-count-start');
         if (visitorElement) visitorElement.textContent = visitors.toLocaleString();
-        if (visitorElementStart) visitorElementStart.textContent = visitors.toLocaleString();
 
-        // Update visit count
+        // Update visit count on loading screen only
         const visitElement = document.getElementById('visit-count');
-        const visitElementStart = document.getElementById('visit-count-start');
         if (visitElement) visitElement.textContent = visits.toLocaleString();
-        if (visitElementStart) visitElementStart.textContent = visits.toLocaleString();
       }
 
-      // Fetch initial count
+      // Fetch initial count ONCE on page load
       fetchVisitorCount();
 
-      // Poll for updates every 3 seconds for more responsive updates
-      window.visitorCountInterval = setInterval(fetchVisitorCount, 3000);
+      // NO POLLING - counts will be updated via WebSocket events
+      // The server broadcasts 'visitor-count-update' when new visitors join
 
       // Loading simulation
       function updateLoading() {
