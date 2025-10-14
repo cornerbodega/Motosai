@@ -201,6 +201,32 @@
         font-size: 48px;
       }
 
+      #devLogButton {
+        position: absolute;
+        bottom: 20px;
+        right: 20px;
+        padding: 12px 24px;
+        font-size: 14px;
+        color: white;
+        background: rgba(102, 126, 234, 0.9);
+        border: 2px solid rgba(255, 255, 255, 0.5);
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.3s;
+        z-index: 100;
+        font-weight: 600;
+        text-decoration: none;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      #devLogButton:hover {
+        background: rgba(118, 75, 162, 0.9);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      }
+
       @media (max-width: 768px) {
         #controls {
           display: none;
@@ -279,6 +305,10 @@
         <div><kbd>M</kbd> - Mute/Unmute Sound</div>
         <div><kbd>P</kbd> - Pause</div>
       </div>
+
+      <a id="devLogButton" href="/devlog.html" target="_blank">
+        📝 Marvin Dev Log
+      </a>
     </div>
 
     <script type="module">
