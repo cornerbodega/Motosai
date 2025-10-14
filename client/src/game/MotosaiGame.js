@@ -1379,9 +1379,23 @@ export class MotosaiGame {
   initBillboards() {
     this.billboardSystem = new BillboardSystem(this.scene);
 
-    // Create test billboards for development
-    // TODO: Replace with Supabase data loading
+    // Create billboards with new textures
+    // Using random selection from all available textures (including your new ones)
     this.billboardSystem.createTestBillboards(10, 500);
+
+    // Alternative options you can use:
+    // Option 1: Use all new textures in sequence
+    // const allTextures = this.billboardSystem.getAvailableTextures();
+    // this.billboardSystem.createBillboardsWithTextures(allTextures, 500, 100);
+
+    // Option 2: Use specific textures
+    // this.billboardSystem.createBillboardsWithTextures([
+    //   "ai-slop-mag.jpg",
+    //   "teriyaki-toothpaste.jpg",
+    //   "wet-cat.jpg",
+    //   "time-machine.jpg",
+    //   "hungry.jpg"
+    // ], 500, 100);
   }
 
   initBackgrounds() {

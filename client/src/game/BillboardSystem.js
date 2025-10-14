@@ -305,9 +305,27 @@ export class BillboardSystem {
     const sides = ["left", "right"];
     const types = ["large-dual", "large-single", "small"]; // Billboard types
 
+    // Array of available billboard textures
+    const billboardTextures = [
+      "ai-slop-mag.jpg",
+      "hungry.jpg",
+      "injury.jpg",
+      "marker.jpg",
+      "middle-shoe.jpg",
+      "silence.jpg",
+      "teriyaki-toothpaste.jpg",
+      "time-machine.jpg",
+      "wet-cat.jpg",
+      "default.png"
+    ];
+
     for (let i = 0; i < count; i++) {
       const side = sides[i % 2];
       const type = types[i % 3]; // Cycle through types
+
+      // Randomly select a texture for each billboard
+      const textureIndex = Math.floor(Math.random() * billboardTextures.length);
+      const selectedTexture = billboardTextures[textureIndex];
 
       // Different sizes based on type
       let scaleX, scaleY, posY, xPos;
@@ -327,7 +345,7 @@ export class BillboardSystem {
 
       this.addBillboard({
         id: `test_billboard_${i}`,
-        name: `Test Billboard ${i} (${type})`,
+        name: `Billboard ${i} - ${selectedTexture.replace('.jpg', '').replace('.png', '')} (${type})`,
         type: type,
         position_x: xPos,
         position_y: posY,
@@ -336,12 +354,82 @@ export class BillboardSystem {
         rotation_y: Math.PI,
         scale_x: scaleX,
         scale_y: scaleY,
-        texture_url: "/textures/billboards/default.png",
+        texture_url: `/textures/billboards/${selectedTexture}`,
         side: side,
       });
     }
 
     // Sort by Z position
     this.billboards.sort((a, b) => a.position.z - b.position.z);
+  }
+
+  /**
+   * Create billboards with specific textures in sequence
+   * @param {Array} textureList - List of texture filenames to use
+   * @param {number} spacing - Spacing between billboards (meters)
+   * @param {number} startZ - Starting Z position
+   */
+  createBillboardsWithTextures(textureList, spacing = 600, startZ = 100) {
+    const sides = ["left", "right"];
+    const types = ["large-dual", "large-single", "small"];
+
+    for (let i = 0; i < textureList.length; i++) {
+      const side = sides[i % 2];
+      const type = types[i % 3];
+      const texture = textureList[i];
+
+      // Different sizes based on type
+      let scaleX, scaleY, posY, xPos;
+
+      if (type === "large-dual" || type === "large-single") {
+        scaleX = 20;
+        scaleY = 10;
+        posY = 10;
+        xPos = side === "left" ? -40 : 40;
+      } else {
+        // small
+        scaleX = 12;
+        scaleY = 6;
+        posY = 7;
+        xPos = side === "left" ? -35 : 35;
+      }
+
+      this.addBillboard({
+        id: `billboard_${i}_${texture.replace(/\.[^.]+$/, '')}`,
+        name: `Billboard ${i} - ${texture.replace(/\.[^.]+$/, '')} (${type})`,
+        type: type,
+        position_x: xPos,
+        position_y: posY,
+        position_z: i * spacing + startZ,
+        rotation_x: 0,
+        rotation_y: Math.PI,
+        scale_x: scaleX,
+        scale_y: scaleY,
+        texture_url: `/textures/billboards/${texture}`,
+        side: side,
+      });
+    }
+
+    // Sort by Z position
+    this.billboards.sort((a, b) => a.position.z - b.position.z);
+  }
+
+  /**
+   * Get list of available billboard texture files
+   * @returns {Array} Array of texture filenames
+   */
+  getAvailableTextures() {
+    return [
+      "ai-slop-mag.jpg",
+      "hungry.jpg",
+      "injury.jpg",
+      "marker.jpg",
+      "middle-shoe.jpg",
+      "silence.jpg",
+      "teriyaki-toothpaste.jpg",
+      "time-machine.jpg",
+      "wet-cat.jpg",
+      "default.png"
+    ];
   }
 }
