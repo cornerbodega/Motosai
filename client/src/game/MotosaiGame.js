@@ -1843,6 +1843,11 @@ export class MotosaiGame {
         console.warn("⚠️ Leaderboard UI not found when player connected");
       }
 
+      // Also notify vehicle pass counter (for mobile leaderboard display)
+      if (this.vehiclePassCounter) {
+        this.vehiclePassCounter.onPlayerConnected();
+      }
+
       // Add multiplayer status to HUD
       this.updateMultiplayerHUD();
     } catch (error) {

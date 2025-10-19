@@ -311,7 +311,7 @@
         <div><kbd>P</kbd> - Pause</div>
       </div>
 
-      <a id="devLogButton" href="/devlog.html" target="_blank">
+      <a id="devLogButton" href="/devlog.html" target="_blank" style="display: none;">
         📝 Marvin Dev Log
       </a>
     </div>
@@ -355,20 +355,33 @@
       // NO POLLING - counts will be updated via WebSocket events
       // The server broadcasts 'visitor-count-update' when new visitors join
 
-      // Loading simulation
-      function updateLoading() {
-        const progress = document.getElementById("loadingProgress");
-        let width = 0;
+      // Real loading progress tracking
+      let loadingComplete = false;
+      window.updateLoadingProgress = function(progress) {
+        const progressBar = document.getElementById("loadingProgress");
+        if (progressBar) {
+          progressBar.style.width = Math.min(progress * 100, 100) + "%";
+        }
 
-        const interval = setInterval(() => {
-          width += Math.random() * 30;
-          if (width >= 100) {
-            width = 100;
-            clearInterval(interval);
-            onLoadingComplete();
-          }
-          progress.style.width = width + "%";
-        }, 200);
+        // When loading is complete
+        if (progress >= 1 && !loadingComplete) {
+          loadingComplete = true;
+          setTimeout(onLoadingComplete, 500);
+        }
+      };
+
+      // Start with a small initial progress to show something is happening
+      function initLoading() {
+        const progress = document.getElementById("loadingProgress");
+        if (progress) {
+          progress.style.width = "5%"; // Show 5% immediately
+        }
+
+        // Start the game initialization immediately to begin loading assets
+        // This will trigger the UFORaceIntro which will update progress
+        setTimeout(() => {
+          startGameLoading();
+        }, 100);
       }
 
       function onLoadingComplete() {
@@ -379,20 +392,22 @@
           loadingScreen.style.display = "none";
           isLoading = false;
 
-          // Start game directly - UFO intro will handle color selection
-          startGame();
+          // Game has already been started in startGameLoading
         }, 500);
+      }
+
+      function startGameLoading() {
+        // Start game initialization during loading screen
+        // This allows UFORaceIntro to load assets and update progress
+        startGame();
       }
 
       // Store pause handler to prevent memory leak when restarting game
       let pauseHandler = null;
 
       window.startGame = function () {
-        // Hide the dev log button when game starts
-        const devLogButton = document.getElementById("devLogButton");
-        if (devLogButton) {
-          devLogButton.style.display = "none";
-        }
+        // Keep the dev log button visible during the game
+        // It's useful for players to access the dev log
 
         // Dispose of any existing game first
         if (game && game.dispose) {
@@ -442,7 +457,7 @@
       }
 
       // Start loading
-      updateLoading();
+      initLoading();
     </script>
   </body>
 </html>

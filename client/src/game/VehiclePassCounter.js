@@ -33,7 +33,23 @@ export class VehiclePassCounter {
 
     // UI elements
     this.createUI();
-    this.fetchPlayerBest();
+    // Don't fetch immediately - wait for player to connect to multiplayer
+    // this.fetchPlayerBest();
+  }
+
+  // Called by game when player connects to multiplayer
+  onPlayerConnected() {
+    if (this.isMobile) {
+      this.fetchPlayerBest();
+
+      // Set up periodic refresh for mobile (every 30 seconds)
+      if (this.refreshTimer) {
+        clearInterval(this.refreshTimer);
+      }
+      this.refreshTimer = setInterval(() => {
+        this.fetchPlayerBest();
+      }, 30000);
+    }
   }
 
   createUI() {
@@ -324,6 +340,25 @@ export class VehiclePassCounter {
     }
   }
 
+  // Called after score submission to refresh the display
+  onScoreSubmitted(newScore, newRank) {
+    if (this.isMobile) {
+      // Update local values if new score is better
+      if (newScore > (this.playerBest || 0)) {
+        this.playerBest = newScore;
+      }
+      if (newRank) {
+        this.playerRank = newRank;
+      }
+
+      // Update display immediately
+      this.updateBestScoreDisplay();
+
+      // Also fetch fresh data from server
+      this.fetchPlayerBest();
+    }
+  }
+
   dispose() {
     // Cancel all active animations
     this.activeAnimations.forEach((animationState) => {
@@ -333,6 +368,12 @@ export class VehiclePassCounter {
       }
     });
     this.activeAnimations.clear();
+
+    // Clear refresh timer if exists
+    if (this.refreshTimer) {
+      clearInterval(this.refreshTimer);
+      this.refreshTimer = null;
+    }
 
     // Clean up UI elements
     const counterDiv = document.getElementById("vehicle-counter");

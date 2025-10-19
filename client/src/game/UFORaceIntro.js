@@ -49,6 +49,52 @@ export class UFORaceIntro {
     this.gltfLoader = new GLTFLoader();
     this.fontLoader = new FontLoader();
     this.textureLoader = new THREE.TextureLoader();
+
+    // Loading tracking
+    this.loadingProgress = {
+      earth: 0,
+      ufo: 0,
+      text: 0,
+      stars: 0,
+      total: 0
+    };
+
+    // Mobile detection
+    this.isMobile = this.detectMobile();
+  }
+
+  detectMobile() {
+    const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+    const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
+    const isMobileScreen = window.innerWidth <= 768;
+    const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    return isMobileUA || (isMobileScreen && hasTouch);
+  }
+
+  updateProgress(category, value) {
+    this.loadingProgress[category] = value;
+    console.log(`Loading progress - ${category}: ${(value * 100).toFixed(1)}%`);
+
+    // Calculate total progress (weighted)
+    const weights = {
+      earth: 0.5,  // Earth textures are the heaviest
+      ufo: 0.2,
+      text: 0.15,
+      stars: 0.15
+    };
+
+    let totalProgress = 0;
+    for (const key in weights) {
+      totalProgress += this.loadingProgress[key] * weights[key];
+    }
+
+    this.loadingProgress.total = totalProgress;
+    console.log(`Total loading progress: ${(totalProgress * 100).toFixed(1)}%`);
+
+    // Update the loading bar in index.html
+    if (window.updateLoadingProgress) {
+      window.updateLoadingProgress(totalProgress);
+    }
   }
 
   async start() {
@@ -82,30 +128,70 @@ export class UFORaceIntro {
     // Load large textures from GCS to avoid Cloud Run memory limits
     const GCS_BASE = "https://storage.googleapis.com/motosai-app";
 
-    // Create promises for texture loading
-    const loadTexture = (url) => {
+    // Choose texture quality based on device type
+    const textureQuality = this.isMobile ? 'mobile' : 'desktop';
+    console.log(`Loading ${textureQuality} quality textures for ${this.isMobile ? 'mobile' : 'desktop'} device`);
+
+    // Mobile uses 2K textures, desktop uses higher resolution
+    const textureUrls = this.isMobile ? {
+      color: `${GCS_BASE}/textures/earth/earth_color_2K.png`,
+      roughness: `${GCS_BASE}/textures/earth/earth_landocean_2K.png`,
+      height: `${GCS_BASE}/textures/earth/topography_2K.png`
+    } : {
+      color: `${GCS_BASE}/textures/earth/earth_color_4K.png`,  // Reduced from 10K
+      roughness: `${GCS_BASE}/textures/earth/earth_landocean_2K.png`,  // Reduced from 4K
+      height: `${GCS_BASE}/textures/earth/topography_2K.png`  // Reduced from 5K
+    };
+
+    // Track loaded textures count for progress
+    let loadedCount = 0;
+    const totalTextures = 3; // 3 earth textures
+
+    // Create promises for texture loading with progress tracking
+    const loadTexture = (url, textureName) => {
       return new Promise((resolve, reject) => {
-        console.log(`Loading texture: ${url}`);
+        console.log(`Loading texture: ${textureName}`);
         this.textureLoader.load(
           url,
           (texture) => {
-            console.log(`Loaded texture: ${url}`);
+            console.log(`Loaded texture: ${textureName}`);
+            loadedCount++;
+            this.updateProgress('earth', loadedCount / totalTextures);
             resolve(texture);
           },
           (progress) => {
-            // Log loading progress for large textures
+            // Track individual texture loading progress
             if (progress.lengthComputable) {
               const percentComplete = (progress.loaded / progress.total) * 100;
-              console.log(`Loading ${url}: ${percentComplete.toFixed(1)}%`);
+              // Update progress more granularly
+              const baseProgress = loadedCount / totalTextures;
+              const currentProgress = (1 / totalTextures) * (percentComplete / 100);
+              this.updateProgress('earth', baseProgress + currentProgress);
             }
           },
           (error) => {
-            console.error(`Failed to load texture: ${url}`, error);
-            // Resolve with a default texture instead of rejecting
-            const defaultTexture = new THREE.Texture();
-            defaultTexture.image = new Image();
-            defaultTexture.image.width = 1;
-            defaultTexture.image.height = 1;
+            console.error(`Failed to load texture: ${textureName}`, error);
+            // Create a simple colored texture as fallback
+            const canvas = document.createElement('canvas');
+            canvas.width = 256;
+            canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+
+            // Create a simple earth-like gradient
+            if (textureName.includes('color')) {
+              const gradient = ctx.createRadialGradient(128, 128, 0, 128, 128, 128);
+              gradient.addColorStop(0, '#4a86e8');  // Ocean blue
+              gradient.addColorStop(0.5, '#2e5db8');
+              gradient.addColorStop(1, '#1a3d78');
+              ctx.fillStyle = gradient;
+            } else {
+              ctx.fillStyle = '#888888';
+            }
+            ctx.fillRect(0, 0, 256, 256);
+
+            const defaultTexture = new THREE.CanvasTexture(canvas);
+            loadedCount++;
+            this.updateProgress('earth', loadedCount / totalTextures);
             resolve(defaultTexture);
           }
         );
@@ -113,13 +199,32 @@ export class UFORaceIntro {
     };
 
     // Load all Earth textures in parallel and wait for them
-    // Including atmosphere texture in the same batch
-    const [earthColorTexture, earthRoughnessMap, earthHeightMap, atmosphereTexture] = await Promise.all([
-      loadTexture(`${GCS_BASE}/textures/earth/earth_color_10K.png`),
-      loadTexture(`${GCS_BASE}/textures/earth/earth_landocean_4K.png`),
-      loadTexture(`${GCS_BASE}/textures/earth/topography_5K.png`),
-      loadTexture("/textures/smoke/fog3.png")
+    const [earthColorTexture, earthRoughnessMap, earthHeightMap] = await Promise.all([
+      loadTexture(textureUrls.color, 'Earth Color'),
+      loadTexture(textureUrls.roughness, 'Earth Roughness'),
+      loadTexture(textureUrls.height, 'Earth Height')
     ]);
+
+    // Create a procedural atmosphere texture
+    const atmosphereCanvas = document.createElement('canvas');
+    atmosphereCanvas.width = 512;
+    atmosphereCanvas.height = 512;
+    const atmosphereCtx = atmosphereCanvas.getContext('2d');
+
+    // Create a radial gradient for atmosphere effect
+    const gradient = atmosphereCtx.createRadialGradient(256, 256, 0, 256, 256, 256);
+    gradient.addColorStop(0, 'rgba(135, 206, 250, 0.6)'); // Light sky blue center
+    gradient.addColorStop(0.5, 'rgba(135, 206, 250, 0.3)');
+    gradient.addColorStop(0.8, 'rgba(255, 255, 255, 0.1)');
+    gradient.addColorStop(1, 'rgba(255, 255, 255, 0)'); // Transparent edge
+
+    atmosphereCtx.fillStyle = gradient;
+    atmosphereCtx.fillRect(0, 0, 512, 512);
+
+    const atmosphereTexture = new THREE.CanvasTexture(atmosphereCanvas);
+
+    // Mark earth loading as complete
+    this.updateProgress('earth', 1);
 
     console.log("All Earth textures loaded successfully");
 
@@ -167,6 +272,7 @@ export class UFORaceIntro {
         "/models/ufo.glb",
         (gltf) => {
           this.ufoModel = gltf.scene;
+          this.updateProgress('ufo', 1); // UFO loaded
 
           // Center the model
           const box = new THREE.Box3().setFromObject(this.ufoModel);
@@ -225,10 +331,17 @@ export class UFORaceIntro {
 
           resolve();
         },
-        (progress) => {},
+        (progress) => {
+          // Track UFO loading progress
+          if (progress.lengthComputable) {
+            const percent = progress.loaded / progress.total;
+            this.updateProgress('ufo', percent);
+          }
+        },
         (error) => {
           console.error("UFO model failed to load:", error);
           this.createFallbackUFO();
+          this.updateProgress('ufo', 1); // Mark as complete even with fallback
           resolve();
         }
       );
@@ -301,8 +414,10 @@ export class UFORaceIntro {
       sizeAttenuation: true,
     });
 
+    // Reduce star count on mobile for performance
+    const starCount = this.isMobile ? 2000 : 5000;
     const starsVertices = [];
-    for (let i = 0; i < 5000; i++) {
+    for (let i = 0; i < starCount; i++) {
       const x = (Math.random() - 0.5) * 300;
       const y = (Math.random() - 0.5) * 300;
       const z = (Math.random() - 0.5) * 300;
@@ -315,6 +430,8 @@ export class UFORaceIntro {
     );
     this.starField = new THREE.Points(starsGeometry, starsMaterial);
     this.scene.add(this.starField);
+
+    this.updateProgress('stars', 1); // Stars created
   }
 
   async create3DText() {
@@ -377,11 +494,13 @@ export class UFORaceIntro {
           this.subtitle3D.position.set(0, 2.5, 0);
           this.scene.add(this.subtitle3D);
 
+          this.updateProgress('text', 1); // Text created
           resolve();
         },
         undefined,
         (error) => {
           console.warn("Font failed to load:", error);
+          this.updateProgress('text', 1); // Mark as complete even with error
           resolve();
         }
       );
@@ -670,6 +789,12 @@ export class UFORaceIntro {
   handleStartGame() {
     // Stop Earth from spinning
     this.stopEarthSpinning = true;
+
+    // Hide the dev log button when actual gameplay starts
+    const devLogButton = document.getElementById("devLogButton");
+    if (devLogButton) {
+      devLogButton.style.display = "none";
+    }
 
     // Remove UI immediately
     if (this.uiContainer) {
