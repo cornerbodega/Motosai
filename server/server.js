@@ -1339,6 +1339,72 @@ setInterval(() => {
   }
 }, 10000); // Check every 10 seconds
 
+// Serve devlog as HTML
+app.get("/devlog", (req, res) => {
+  const devlogPath = path.join(__dirname, "..", "DEVELOPMENT_JOURNAL_2025-10-13.md");
+
+  if (!fs.existsSync(devlogPath)) {
+    return res.status(404).send("Development journal not found");
+  }
+
+  const markdown = fs.readFileSync(devlogPath, "utf8");
+
+  // Simple markdown to HTML conversion
+  const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Motosai Development Journal</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.5.0/github-markdown-dark.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/11.1.1/marked.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <style>
+    body {
+      background: #0d1117;
+      padding: 20px;
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+    .markdown-body {
+      padding: 45px;
+      border-radius: 8px;
+      background: #161b22;
+    }
+    .back-link {
+      display: inline-block;
+      margin-bottom: 20px;
+      color: #58a6ff;
+      text-decoration: none;
+    }
+    .back-link:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <a href="/" class="back-link">← Back to Motosai</a>
+  <article class="markdown-body" id="content"></article>
+  <script>
+    marked.setOptions({
+      highlight: function(code, lang) {
+        if (lang && hljs.getLanguage(lang)) {
+          return hljs.highlight(code, { language: lang }).value;
+        }
+        return hljs.highlightAuto(code).value;
+      }
+    });
+    document.getElementById('content').innerHTML = marked.parse(${JSON.stringify(markdown)});
+  </script>
+</body>
+</html>
+  `;
+
+  res.send(html);
+});
+
 // Serve index.html for all other routes (SPA fallback)
 app.get("*", (req, res) => {
   res.sendFile(path.join(clientDistPath, "index.html"));

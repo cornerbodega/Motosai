@@ -207,4 +207,6 @@ For questions or suggestions, please open an issue on GitHub.
 
 ---
 
-**Live Demo**: https://storage.googleapis.com/motosai-app/index.html
+**Live Demo**: https://motosai.com
+
+**Development Journal**: https://motosai.com/devlog

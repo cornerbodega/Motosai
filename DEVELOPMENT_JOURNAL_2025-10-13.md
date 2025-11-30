@@ -832,7 +832,7 @@ Ship it.
 
 ---
 
-**Current Status:** Deployed at https://storage.googleapis.com/motosai-app/index.html
+**Current Status:** Deployed at https://motosai.com
 
 **Lessons Learned:** 71 commits worth
 
