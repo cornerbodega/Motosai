@@ -339,15 +339,28 @@ export class MotorcyclePhysics {
   
   updateWheels() {
     const speed = Math.sqrt(this.velocity.x ** 2 + this.velocity.z ** 2);
-    
+
     // Wheel rotation speeds
     this.frontWheel.angularVelocity = speed / this.frontWheel.radius;
     this.rearWheel.angularVelocity = speed / this.rearWheel.radius;
-    
+
+    // Calculate steering angle based on lean and speed
+    // At high speeds, steering is minimal (counter-steering)
+    // At low speeds, more direct steering
+    if (speed > 2) {
+      // Counter-steering: steer opposite to lean at speed
+      this.frontWheel.steerAngle = -this.rotation.roll * 0.15;
+    } else if (speed > 0.1) {
+      // Low speed: direct steering based on control input
+      this.frontWheel.steerAngle = this.controls.steer * 0.3;
+    } else {
+      this.frontWheel.steerAngle = 0;
+    }
+
     // Slip calculation (simplified)
     const driveSpeed = this.rearWheel.angularVelocity * this.rearWheel.radius;
     this.rearWheel.slip = Math.max(0, (driveSpeed - speed) / Math.max(1, speed));
-    
+
     // Reduce grip with slip
     this.rearWheel.grip = 1.0 - Math.min(0.5, this.rearWheel.slip * 2);
     this.frontWheel.grip = 1.0; // Front wheel doesn't slip in this model
@@ -382,13 +395,14 @@ export class MotorcyclePhysics {
     const speedMPH = speed * 2.237; // m/s to mph
     
     return {
-      position: { ...this.position },
-      rotation: { ...this.rotation },
-      velocity: { ...this.velocity },
+      position: this.position, // Direct reference, no clone
+      rotation: this.rotation, // Direct reference, no clone
+      velocity: this.velocity, // Direct reference, no clone
       speed: speedMPH,
       rpm: Math.round(this.engine.rpm),
       gear: this.engine.gear,
       leanAngle: this.rotation.roll * 180 / Math.PI,
+      steerAngle: this.frontWheel.steerAngle, // Add steering angle for visual representation
       wheelie: this.rotation.pitch > 0.1,
       frontSuspension: this.suspension.front.compression,
       rearSuspension: this.suspension.rear.compression,

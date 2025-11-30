@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { getMaterialManager } from '../utils/MaterialManager.js';
 
 export class MotorcycleFactory {
   static createMotorcycle(options = {}) {
@@ -10,10 +11,15 @@ export class MotorcycleFactory {
     } = options;
 
     const motorcycle = new THREE.Group();
-    
-    // Body (simplified sportbike shape - shortened to prevent rear clipping)
-    const bodyGeo = new THREE.BoxGeometry(0.3, 0.4, 1.4, 2, 2, 4);
-    const bodyMat = new THREE.MeshStandardMaterial({ 
+    const materialManager = getMaterialManager();
+
+    // Create steering assembly group (for front wheel, forks, and handlebars)
+    const steeringAssembly = new THREE.Group();
+    steeringAssembly.position.set(0, 0, 0.7); // Position at front of bike
+
+    // Body (simplified sportbike shape - reduced complexity)
+    const bodyGeo = new THREE.BoxGeometry(0.3, 0.4, 1.4, 1, 1, 2);
+    const bodyMat = materialManager.getMaterial('standard', {
       color: bikeColor,
       metalness: 0.6,
       roughness: 0.3,
@@ -32,8 +38,8 @@ export class MotorcycleFactory {
     motorcycle.add(tank);
     
     // Seat
-    const seatGeo = new THREE.BoxGeometry(0.25, 0.1, 0.4, 2, 1, 2);
-    const seatMat = new THREE.MeshStandardMaterial({ 
+    const seatGeo = new THREE.BoxGeometry(0.25, 0.1, 0.4, 1, 1, 1);
+    const seatMat = materialManager.getMaterial('standard', {
       color: 0x1a1a1a,
       roughness: 0.8,
       metalness: 0
@@ -42,9 +48,9 @@ export class MotorcycleFactory {
     seat.position.set(0, 0.65, -0.25);
     motorcycle.add(seat);
     
-    // Wheels
-    const wheelGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.15, 16);
-    const wheelMat = new THREE.MeshStandardMaterial({ 
+    // Wheels (reduced segments for performance)
+    const wheelGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.15, 12);
+    const wheelMat = materialManager.getMaterial('standard', {
       color: 0x2a2a2a,
       roughness: 0.9,
       metalness: 0
@@ -52,10 +58,10 @@ export class MotorcycleFactory {
     
     const frontWheel = new THREE.Mesh(wheelGeo, wheelMat);
     frontWheel.rotation.z = Math.PI / 2;
-    frontWheel.position.set(0, 0.3, 0.7);
+    frontWheel.position.set(0, 0.3, 0); // Position relative to steering assembly
     frontWheel.castShadow = true;
     frontWheel.receiveShadow = true;
-    motorcycle.add(frontWheel);
+    steeringAssembly.add(frontWheel); // Add to steering assembly instead of motorcycle
     
     const rearWheel = new THREE.Mesh(wheelGeo, wheelMat);
     rearWheel.rotation.z = Math.PI / 2;
@@ -64,33 +70,36 @@ export class MotorcycleFactory {
     rearWheel.receiveShadow = true;
     motorcycle.add(rearWheel);
     
-    // Fork - brushed metal
-    const forkGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.6, 8);
-    const forkMat = new THREE.MeshStandardMaterial({ 
+    // Fork - brushed metal (reduced segments)
+    const forkGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.6, 6);
+    const forkMat = materialManager.getMaterial('standard', {
       color: 0x888888,
       metalness: 0.9,
       roughness: 0.4
     });
     const fork1 = new THREE.Mesh(forkGeo, forkMat);
-    fork1.position.set(0.08, 0.3, 0.7);
+    fork1.position.set(0.08, 0.3, 0); // Position relative to steering assembly
     fork1.rotation.z = 0.1;
-    motorcycle.add(fork1);
-    
+    steeringAssembly.add(fork1); // Add to steering assembly
+
     const fork2 = new THREE.Mesh(forkGeo, forkMat);
-    fork2.position.set(-0.08, 0.3, 0.7);
+    fork2.position.set(-0.08, 0.3, 0); // Position relative to steering assembly
     fork2.rotation.z = -0.1;
-    motorcycle.add(fork2);
+    steeringAssembly.add(fork2); // Add to steering assembly
     
     // Handlebars - rubber grips
     const barGeo = new THREE.BoxGeometry(0.5, 0.02, 0.02);
-    const barMat = new THREE.MeshStandardMaterial({
+    const barMat = materialManager.getMaterial('standard', {
       color: 0x1a1a1a,
       roughness: 0.9,
       metalness: 0
     });
     const bars = new THREE.Mesh(barGeo, barMat);
-    bars.position.set(0, 0.7, 0.6);
-    motorcycle.add(bars);
+    bars.position.set(0, 0.7, -0.1); // Position relative to steering assembly
+    steeringAssembly.add(bars); // Add to steering assembly
+
+    // Add the complete steering assembly to the motorcycle
+    motorcycle.add(steeringAssembly);
     
     // Add rider if requested
     if (includeRider) {
@@ -110,6 +119,7 @@ export class MotorcycleFactory {
     }
     
     // Store references for animation
+    motorcycle.userData.steeringAssembly = steeringAssembly; // Reference to steering assembly for turning animation
     motorcycle.userData.frontWheel = frontWheel;
     motorcycle.userData.rearWheel = rearWheel;
     motorcycle.userData.body = body;
@@ -120,10 +130,11 @@ export class MotorcycleFactory {
   
   static createRider(riderColor = 0x2a2a2a) {
     const riderGroup = new THREE.Group();
-    
-    // Helmet
-    const helmetGeo = new THREE.SphereGeometry(0.22, 12, 8);
-    const helmetMat = new THREE.MeshStandardMaterial({ 
+    const materialManager = getMaterialManager();
+
+    // Helmet (reduced segments for performance)
+    const helmetGeo = new THREE.SphereGeometry(0.22, 8, 6);
+    const helmetMat = materialManager.getMaterial('standard', {
       color: riderColor,
       metalness: 0.4,
       roughness: 0.15
@@ -135,7 +146,7 @@ export class MotorcycleFactory {
     
     // Visor
     const visorGeo = new THREE.BoxGeometry(0.18, 0.09, 0.11);
-    const visorMat = new THREE.MeshStandardMaterial({ 
+    const visorMat = materialManager.getMaterial('standard', {
       color: 0x000033,
       metalness: 0.1,
       roughness: 0,
@@ -147,8 +158,8 @@ export class MotorcycleFactory {
     riderGroup.add(visor);
     
     // Body
-    const riderBodyGeo = new THREE.BoxGeometry(0.24, 0.3, 0.25, 2, 2, 2);
-    const riderBodyMat = new THREE.MeshStandardMaterial({ 
+    const riderBodyGeo = new THREE.BoxGeometry(0.24, 0.3, 0.25, 1, 1, 1);
+    const riderBodyMat = materialManager.getMaterial('standard', {
       color: riderColor,
       roughness: 0.7,
       metalness: 0

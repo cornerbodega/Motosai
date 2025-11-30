@@ -11,7 +11,7 @@ echo "============================"
 # Configuration
 PROJECT_ID="punchies-game"  # Using same project as Punchies
 REGION="us-central1"
-BUCKET_NAME="motosai-app"
+BUCKET_NAME="motosai-game"
 REPOSITORY_NAME="motosai-repo"
 
 echo "Using project: $PROJECT_ID"
@@ -66,7 +66,7 @@ echo ""
 echo "6. Starting Cloud Build deployment..."
 echo "   This will build and deploy both server and client"
 
-cd /Users/fromastermarv/Documents/Codeyard/motosai
+cd /Users/fromastermarv/Documents/Codeyard/Motosai
 
 gcloud builds submit --config cloudbuild.yaml \
     --substitutions=_PROJECT_ID=$PROJECT_ID

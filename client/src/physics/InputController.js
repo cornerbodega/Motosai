@@ -2,7 +2,7 @@
 // Prevents jerky movements and spin-outs from quick inputs
 
 export class InputController {
-  constructor() {
+  constructor(options = {}) {
     // Current raw inputs
     this.rawInputs = {
       throttle: 0,
@@ -11,7 +11,7 @@ export class InputController {
       lean: 0,
       steer: 0
     };
-    
+
     // Smoothed outputs
     this.smoothedInputs = {
       throttle: 0,
@@ -20,43 +20,47 @@ export class InputController {
       lean: 0,
       steer: 0
     };
-    
+
     // Previous inputs for rate limiting
     this.previousInputs = {
       lean: 0,
       steer: 0
     };
-    
+
+    // Input source tracking
+    this.inputSource = 'keyboard'; // 'keyboard', 'mobile', 'gamepad'
+    this.isMobileInput = options.isMobile || false;
+
     // Smoothing parameters
     this.smoothing = {
       throttle: 0.15,     // Moderate smoothing
       brake: 0.2,         // Quick brake response
-      lean: 0.08,         // Heavy smoothing for stability
-      steer: 0.06,        // Very heavy smoothing
+      lean: this.isMobileInput ? 0.35 : 0.08,  // Much higher for mobile = faster response
+      steer: this.isMobileInput ? 0.30 : 0.06,  // Much higher for mobile steering
       speedFactor: 1.0    // Adjusted by speed
     };
-    
+
     // Rate limits (max change per second)
     this.rateLimits = {
-      lean: 1.2,          // radians per second
-      steer: 1.5,         // radians per second
-      leanReturn: 2.0,    // faster return to center
-      steerReturn: 2.5   // faster return to center
+      lean: this.isMobileInput ? 5.0 : 1.2,    // Much faster for mobile - almost instant
+      steer: this.isMobileInput ? 4.5 : 1.5,   // Much faster steering rate for mobile
+      leanReturn: this.isMobileInput ? 6.0 : 2.0,    // Very fast return to center for mobile
+      steerReturn: this.isMobileInput ? 6.0 : 2.5   // Very fast return to center for mobile
     };
-    
+
     // Dead zones
     this.deadZones = {
-      lean: 0.05,
-      steer: 0.05,
+      lean: this.isMobileInput ? 0.02 : 0.05,  // Smaller dead zone for mobile
+      steer: this.isMobileInput ? 0.02 : 0.05,  // Smaller dead zone for mobile steering
       throttle: 0.02
     };
-    
+
     // Input history for filtering
     this.inputHistory = {
       lean: [],
       steer: []
     };
-    this.historySize = 5;
+    this.historySize = this.isMobileInput ? 3 : 5; // Shorter history for mobile (less latency)
   }
   
   update(deltaTime, speed) {
@@ -106,62 +110,83 @@ export class InputController {
   
   processLean(deltaTime, speedMPH) {
     // Apply dead zone
-    let target = Math.abs(this.rawInputs.lean) < this.deadZones.lean ? 
+    let target = Math.abs(this.rawInputs.lean) < this.deadZones.lean ?
                  0 : this.rawInputs.lean;
-    
+
+    // Mobile: NO SMOOTHING - direct input!
+    if (this.isMobileInput) {
+      this.smoothedInputs.lean = target;
+
+      // Stability check - reduce lean at very low speeds
+      if (speedMPH < 10) {
+        const reductionFactor = Math.max(0.5, speedMPH / 10); // Mobile: minimum 50% lean at low speeds
+        this.smoothedInputs.lean *= reductionFactor;
+      }
+      return; // Exit early - no smoothing needed
+    }
+
+    // Keyboard: Apply full smoothing
     // Add to history for filtering
     this.updateHistory('lean', target);
-    
+
     // Apply median filter to remove spikes
     target = this.medianFilter(this.inputHistory.lean);
-    
+
     // Rate limiting
     const maxChange = this.calculateMaxChange('lean', target, deltaTime, speedMPH);
     const currentLean = this.smoothedInputs.lean;
-    
+
     if (Math.abs(target - currentLean) > maxChange) {
       target = currentLean + Math.sign(target - currentLean) * maxChange;
     }
-    
+
     // Speed-dependent smoothing
     const speedSmoothing = this.smoothing.lean * (1 + (100 - speedMPH) / 100);
     const finalSmoothing = Math.min(0.15, speedSmoothing);
-    
+
     // Apply smoothing
     this.smoothedInputs.lean = this.lerp(
       this.smoothedInputs.lean,
       target,
       finalSmoothing
     );
-    
+
     // Stability check - reduce lean at very low speeds
     if (speedMPH < 10) {
-      this.smoothedInputs.lean *= speedMPH / 10;
+      const reductionFactor = speedMPH / 10; // Keyboard: full reduction
+      this.smoothedInputs.lean *= reductionFactor;
     }
   }
   
   processSteer(deltaTime, speedMPH) {
     // Apply dead zone
-    let target = Math.abs(this.rawInputs.steer) < this.deadZones.steer ? 
+    let target = Math.abs(this.rawInputs.steer) < this.deadZones.steer ?
                  0 : this.rawInputs.steer;
-    
+
+    // Mobile: NO SMOOTHING - direct input!
+    if (this.isMobileInput) {
+      this.smoothedInputs.steer = target;
+      return; // Exit early - no smoothing needed
+    }
+
+    // Keyboard: Apply full smoothing
     // Add to history for filtering
     this.updateHistory('steer', target);
-    
+
     // Apply median filter to remove spikes
     target = this.medianFilter(this.inputHistory.steer);
-    
+
     // Rate limiting
     const maxChange = this.calculateMaxChange('steer', target, deltaTime, speedMPH);
     const currentSteer = this.smoothedInputs.steer;
-    
+
     if (Math.abs(target - currentSteer) > maxChange) {
       target = currentSteer + Math.sign(target - currentSteer) * maxChange;
     }
-    
+
     // Very heavy smoothing for steering to prevent spin-outs
     const steerSmoothing = this.smoothing.steer * this.smoothing.speedFactor;
-    
+
     this.smoothedInputs.steer = this.lerp(
       this.smoothedInputs.steer,
       target,
@@ -250,7 +275,73 @@ export class InputController {
     return {
       raw: { ...this.rawInputs },
       smoothed: { ...this.smoothedInputs },
-      smoothingFactor: this.smoothing.speedFactor
+      smoothingFactor: this.smoothing.speedFactor,
+      inputSource: this.inputSource
     };
+  }
+
+  // Set input source (keyboard, mobile, gamepad)
+  setInputSource(source) {
+    this.inputSource = source;
+
+    // Adjust parameters based on input source
+    if (source === 'mobile') {
+      this.isMobileInput = true;
+      this.smoothing.lean = 0.35;
+      this.smoothing.steer = 0.30;
+      this.rateLimits.lean = 5.0;
+      this.rateLimits.steer = 4.5;
+      this.rateLimits.leanReturn = 6.0;
+      this.rateLimits.steerReturn = 6.0;
+      this.deadZones.lean = 0.02;
+      this.deadZones.steer = 0.02;
+      this.historySize = 3;
+    } else {
+      this.isMobileInput = false;
+      this.smoothing.lean = 0.08;
+      this.smoothing.steer = 0.06;
+      this.rateLimits.lean = 1.2;
+      this.rateLimits.steer = 1.5;
+      this.rateLimits.leanReturn = 2.0;
+      this.rateLimits.steerReturn = 2.5;
+      this.deadZones.lean = 0.05;
+      this.deadZones.steer = 0.05;
+      this.historySize = 5;
+    }
+  }
+
+  // Update inputs from mobile controller
+  updateFromMobile(mobileInputs) {
+    this.setInputSource('mobile');
+
+    // Map mobile inputs to raw inputs
+    if (mobileInputs.lean !== undefined) {
+      this.rawInputs.lean = mobileInputs.lean;
+      this.rawInputs.steer = mobileInputs.lean; // Use lean for steering too
+
+      // Debug: Log mobile input mapping occasionally
+      if (Math.abs(mobileInputs.lean) > 0.1 && Math.random() < 0.05) {
+        console.log('📥 InputController.updateFromMobile - lean:', mobileInputs.lean.toFixed(2),
+                    'rawInputs.steer:', this.rawInputs.steer.toFixed(2),
+                    'smoothed.steer:', this.smoothedInputs.steer.toFixed(2));
+      }
+    }
+
+    if (mobileInputs.throttle !== undefined) {
+      this.rawInputs.throttle = mobileInputs.throttle;
+    }
+
+    // Use frontBrake/rearBrake if provided, otherwise fall back to combined brake value
+    if (mobileInputs.frontBrake !== undefined) {
+      this.rawInputs.frontBrake = mobileInputs.frontBrake;
+    } else if (mobileInputs.brake !== undefined) {
+      this.rawInputs.frontBrake = mobileInputs.brake;
+    }
+
+    if (mobileInputs.rearBrake !== undefined) {
+      this.rawInputs.rearBrake = mobileInputs.rearBrake;
+    } else if (mobileInputs.brake !== undefined) {
+      this.rawInputs.rearBrake = mobileInputs.brake;
+    }
   }
 }

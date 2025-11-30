@@ -1,0 +1,56 @@
+steps:
+  # Step 1: Build the client with environment variables
+  - name: 'node:18'
+    entrypoint: 'sh'
+    args:
+      - '-c'
+      - |
+        cd client
+        # Create .env file with production values
+        echo "VITE_SUPABASE_URL=https://zibmgusmsqnpqacuygec.supabase.co" > .env
+        echo "VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InppYm1ndXNtc3FucHFhY3V5Z2VjIiwicm9sZSI6ImFub24iLCJpYXQiOjE2OTA4NDkzOTUsImV4cCI6MjAwNjQyNTM5NX0.DPSFsM5RekVICcIeV9PK08uwOEntnWuCVBWt-DBmxkA" >> .env
+        echo "VITE_SERVER_URL=https://motosai-680702586477.us-central1.run.app" >> .env
+        echo "VITE_UNSPLASH_ACCESS_KEY=qFxcvfJy07a1t-xwRjHV4EzbQUgJJyWeM9-wyOBHf5w" >> .env
+        npm install
+        npm run build
+        ls -la dist/
+
+  # Step 2: Build Docker image with both server and client
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/motosai'
+      - '.'
+
+  # Step 3: Push the image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/motosai'
+
+  # Step 4: Deploy to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'motosai'
+      - '--image'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/motosai'
+      - '--region'
+      - 'us-central1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--port'
+      - '8080'
+      - '--memory'
+      - '1Gi'
+      - '--cpu'
+      - '1'
+      - '--set-env-vars'
+      - 'NEXT_PUBLIC_SUPABASE_URL=https://zibmgusmsqnpqacuygec.supabase.co,NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InppYm1ndXNtc3FucHFhY3V5Z2VjIiwicm9sZSI6ImFub24iLCJpYXQiOjE2OTA4NDkzOTUsImV4cCI6MjAwNjQyNTM5NX0.DPSFsM5RekVICcIeV9PK08uwOEntnWuCVBWt-DBmxkA,NODE_ENV=production'
+
+images:
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/motosai'

@@ -36,7 +36,10 @@ steps:
       - '--cpu'
       - '1'
       - '--set-env-vars'
-      - 'NODE_ENV=production'
+      - 'NODE_ENV=production,NEXT_PUBLIC_SUPABASE_URL=https://zibmgusmsqnpqacuygec.supabase.co,NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InppYm1ndXNtc3FucHFhY3V5Z2VjIiwicm9sZSI6ImFub24iLCJpYXQiOjE2OTA4NDkzOTUsImV4cCI6MjAwNjQyNTM5NX0.DPSFsM5RekVICcIeV9PK08uwOEntnWuCVBWt-DBmxkA'
+      - '--session-affinity'
+      - '--timeout=300'
+      - '--no-cpu-throttling'
 
   # Build client
   - name: 'node:20'

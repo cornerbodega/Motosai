@@ -1,72 +1,114 @@
 import * as THREE from 'three';
+import { ROAD_CONSTANTS } from './RoadConstants.js';
+import { getMaterialManager } from '../utils/MaterialManager.js';
 
 export class Highway101 {
   constructor(scene) {
     this.scene = scene;
     this.segments = [];
     this.segmentLength = 200; // Doubled from 100 to 200 meters per segment
-    this.numSegments = 20; // Reduced to prevent memory issues
+    this.numSegments = 15; // Further reduced for lower-end machines
     this.currentZ = 0;
-    
-    // Highway parameters
-    this.laneWidth = 4.5; // meters - wider lanes for easier driving
-    this.numLanes = 3; // 3 lanes all same direction
-    this.shoulderWidth = 2.5; // Slightly wider shoulders too
-    this.totalWidth = this.laneWidth * this.numLanes + this.shoulderWidth * 2;
-    
+
+    // MEMORY LEAK FIX: Dynamic segment limits based on speed
+    this.BASE_SEGMENTS = 15;
+    this.MAX_SEGMENTS = 50; // Hard limit to prevent crashes
+    this.MIN_COVERAGE_DISTANCE = 1000; // Always cover at least 1km ahead
+    this.segmentCleanupCounter = 0;
+    this.lastPlayerSpeed = 0;
+
+    // Highway parameters - using shared constants
+    this.laneWidth = ROAD_CONSTANTS.LANE_WIDTH;
+    this.numLanes = ROAD_CONSTANTS.NUM_LANES;
+    this.shoulderWidth = ROAD_CONSTANTS.SHOULDER_WIDTH;
+    this.totalWidth = ROAD_CONSTANTS.TOTAL_WIDTH;
+
+    // Use centralized material manager
+    this.materialManager = getMaterialManager();
+
     // Materials
-    this.createMaterials();
+    this.initMaterials();
     
     // Instanced meshes for trees
     this.initInstancedTrees();
+
+    // Initialize shared geometries to prevent memory leaks
+    this.initSharedGeometries();
   }
-  
-  createMaterials() {
-    // Asphalt - very rough, completely non-reflective surface
-    this.asphaltMat = new THREE.MeshStandardMaterial({ 
-      color: 0x2a2a2a,
-      roughness: 1.0,  // Maximum roughness for completely matte
-      metalness: 0,
-      bumpScale: 0.002
-    });
-    
-    // Lane markings - slightly reflective paint
-    this.whiteMat = new THREE.MeshStandardMaterial({ 
-      color: 0xffffff,
-      roughness: 0.6,
-      metalness: 0.1,
-      emissive: 0xffffff,
-      emissiveIntensity: 0.05
-    });
-    
-    this.yellowMat = new THREE.MeshStandardMaterial({ 
+
+  initSharedGeometries() {
+    // Create shared geometries that will be reused for all segments
+    // Use larger overlaps to prevent gaps even with floating-point precision errors
+    this.sharedRoadGeometries = {
+      // Road surfaces - increased overlap from 0.1 to 1.0
+      road: new THREE.PlaneGeometry(this.totalWidth, this.segmentLength + 1.0),
+      shoulder: new THREE.PlaneGeometry(this.shoulderWidth, this.segmentLength + 1.0),
+      grass: new THREE.PlaneGeometry(50, this.segmentLength + 1.0),
+
+      // Lane markings
+      dash: new THREE.PlaneGeometry(0.15, 3), // lineWidth x dashLength
+      edgeLine: new THREE.PlaneGeometry(0.3, this.segmentLength + 1.0), // lineWidth * 2, with overlap
+
+      // Barriers - add overlap to prevent gaps
+      barrier: new THREE.BoxGeometry(0.5, 1.2, this.segmentLength + 1.0),
+      strip: new THREE.BoxGeometry(0.1, 0.1, this.segmentLength + 1.0),
+
+      // Cacti
+      cactusBody: new THREE.CylinderGeometry(0.4, 0.5, 4, 8), // Main cactus trunk
+      cactusArm: new THREE.CylinderGeometry(0.25, 0.3, 1.5, 6), // Cactus arms
+
+      // Signs
+      pole: new THREE.CylinderGeometry(0.05, 0.05, 2, 4),
+      signSmall: new THREE.BoxGeometry(2, 1, 0.1),
+      signSupport: new THREE.BoxGeometry(0.2, 3, 0.2),
+      signLarge: new THREE.BoxGeometry(5, 2, 0.2)
+    };
+  }
+
+  initMaterials() {
+    // Use shared materials from MaterialManager
+    this.asphaltMat = this.materialManager.getRoadMaterial('asphalt');
+    this.whiteMat = this.materialManager.getRoadMaterial('whiteLine');
+    this.yellowMat = this.materialManager.getMaterial('standard', { 
       color: 0xffcc00,
       roughness: 0.6,
       metalness: 0.1,
       emissive: 0xffcc00,
       emissiveIntensity: 0.05
     });
-    
-    // Shoulder - worn concrete
-    this.shoulderMat = new THREE.MeshStandardMaterial({ 
-      color: 0x4a4a4a,
-      roughness: 0.9,
-      metalness: 0
-    });
-    
-    // Grass - soft, non-reflective
-    this.grassMat = new THREE.MeshStandardMaterial({ 
-      color: 0x7cae3f,
+
+    // Shoulder - use MaterialManager
+    this.shoulderMat = this.materialManager.getRoadMaterial('shoulder');
+
+    // Sand - use MaterialManager
+    this.grassMat = this.materialManager.getMaterial('standard', {
+      color: 0xC2B280, // Sandy yellow/beige color
       roughness: 1,
       metalness: 0
     });
-    
-    // Concrete barrier - weathered concrete
-    this.barrierMat = new THREE.MeshStandardMaterial({ 
+
+    // Concrete barrier - use MaterialManager
+    this.barrierMat = this.materialManager.getMaterial('standard', {
       color: 0x8a8a8a,
       roughness: 0.85,
       metalness: 0
     });
+
+    // Create reusable materials for props (cacti, signs, etc.)
+    this.propMaterials = {
+      cactus: this.materialManager.getMaterial('lambert', { color: 0x4A7C59 }), // Desert cactus green
+      pole: this.materialManager.getMaterial('lambert', { color: 0x666666 }),
+      sign: this.materialManager.getMaterial('lambert', { color: 0x006600 }),
+      signLarge: this.materialManager.getMaterial('lambert', { color: 0x006633 }),
+      support: this.materialManager.getMaterial('lambert', { color: 0x444444 }),
+      stripReflective: this.materialManager.getMaterial('standard', {
+        color: 0xffffff,
+        emissive: 0xffffff,
+        emissiveIntensity: 0.2,
+        metalness: 0.9,
+        roughness: 0.1
+      })
+    };
   }
   
   initInstancedTrees() {
@@ -91,10 +133,9 @@ export class Highway101 {
   createSegment(zPosition) {
     const segment = new THREE.Group();
     segment.position.z = zPosition; // Position the whole group
-    
-    // Main road surface - slightly overlap to prevent gaps
-    const roadGeo = new THREE.PlaneGeometry(this.totalWidth, this.segmentLength + 0.1);
-    const road = new THREE.Mesh(roadGeo, this.asphaltMat);
+
+    // Main road surface - use shared geometry
+    const road = new THREE.Mesh(this.sharedRoadGeometries.road, this.asphaltMat);
     road.rotation.x = -Math.PI / 2;
     road.position.z = 0; // Local to group
     road.receiveShadow = true;
@@ -103,15 +144,13 @@ export class Highway101 {
     // Store LOD level
     segment.userData.lodLevel = 0;
     
-    // Shoulders - slightly overlap
-    const shoulderGeo = new THREE.PlaneGeometry(this.shoulderWidth, this.segmentLength + 0.1);
-    
-    const leftShoulder = new THREE.Mesh(shoulderGeo, this.shoulderMat);
+    // Shoulders - use shared geometry
+    const leftShoulder = new THREE.Mesh(this.sharedRoadGeometries.shoulder, this.shoulderMat);
     leftShoulder.rotation.x = -Math.PI / 2;
     leftShoulder.position.set(-this.totalWidth / 2 - this.shoulderWidth / 2, 0.01, 0);
     segment.add(leftShoulder);
-    
-    const rightShoulder = new THREE.Mesh(shoulderGeo, this.shoulderMat);
+
+    const rightShoulder = new THREE.Mesh(this.sharedRoadGeometries.shoulder, this.shoulderMat);
     rightShoulder.rotation.x = -Math.PI / 2;
     rightShoulder.position.set(this.totalWidth / 2 + this.shoulderWidth / 2, 0.01, 0);
     segment.add(rightShoulder);
@@ -142,24 +181,27 @@ export class Highway101 {
     const dashLength = 3;
     const dashGap = 9;
     const lineWidth = 0.15;
-    
+
     // Get segment data
     const segmentData = this.segments.find(s => s.group === segment);
-    
-    // White dashed lanes for 3 lanes (2 dividers between lanes)
-    // Lane 0 at x=-3.5, Lane 1 at x=0, Lane 2 at x=3.5
-    // Dividers at x=-1.75 and x=1.75
-    const lane0X = -this.laneWidth;
-    const lane1X = 0;
-    const lane2X = this.laneWidth;
-    
+
+    // Use ROAD_CONSTANTS for consistent lane positioning
+    // Get lane center positions from RoadConstants
+    const lane0X = ROAD_CONSTANTS.getLanePosition(0); // -6
+    const lane1X = ROAD_CONSTANTS.getLanePosition(1); // 0
+    const lane2X = ROAD_CONSTANTS.getLanePosition(2); // 6
+
+    // Calculate divider positions between lane centers
+    // Dividers should be halfway between lane centers
+    const divider0X = (lane0X + lane1X) / 2; // (-6 + 0) / 2 = -3
+    const divider1X = (lane1X + lane2X) / 2; // (0 + 6) / 2 = 3
+
     // Create individual dashed lines (not merged for simplicity and visibility)
     for (let divider = 0; divider < 2; divider++) {
-      const xPos = divider === 0 ? (lane0X + lane1X) / 2 : (lane1X + lane2X) / 2;
+      const xPos = divider === 0 ? divider0X : divider1X;
       
       for (let i = 0; i < this.segmentLength; i += dashLength + dashGap) {
-        const dashGeo = new THREE.PlaneGeometry(lineWidth, dashLength);
-        const dash = new THREE.Mesh(dashGeo, this.whiteMat);
+        const dash = new THREE.Mesh(this.sharedRoadGeometries.dash, this.whiteMat);
         dash.rotation.x = -Math.PI / 2;
         dash.position.set(xPos, markingHeight, -this.segmentLength / 2 + i + dashLength/2);
         dash.userData.isMarking = true;
@@ -168,17 +210,15 @@ export class Highway101 {
       }
     }
     
-    // Edge lines
-    const edgeLineGeo = new THREE.PlaneGeometry(lineWidth * 2, this.segmentLength);
-    
-    const leftEdge = new THREE.Mesh(edgeLineGeo, this.whiteMat);
+    // Edge lines - use shared geometry
+    const leftEdge = new THREE.Mesh(this.sharedRoadGeometries.edgeLine, this.whiteMat);
     leftEdge.rotation.x = -Math.PI / 2;
     leftEdge.position.set(-this.totalWidth / 2, markingHeight, 0);
     leftEdge.userData.isMarking = true;
     segment.add(leftEdge);
     if (segmentData) segmentData.detailGroups.markings.push(leftEdge);
-    
-    const rightEdge = new THREE.Mesh(edgeLineGeo, this.whiteMat);
+
+    const rightEdge = new THREE.Mesh(this.sharedRoadGeometries.edgeLine, this.whiteMat);
     rightEdge.rotation.x = -Math.PI / 2;
     rightEdge.position.set(this.totalWidth / 2, markingHeight, 0);
     rightEdge.userData.isMarking = true;
@@ -189,91 +229,117 @@ export class Highway101 {
   createRoadside(segment, zPosition) {
     const segmentData = this.segments.find(s => s.group === segment);
     
-    // Grass areas - overlap to prevent gaps
+    // Grass areas - use shared geometry
     const grassWidth = 50;
-    const grassGeo = new THREE.PlaneGeometry(grassWidth, this.segmentLength + 0.2);
-    
-    const leftGrass = new THREE.Mesh(grassGeo, this.grassMat);
+    const leftGrass = new THREE.Mesh(this.sharedRoadGeometries.grass, this.grassMat);
     leftGrass.rotation.x = -Math.PI / 2;
     leftGrass.position.set(-this.totalWidth / 2 - this.shoulderWidth - grassWidth / 2, -0.1, 0);
     leftGrass.receiveShadow = true;
     leftGrass.userData.isRoadside = true;
     segment.add(leftGrass);
     if (segmentData) segmentData.detailGroups.roadside.push(leftGrass);
-    
-    const rightGrass = new THREE.Mesh(grassGeo, this.grassMat);
+
+    const rightGrass = new THREE.Mesh(this.sharedRoadGeometries.grass, this.grassMat);
     rightGrass.rotation.x = -Math.PI / 2;
     rightGrass.position.set(this.totalWidth / 2 + this.shoulderWidth + grassWidth / 2, -0.1, 0);
     rightGrass.receiveShadow = true;
     rightGrass.userData.isRoadside = true;
     segment.add(rightGrass);
     if (segmentData) segmentData.detailGroups.roadside.push(rightGrass);
+
+    // GUARDRAILS - Much further out (beyond shoulder)
+    const railingOffset = ROAD_CONSTANTS.TOTAL_WIDTH / 2 + ROAD_CONSTANTS.BARRIER_OFFSET; // Further out beyond shoulder
+
+    // Left guardrail - use shared geometry
+    const leftBarrier = new THREE.Mesh(this.sharedRoadGeometries.barrier, this.barrierMat);
+    leftBarrier.position.set(-railingOffset, 0.6, 0);
+    leftBarrier.castShadow = false; // No shadows for performance
+    leftBarrier.userData.isBarrier = true;
+    segment.add(leftBarrier);
+    if (segmentData) segmentData.detailGroups.roadside.push(leftBarrier);
     
-    // Concrete barriers (occasionally)
-    if (Math.random() > 0.85) { // Reduced frequency from 0.7 to 0.85
-      const barrierGeo = new THREE.BoxGeometry(0.5, 1, this.segmentLength);
-      
-      const leftBarrier = new THREE.Mesh(barrierGeo, this.barrierMat);
-      leftBarrier.position.set(-this.totalWidth / 2 - this.shoulderWidth - 0.25, 0.5, 0);
-      leftBarrier.castShadow = true;
-      leftBarrier.userData.isRoadside = true;
-      segment.add(leftBarrier);
-      if (segmentData) segmentData.detailGroups.roadside.push(leftBarrier);
-    }
+    // Right guardrail - use shared geometry
+    const rightBarrier = new THREE.Mesh(this.sharedRoadGeometries.barrier, this.barrierMat);
+    rightBarrier.position.set(railingOffset, 0.6, 0);
+    rightBarrier.castShadow = false; // No shadows for performance
+    rightBarrier.userData.isBarrier = true;
+    segment.add(rightBarrier);
+    if (segmentData) segmentData.detailGroups.roadside.push(rightBarrier);
     
-    // Trees (low poly)
-    this.addTrees(segment, 0);
+    // Add reflective strips for visibility - WHITE like guardrails - use shared geometry
+    const leftStrip = new THREE.Mesh(this.sharedRoadGeometries.strip, this.propMaterials.stripReflective);
+    leftStrip.position.set(-railingOffset + 0.25, 0.9, 0);
+    segment.add(leftStrip);
+
+    const rightStrip = new THREE.Mesh(this.sharedRoadGeometries.strip, this.propMaterials.stripReflective);
+    rightStrip.position.set(railingOffset - 0.25, 0.9, 0);
+    segment.add(rightStrip);
     
+    // Cacti (low poly)
+    this.addCacti(segment, 0);
+
     // Signs and landmarks
     this.addSignage(segment, 0);
   }
   
-  addTrees(segment, zPosition) {
+  addCacti(segment, zPosition) {
     const segmentData = this.segments.find(s => s.group === segment);
-    const numTrees = Math.floor(Math.random() * 2) + 1; // Reduced for performance
-    
-    for (let i = 0; i < numTrees; i++) {
-      const tree = this.createSimpleTree();
-      
+
+    // Add cacti to ~40% of segments for more desert vegetation
+    if (Math.random() > 0.4) return;
+
+    const numCacti = Math.floor(1 + Math.random() * 3); // 1-3 cacti per segment
+
+    for (let i = 0; i < numCacti; i++) {
+      const cactus = this.createSimpleCactus();
+
       // Random position alongside road
       const side = Math.random() > 0.5 ? 1 : -1;
       const xOffset = (this.totalWidth / 2 + this.shoulderWidth + 5 + Math.random() * 20) * side;
       const zOffset = (Math.random() - 0.5) * this.segmentLength;
-      
-      tree.position.set(xOffset, 0, zOffset);
-      tree.scale.setScalar(0.8 + Math.random() * 0.4);
-      tree.userData.isTree = true;
-      
-      segment.add(tree);
+
+      cactus.position.set(xOffset, 0, zOffset);
+      cactus.scale.setScalar(0.8 + Math.random() * 0.4);
+      cactus.userData.isCactus = true;
+
+      segment.add(cactus);
       if (segmentData) {
         if (!segmentData.detailGroups.trees) segmentData.detailGroups.trees = [];
-        segmentData.detailGroups.trees.push(tree);
+        segmentData.detailGroups.trees.push(cactus);
       }
     }
   }
   
-  createSimpleTree() {
-    const tree = new THREE.Group();
-    
-    // Simple trunk
-    const trunkGeo = new THREE.CylinderGeometry(0.2, 0.3, 2, 4);
-    const trunkMat = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
-    const trunk = new THREE.Mesh(trunkGeo, trunkMat);
-    trunk.position.y = 1;
-    tree.add(trunk);
-    
-    // Simple foliage
-    const foliageGeo = new THREE.ConeGeometry(1.5, 3, 4);
-    const foliageMat = new THREE.MeshLambertMaterial({ color: 0x228B22 });
-    const foliage = new THREE.Mesh(foliageGeo, foliageMat);
-    foliage.position.y = 3;
-    tree.add(foliage);
-    
-    return tree;
+  createSimpleCactus() {
+    const cactus = new THREE.Group();
+
+    // Main cactus body - use shared geometry and material
+    const body = new THREE.Mesh(this.sharedRoadGeometries.cactusBody, this.propMaterials.cactus);
+    body.position.y = 2; // Center the body vertically
+    cactus.add(body);
+
+    // Add arms randomly (50% chance for each side)
+    if (Math.random() > 0.3) {
+      // Left arm
+      const leftArm = new THREE.Mesh(this.sharedRoadGeometries.cactusArm, this.propMaterials.cactus);
+      leftArm.position.set(-0.5, 1.5, 0);
+      leftArm.rotation.z = Math.PI / 3; // Angle upward
+      cactus.add(leftArm);
+    }
+
+    if (Math.random() > 0.3) {
+      // Right arm
+      const rightArm = new THREE.Mesh(this.sharedRoadGeometries.cactusArm, this.propMaterials.cactus);
+      rightArm.position.set(0.5, 2, 0);
+      rightArm.rotation.z = -Math.PI / 3; // Angle upward
+      cactus.add(rightArm);
+    }
+
+    return cactus;
   }
-  
+
   // Removed createLowPolyTree - now using instanced rendering
-  
+
   addSignage(segment, zPosition) {
     const segmentData = this.segments.find(s => s.group === segment);
     
@@ -298,18 +364,14 @@ export class Highway101 {
   
   createDistanceSign(miles) {
     const signGroup = new THREE.Group();
-    
-    // Pole
-    const poleGeo = new THREE.CylinderGeometry(0.05, 0.05, 2, 4); // Reduced from 3 to 2
-    const poleMat = new THREE.MeshLambertMaterial({ color: 0x666666 });
-    const pole = new THREE.Mesh(poleGeo, poleMat);
+
+    // Pole - use shared geometry and material
+    const pole = new THREE.Mesh(this.sharedRoadGeometries.pole, this.propMaterials.pole);
     pole.position.y = 1; // Lowered from 1.5 to 1
     signGroup.add(pole);
-    
-    // Sign board
-    const signGeo = new THREE.BoxGeometry(2, 1, 0.1);
-    const signMat = new THREE.MeshLambertMaterial({ color: 0x006600 });
-    const signBoard = new THREE.Mesh(signGeo, signMat);
+
+    // Sign board - use shared geometry and material
+    const signBoard = new THREE.Mesh(this.sharedRoadGeometries.signSmall, this.propMaterials.sign);
     signBoard.position.y = 2; // Lowered from 3 to 2
     signGroup.add(signBoard);
     
@@ -318,23 +380,18 @@ export class Highway101 {
   
   createExitSign() {
     const signGroup = new THREE.Group();
-    
-    // Support structure
-    const supportGeo = new THREE.BoxGeometry(0.2, 3, 0.2); // Reduced from 4 to 3
-    const supportMat = new THREE.MeshLambertMaterial({ color: 0x444444 });
-    
-    const support1 = new THREE.Mesh(supportGeo, supportMat);
+
+    // Support structure - use shared geometry and material
+    const support1 = new THREE.Mesh(this.sharedRoadGeometries.signSupport, this.propMaterials.support);
     support1.position.set(-2, 1.5, 0); // Lowered from 2 to 1.5
     signGroup.add(support1);
-    
-    const support2 = new THREE.Mesh(supportGeo, supportMat);
+
+    const support2 = new THREE.Mesh(this.sharedRoadGeometries.signSupport, this.propMaterials.support);
     support2.position.set(2, 1.5, 0); // Lowered from 2 to 1.5
     signGroup.add(support2);
-    
-    // Sign
-    const signGeo = new THREE.BoxGeometry(5, 2, 0.2);
-    const signMat = new THREE.MeshLambertMaterial({ color: 0x006633 });
-    const sign = new THREE.Mesh(signGeo, signMat);
+
+    // Sign - use shared geometry and material
+    const sign = new THREE.Mesh(this.sharedRoadGeometries.signLarge, this.propMaterials.signLarge);
     sign.position.y = 2.5; // Lowered from 4 to 2.5
     signGroup.add(sign);
     
@@ -342,11 +399,34 @@ export class Highway101 {
   }
   
   update(playerZ, playerSpeed) {
-    // Infinite scrolling - move segments as player progresses
-    // Keep visibility limited to prevent performance issues
-    const speedFactor = Math.max(1, Math.min(2, (playerSpeed || 0) / 50)); // Cap speed factor
-    const aheadDistance = this.segmentLength * Math.min(8, 5 + speedFactor * 2); // Max 8 segments ahead
-    const behindDistance = this.segmentLength * 2; // Keep minimal behind
+    // DYNAMIC SEGMENT MANAGEMENT FOR INFINITE SPEED
+    this.lastPlayerSpeed = playerSpeed || 0;
+    
+    // Calculate needed coverage based on speed
+    // At high speeds, we need more segments ahead
+    const speedFactor = Math.max(1, this.lastPlayerSpeed / 50);
+    const segmentsAhead = Math.min(Math.ceil(5 + speedFactor * 3), 20); // More segments at high speed
+    const segmentsBehind = 3; // Keep minimal behind
+    
+    const aheadDistance = this.segmentLength * segmentsAhead;
+    const behindDistance = this.segmentLength * segmentsBehind;
+    
+    // Dynamically adjust segment pool size based on speed
+    const neededSegments = segmentsAhead + segmentsBehind;
+    
+    // Update the target number of segments based on need
+    this.numSegments = Math.min(neededSegments, this.MAX_SEGMENTS);
+    
+    // Create segments if we need more
+    if (this.segments.length < this.numSegments) {
+      const segmentsToCreate = Math.min(this.numSegments - this.segments.length, 3);
+
+      // Create segments at needed positions
+      for (let i = 0; i < segmentsToCreate; i++) {
+        const newZ = playerZ + (aheadDistance - i * this.segmentLength);
+        this.createSegment(newZ);
+      }
+    }
     
     // Update LOD for all segments based on distance and speed
     this.updateLOD(playerZ, playerSpeed);
@@ -431,15 +511,15 @@ export class Highway101 {
       segment.detailGroups.markings.forEach(obj => {
         obj.visible = lodLevel < 2;
       });
-      
+
       // Trees are now handled via instanced mesh visibility
       // We could potentially update instance visibility here
-      
+
       // Signs - hide at far distances
       segment.detailGroups.signs.forEach(obj => {
         obj.visible = lodLevel < 3;
       });
-      
+
       // Roadside elements
       segment.detailGroups.roadside.forEach(obj => {
         obj.visible = lodLevel < 2;
@@ -448,6 +528,18 @@ export class Highway101 {
   }
   
   ensureContinuousCoverage(playerZ, aheadDistance, behindDistance) {
+    // MEMORY LEAK FIX: Clean up distant segments periodically
+    this.segmentCleanupCounter++;
+    if (this.segmentCleanupCounter % 60 === 0) { // Every 60 frames (once per second)
+      this.cleanupDistantSegments(playerZ);
+    }
+    
+    // MEMORY LEAK FIX: Emergency cleanup if too many segments
+    if (this.segments.length > this.MAX_SEGMENTS) {
+      this.emergencyCleanup(playerZ);
+      // Don't return - still try to maintain coverage
+    }
+    
     // Calculate the range we need to cover
     const minZ = playerZ - behindDistance;
     const maxZ = playerZ + aheadDistance;
@@ -477,59 +569,84 @@ export class Highway101 {
           const alignedZ = Math.round(s.z / this.segmentLength) * this.segmentLength;
           return !requiredPositions.includes(alignedZ);
         });
-        
+
         if (availableSegment) {
-          // Move this segment to fill the gap
-          availableSegment.z = requiredZ;
-          availableSegment.group.position.z = requiredZ;
+          // Move this segment to fill the gap - ensure EXACT alignment to prevent gaps
+          const exactZ = Math.round(requiredZ / this.segmentLength) * this.segmentLength;
+          availableSegment.z = exactZ;
+          availableSegment.group.position.z = exactZ;
           this.regenerateRoadside(availableSegment);
         } else {
-          // This shouldn't happen, but create emergency segment if needed
-          console.warn('Creating emergency segment at', requiredZ);
-          this.createSegment(requiredZ);
+          // MEMORY LEAK FIX: Create new segment if we have room
+          if (this.segments.length < this.numSegments) {
+            // We have room, create a new segment with exact alignment
+            const exactZ = Math.round(requiredZ / this.segmentLength) * this.segmentLength;
+            this.createSegment(exactZ);
+          } else {
+            // Try to recycle the furthest segment
+            let furthestDist = 0;
+            let furthestSegment = null;
+
+            this.segments.forEach(s => {
+              if (!requiredPositions.includes(s.z)) {
+                const dist = Math.abs(s.z - playerZ);
+                if (dist > furthestDist) {
+                  furthestDist = dist;
+                  furthestSegment = s;
+                }
+              }
+            });
+
+            if (furthestSegment) {
+              // Recycle the furthest segment - ensure EXACT alignment to prevent gaps
+              const exactZ = Math.round(requiredZ / this.segmentLength) * this.segmentLength;
+              furthestSegment.z = exactZ;
+              furthestSegment.group.position.z = exactZ;
+              this.regenerateRoadside(furthestSegment);
+              // Successfully recycled segment
+            } else {
+              // Silently handle - no segments available to recycle
+            }
+          }
         }
       }
     });
   }
   
   regenerateRoadside(segment) {
-    // Remove old trees and signs - properly dispose of geometries
+    // Remove old cacti and signs - DON'T dispose shared geometries
     const toRemove = [];
     segment.group.traverse(child => {
-      if (child.userData.roadside || child.userData.isSign || child.userData.isTree) {
+      if (child.userData.roadside || child.userData.isSign || child.userData.isCactus) {
         toRemove.push(child);
       }
     });
     toRemove.forEach(child => {
-      // Dispose of geometry for non-shared objects
-      if (child.geometry) {
-        child.geometry.dispose();
-      }
-      // Don't dispose materials as they're shared
+      // DON'T dispose geometry - it's shared!
+      // DON'T dispose materials - they're shared!
       segment.group.remove(child);
     });
-    
+
     // Clear detail groups
     if (segment.detailGroups) {
       segment.detailGroups.trees = [];
       segment.detailGroups.signs = [];
     }
-    
+
     // Add new ones
-    this.addTrees(segment.group, 0);
+    this.addCacti(segment.group, 0);
     this.addSignage(segment.group, segment.z);
   }
   
   getLanePosition(lane) {
     // Returns x position for given lane (0-2 for 3 lanes)
-    const laneOffset = (lane - 1) * this.laneWidth; // Lane 0 is left, 1 is center, 2 is right
-    return laneOffset;
+    return ROAD_CONSTANTS.getLanePosition(lane);
   }
   
   getNearestLane(xPosition) {
     // Returns nearest lane number for given x position
-    const lane = Math.round((xPosition / this.laneWidth) + 1);
-    return Math.max(0, Math.min(2, lane)); // Clamp to 0-2 for 3 lanes
+    const lane = Math.round((xPosition / ROAD_CONSTANTS.LANE_WIDTH) + 1);
+    return Math.max(0, Math.min(ROAD_CONSTANTS.NUM_LANES - 1, lane)); // Clamp to valid lane range
   }
   
   getLocationAtPosition(absoluteZ) {
@@ -572,35 +689,30 @@ export class Highway101 {
     // Remove all segments from scene
     this.segments.forEach(segment => {
       if (segment.group) {
-        segment.group.traverse((object) => {
-          if (object.geometry) {
-            object.geometry.dispose();
-          }
-          if (object.material) {
-            if (Array.isArray(object.material)) {
-              object.material.forEach(mat => mat.dispose());
-            } else {
-              object.material.dispose();
-            }
-          }
-        });
+        // Just remove from scene - don't dispose shared geometries
         this.scene.remove(segment.group);
       }
     });
-    
+
     // Clear segments array
     this.segments = [];
-    
-    // Dispose of materials
-    if (this.asphaltMat) this.asphaltMat.dispose();
-    if (this.whiteMat) this.whiteMat.dispose();
-    if (this.yellowMat) this.yellowMat.dispose();
-    if (this.shoulderMat) this.shoulderMat.dispose();
-    if (this.grassMat) this.grassMat.dispose();
-    if (this.barrierMat) this.barrierMat.dispose();
-    if (this.rockMat) this.rockMat.dispose();
-    if (this.guardrailMat) this.guardrailMat.dispose();
-    
+
+    // Dispose all shared geometries
+    if (this.sharedRoadGeometries) {
+      Object.values(this.sharedRoadGeometries).forEach(geo => {
+        if (geo && geo.dispose) {
+          geo.dispose();
+        }
+      });
+      this.sharedRoadGeometries = null;
+    }
+
+    // Clear prop materials reference (materials themselves managed by MaterialManager)
+    this.propMaterials = null;
+
+    // Materials are managed by MaterialManager - don't dispose them here
+    // They will be disposed when MaterialManager.dispose() is called
+
     // Dispose of instanced tree meshes
     if (this.treeMesh) {
       this.treeMesh.geometry.dispose();
@@ -612,5 +724,112 @@ export class Highway101 {
       this.trunkMesh.material.dispose();
       this.scene.remove(this.trunkMesh);
     }
+  }
+  
+  // MEMORY LEAK FIX: Add cleanup methods
+  cleanupDistantSegments(playerZ) {
+    if (!this.segments || this.segments.length === 0) return;
+    
+    // Only cleanup if we have too many segments
+    if (this.segments.length <= this.numSegments) {
+      return; // Don't cleanup if we're at or below target
+    }
+    
+    // Dynamic cleanup distance based on speed
+    const speedFactor = Math.max(1, this.lastPlayerSpeed / 50);
+    const maxDistance = Math.max(3000, 1500 * speedFactor); // More generous distance
+    
+    const removed = [];
+    this.segments = this.segments.filter(segment => {
+      const distance = Math.abs(segment.z - playerZ);
+      if (distance > maxDistance && this.segments.length > this.numSegments) {
+        removed.push(segment);
+        return false;
+      }
+      return true;
+    });
+    
+    // Properly dispose removed segments
+    removed.forEach(segment => {
+      this.disposeSegment(segment);
+    });
+  }
+  
+  reset() {
+    // Clear all existing segments
+    while (this.segments.length > 0) {
+      const segment = this.segments.pop();
+      this.disposeSegment(segment);
+    }
+    
+    // Reset to initial state
+    this.segments = [];
+    this.currentZ = 0;
+    this.numSegments = this.BASE_SEGMENTS;
+    this.segmentCleanupCounter = 0;
+    this.lastPlayerSpeed = 0;
+    
+    // Create initial segments around starting position
+    const startZ = -this.segmentLength * 2; // Start a bit behind
+    for (let i = 0; i < 5; i++) { // Create first 5 segments
+      const z = startZ + i * this.segmentLength;
+      this.createSegment(z);
+    }
+  }
+  
+  emergencyCleanup(playerZ) {
+    if (!this.segments || this.segments.length === 0) return;
+    
+    // Sort by distance from player
+    this.segments.sort((a, b) => {
+      const distA = Math.abs(a.z - playerZ);
+      const distB = Math.abs(b.z - playerZ);
+      return distA - distB;
+    });
+    
+    // Keep only closest segments
+    const toKeep = this.segments.slice(0, this.numSegments);
+    const toRemove = this.segments.slice(this.numSegments);
+    
+    // Dispose excess segments
+    toRemove.forEach(segment => {
+      this.disposeSegment(segment);
+    });
+    
+    this.segments = toKeep;
+  }
+  
+  disposeSegment(segment) {
+    if (!segment) return;
+
+    // Remove from scene and dispose group
+    if (segment.group) {
+      // Traverse and remove all children
+      const toDispose = [];
+      segment.group.traverse(child => {
+        if (child !== segment.group) {
+          toDispose.push(child);
+        }
+      });
+
+      toDispose.forEach(child => {
+        // DON'T dispose geometry - it's all shared now!
+        // DON'T dispose materials - they're shared!
+
+        // Remove from parent
+        if (child.parent) {
+          child.parent.remove(child);
+        }
+      });
+
+      // Remove group from scene
+      if (segment.group.parent) {
+        segment.group.parent.remove(segment.group);
+      }
+    }
+
+    // Clear references
+    segment.group = null;
+    segment.detailGroups = null;
   }
 }

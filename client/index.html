@@ -1,196 +1,463 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Motosai - Hello World</title>
+  <head>
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-RBJYMLLVWH"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+
+      gtag('config', 'G-RBJYMLLVWH');
+    </script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏍️</text></svg>" />
+    <title>Motosai - Level: Death Valley</title>
+
+    <!-- Open Graph / Social Media Preview -->
+    <meta property="og:title" content="Motosai - Level: Death Valley" />
+    <meta property="og:description" content="Ride through Death Valley in this immersive motorcycle simulator. Experience realistic physics and stunning desert landscapes." />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="/preview.png" />
+    <meta name="description" content="Ride through Death Valley in this immersive motorcycle simulator. Experience realistic physics and stunning desert landscapes." />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Motosai - Level: Death Valley" />
+    <meta name="twitter:description" content="Ride through Death Valley in this immersive motorcycle simulator. Experience realistic physics and stunning desert landscapes." />
+    <meta name="twitter:image" content="/preview.png" />
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        overflow: hidden;
+        background: #000;
+      }
+
+      @keyframes fadeOut {
+        0% {
+          opacity: 1;
         }
-        
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
+        70% {
+          opacity: 1;
         }
-        
-        .container {
-            background: white;
-            border-radius: 20px;
-            padding: 40px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            max-width: 600px;
-            width: 90%;
+        100% {
+          opacity: 0;
         }
-        
-        h1 {
-            color: #333;
-            margin-bottom: 30px;
-            text-align: center;
-            font-size: 2.5em;
+      }
+
+      #gameContainer {
+        width: 100vw;
+        height: 100vh;
+        position: relative;
+      }
+
+      #loadingScreen {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+        transition: opacity 0.5s;
+      }
+
+      #loadingScreen img.logo {
+        width: 200px;
+        height: auto;
+        margin-bottom: 30px;
+        animation: fadeIn 1s ease-in-out;
+      }
+
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(-20px);
         }
-        
-        .status {
-            padding: 15px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-            text-align: center;
-            font-weight: 500;
+        to {
+          opacity: 1;
+          transform: translateY(0);
         }
-        
-        .status.connected {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
+      }
+
+      #loadingScreen h1 {
+        color: white;
+        font-size: 48px;
+        margin-bottom: 20px;
+      }
+
+      #loadingBar {
+        width: 300px;
+        height: 4px;
+        background: rgba(255, 255, 255, 0.3);
+        border-radius: 2px;
+        overflow: hidden;
+      }
+
+      #loadingProgress {
+        height: 100%;
+        background: white;
+        width: 0%;
+        transition: width 0.3s;
+      }
+
+      #startScreen {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        display: none;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        z-index: 999;
+      }
+
+      #startScreen img.logo {
+        width: 250px;
+        height: auto;
+        margin-bottom: 30px;
+        animation: fadeIn 1s ease-in-out;
+      }
+
+      #startScreen h1 {
+        color: white;
+        font-size: 64px;
+        margin-bottom: 10px;
+        text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.3);
+      }
+
+      #startScreen h2 {
+        color: white;
+        font-size: 24px;
+        margin-bottom: 40px;
+        opacity: 0.9;
+      }
+
+      .startButton {
+        padding: 15px 40px;
+        font-size: 20px;
+        color: white;
+        background: rgba(255, 255, 255, 0.2);
+        border: 2px solid white;
+        border-radius: 50px;
+        cursor: pointer;
+        transition: all 0.3s;
+        margin: 10px;
+      }
+
+      .startButton:hover {
+        background: rgba(255, 255, 255, 0.3);
+        transform: scale(1.05);
+      }
+
+      #controls {
+        position: absolute;
+        bottom: 20px;
+        left: 20px;
+        color: white;
+        background: rgba(0, 0, 0, 0.7);
+        padding: 15px;
+        border-radius: 10px;
+        font-size: 12px;
+        z-index: 100;
+      }
+
+      #controls h3 {
+        margin-bottom: 10px;
+        color: #ffcc00;
+      }
+
+      #controls div {
+        margin: 5px 0;
+      }
+
+      #controls kbd {
+        background: rgba(255, 255, 255, 0.2);
+        padding: 2px 6px;
+        border-radius: 3px;
+        margin: 0 2px;
+      }
+
+      #pauseOverlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.7);
+        display: none;
+        justify-content: center;
+        align-items: center;
+        z-index: 998;
+      }
+
+      #pauseOverlay h2 {
+        color: white;
+        font-size: 48px;
+      }
+
+      #devLogButton {
+        position: absolute;
+        bottom: 20px;
+        right: 20px;
+        padding: 12px 24px;
+        font-size: 14px;
+        color: white;
+        background: rgba(102, 126, 234, 0.9);
+        border: 2px solid rgba(255, 255, 255, 0.5);
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.3s;
+        z-index: 100;
+        font-weight: 600;
+        text-decoration: none;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      #devLogButton:hover {
+        background: rgba(118, 75, 162, 0.9);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      }
+
+      @media (max-width: 768px) {
+        #controls {
+          display: none;
         }
-        
-        .status.disconnected {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-        
-        .input-group {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-        
-        input {
-            flex: 1;
-            padding: 12px;
-            border: 2px solid #ddd;
-            border-radius: 8px;
-            font-size: 16px;
-            transition: border-color 0.3s;
-        }
-        
-        input:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-        
-        button {
-            padding: 12px 24px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: transform 0.2s, box-shadow 0.2s;
-        }
-        
-        button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
-        }
-        
-        button:active {
-            transform: translateY(0);
-        }
-        
-        button:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-        }
-        
-        .messages {
-            background: #f8f9fa;
-            border-radius: 10px;
-            padding: 20px;
-            max-height: 400px;
-            overflow-y: auto;
-        }
-        
-        .message {
-            padding: 10px;
-            margin-bottom: 10px;
-            border-radius: 8px;
-            background: white;
-            border-left: 4px solid #667eea;
-        }
-        
-        .message.sent {
-            border-left-color: #764ba2;
-        }
-        
-        .message-time {
-            font-size: 0.8em;
-            color: #666;
-            margin-top: 5px;
-        }
-        
-        .latency {
-            text-align: center;
-            margin-top: 20px;
-            color: #666;
-            font-size: 0.9em;
-        }
-        
-        .endpoints {
-            margin-top: 20px;
-            padding: 20px;
-            background: #f8f9fa;
-            border-radius: 10px;
-        }
-        
-        .endpoint-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 10px;
-        }
-        
-        .endpoint-response {
-            margin-top: 10px;
-            padding: 10px;
-            background: white;
-            border-radius: 5px;
-            font-family: monospace;
-            font-size: 0.9em;
-        }
+      }
     </style>
-</head>
-<body>
-    <div class="container">
-        <h1>🏍️ Motosai</h1>
-        <div id="status" class="status disconnected">Disconnected</div>
-        
-        <div style="margin: 20px 0; text-align: center;">
-            <a href="game.html" style="display: inline-block; padding: 15px 30px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 18px;">
-                🎮 Play Game
-            </a>
+  </head>
+  <body>
+    <div id="gameContainer">
+      <div id="loadingScreen">
+        <div style="color: white; font-size: 14px; margin-bottom: 20px; opacity: 0.7;">
+          <div>Visitors: <span id="visitor-count">...</span></div>
+          <div>Visits: <span id="visit-count">...</span></div>
         </div>
-        
-        <div class="input-group">
-            <input type="text" id="nameInput" placeholder="Enter your name" value="User">
-            <button id="sendHello">Send Hello</button>
+        <h1>🏍️ MOTOSAI</h1>
+        <p style="color: white; font-size: 18px; margin-bottom: 20px; opacity: 0.9;">by marvin.technology</p>
+        <img src="/mt logo-brown-green.png" alt="Motosai Logo" class="logo" />
+        <div id="loadingBar">
+          <div id="loadingProgress"></div>
         </div>
-        
-        <div class="endpoints">
-            <h3>REST API Test</h3>
-            <div class="endpoint-item">
-                <span>/api/hello</span>
-                <button id="testApi">Test API</button>
-            </div>
-            <div id="apiResponse" class="endpoint-response" style="display: none;"></div>
+      </div>
+
+      <div id="startScreen">
+        <img src="/mt logo-brown-green.png" alt="Motosai Logo" class="logo" />
+        <h1>🏍️ MOTOSAI</h1>
+        <p style="color: white; font-size: 18px; margin-bottom: 10px; opacity: 0.9;">by marvin.technology</p>
+        <h2>Death Valley, USA</h2>
+
+        <div style="margin: 20px 0">
+          <label style="color: white; font-size: 18px; margin-right: 10px"
+            >Rider Gear Color:</label
+          >
+          <select
+            id="riderColor"
+            style="
+              padding: 8px 15px;
+              font-size: 16px;
+              border-radius: 5px;
+              background: rgba(255, 255, 255, 0.9);
+              border: none;
+            "
+          >
+            <option value="0x1a1a1a">Black</option>
+            <option value="0xff0000">Red</option>
+            <option value="0x0066cc">Blue</option>
+            <option value="0xffff00">Hi-Viz Yellow</option>
+            <option value="0xff6600">Orange</option>
+            <option value="0x00ff00">Green</option>
+            <option value="0xffffff">White</option>
+            <option value="0x800080">Purple</option>
+            <option value="0x00ffff">Cyan</option>
+          </select>
         </div>
-        
-        <div class="messages" id="messages">
-            <div class="message">Welcome to Motosai! Click "Send Hello" to test WebSocket connection.</div>
-        </div>
-        
-        <div class="latency" id="latency">Latency: -- ms</div>
+
+        <button class="startButton" onclick="startGame()">START RIDE</button>
+        <!-- Options removed -->
+      </div>
+
+      <div id="pauseOverlay">
+        <h2>PAUSED</h2>
+      </div>
+
+      <div id="controls">
+        <h3>Controls</h3>
+        <div><kbd>W</kbd> / <kbd>↑</kbd> - Throttle</div>
+        <div><kbd>S</kbd> / <kbd>↓</kbd> - Brake</div>
+        <div><kbd>A</kbd> / <kbd>←</kbd> - Lean Left (tap-hold for sharp)</div>
+        <div><kbd>D</kbd> / <kbd>→</kbd> - Lean Right (tap-hold for sharp)</div>
+        <div><kbd>Left Shift</kbd> - Front Brake</div>
+        <div><kbd>Right Shift</kbd> - Rear Brake</div>
+        <div><kbd>Space</kbd> - Camera View</div>
+        <div><kbd>M</kbd> - Mute/Unmute Sound</div>
+        <div><kbd>P</kbd> - Pause</div>
+      </div>
+
+      <a id="devLogButton" href="/devlog.html" target="_blank" style="display: none;">
+        📝 Marvin Dev Log
+      </a>
     </div>
-    
-    <script type="module" src="/src/main.js"></script>
-</body>
+
+    <script type="module">
+      import { MotosaiGame } from "/src/game/MotosaiGame.js";
+
+      let game = null;
+      let isLoading = true;
+
+      // Fetch visitor count via REST API to avoid duplicate socket connections
+      const serverUrl = window.location.hostname === 'localhost'
+        ? 'http://localhost:8080'
+        : window.location.origin;
+
+      async function fetchVisitorCount() {
+        try {
+          const response = await fetch(`${serverUrl}/api/visitors/count`);
+          const data = await response.json();
+          if (data.success) {
+            updateCounts(data.visitors, data.visits);
+          }
+        } catch (error) {
+          console.error('Failed to fetch counts:', error);
+        }
+      }
+
+      function updateCounts(visitors, visits) {
+        // Update visitor count on loading screen only
+        const visitorElement = document.getElementById('visitor-count');
+        if (visitorElement) visitorElement.textContent = visitors.toLocaleString();
+
+        // Update visit count on loading screen only
+        const visitElement = document.getElementById('visit-count');
+        if (visitElement) visitElement.textContent = visits.toLocaleString();
+      }
+
+      // Fetch initial count ONCE on page load
+      fetchVisitorCount();
+
+      // NO POLLING - counts will be updated via WebSocket events
+      // The server broadcasts 'visitor-count-update' when new visitors join
+
+      // Real loading progress tracking
+      let loadingComplete = false;
+      window.updateLoadingProgress = function(progress) {
+        const progressBar = document.getElementById("loadingProgress");
+        if (progressBar) {
+          progressBar.style.width = Math.min(progress * 100, 100) + "%";
+        }
+
+        // When loading is complete
+        if (progress >= 1 && !loadingComplete) {
+          loadingComplete = true;
+          setTimeout(onLoadingComplete, 500);
+        }
+      };
+
+      // Start with a small initial progress to show something is happening
+      function initLoading() {
+        const progress = document.getElementById("loadingProgress");
+        if (progress) {
+          progress.style.width = "5%"; // Show 5% immediately
+        }
+
+        // Start the game initialization immediately to begin loading assets
+        // This will trigger the UFORaceIntro which will update progress
+        setTimeout(() => {
+          startGameLoading();
+        }, 100);
+      }
+
+      function onLoadingComplete() {
+        const loadingScreen = document.getElementById("loadingScreen");
+
+        loadingScreen.style.opacity = "0";
+        setTimeout(() => {
+          loadingScreen.style.display = "none";
+          isLoading = false;
+
+          // Game has already been started in startGameLoading
+        }, 500);
+      }
+
+      function startGameLoading() {
+        // Start game initialization during loading screen
+        // This allows UFORaceIntro to load assets and update progress
+        startGame();
+      }
+
+      // Store pause handler to prevent memory leak when restarting game
+      let pauseHandler = null;
+
+      window.startGame = function () {
+        // Keep the dev log button visible during the game
+        // It's useful for players to access the dev log
+
+        // Dispose of any existing game first
+        if (game && game.dispose) {
+          game.dispose();
+          game = null;
+        }
+
+        // Remove old pause handler if it exists to prevent memory leak
+        if (pauseHandler) {
+          window.removeEventListener("keydown", pauseHandler);
+          pauseHandler = null;
+        }
+
+        // Keep visitor count polling running throughout the game session
+        // Don't clear it - we want to see updates when new players join
+
+        // Initialize game with default configuration
+        // Color will be set by UFO intro
+        const container = document.getElementById("gameContainer");
+        const config = {
+          riderColor: 0x1a1a1a, // Default, will be overridden by intro
+          multiplayer: true, // Enable multiplayer
+        };
+        game = new MotosaiGame(container, config);
+        game.start();
+
+        // Setup pause handler (save reference to remove later)
+        pauseHandler = (e) => {
+          if (e.code === "KeyP") {
+            togglePause();
+          }
+        };
+        window.addEventListener("keydown", pauseHandler);
+      };
+
+      function togglePause() {
+        if (!game) return;
+
+        const pauseOverlay = document.getElementById("pauseOverlay");
+        game.pause();
+
+        if (game.isPaused) {
+          pauseOverlay.style.display = "flex";
+        } else {
+          pauseOverlay.style.display = "none";
+        }
+      }
+
+      // Start loading
+      initLoading();
+    </script>
+  </body>
 </html>

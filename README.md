@@ -41,9 +41,12 @@ A realistic motorcycle physics simulator featuring California's Highway 101 from
   - `Space` - Front Brake
   - `P` - Pause
 
-- **Mobile**
-  - Touch controls for throttle, brake, and lean
+- **Mobile** 📱
+  - Virtual joystick for steering/leaning (left side)
+  - Touch buttons for throttle and brake (right side)
+  - Haptic feedback support
   - Optimized for mobile browsers
+  - See [MOBILE_CONTROLS_GUIDE.md](MOBILE_CONTROLS_GUIDE.md) for details
 
 ## 🏗️ Architecture
 
@@ -204,4 +207,6 @@ For questions or suggestions, please open an issue on GitHub.
 
 ---
 
-**Live Demo**: https://storage.googleapis.com/motosai-app/index.html
+**Live Demo**: https://motosai.com
+
+**Development Journal**: https://motosai.com/devlog

@@ -1,551 +1,427 @@
-// Background System for forward-driving view
-// Places photo/gradient on the horizon where the road meets the sky
+// Simple blue sky background with beautiful night starfield
 
-import * as THREE from 'three';
-import { UnsplashService } from './UnsplashService.js';
-import { ImageCacheManager } from './ImageCacheManager.js';
+import * as THREE from "three";
 
 export class BackgroundSystem {
   constructor(scene, camera) {
-    // console.log('BackgroundSystem: Constructor called with scene:', scene, 'camera:', camera);
     this.scene = scene;
     this.camera = camera;
-    this.photoService = new UnsplashService();
-    this.cacheManager = new ImageCacheManager();
-    
-    // Current background elements
-    this.horizonPlane = null;
     this.skyDome = null;
-    this.currentSegment = -1;  // Start at -1 so segment 0 triggers
-    this.nextSegment = null;
-    
-    // Transition state
-    this.transitioning = false;
-    this.transitionProgress = 0;
-    this.transitionAnimationId = null;  // Store animation frame ID
-    
-    // Cache with size limit
-    this.backgroundCache = new Map();
-    this.maxCacheSize = 10; // Maximum number of cached backgrounds
-    this.cacheCleanupCounter = 0;
-    
-    // Track textures for disposal
-    this.activeTextures = new Set();
-    
-    // Clean up old cached images on startup (older than 30 days)
-    this.cacheManager.clearOldCache();
-    
+    this.starfield = null;
+    this.milkyWay = null;
+    this.sun = null;
+    this.sunRelativePosition = new THREE.Vector3(0, 1700, 0); // Initialize above
+    this.time = 0;
+
     this.init();
   }
-  
+
   init() {
-    // Create the sky dome which will also be our background
-    this.updateSkyDome();
-    
-    // Create second sphere for smooth transitions
-    this.createTransitionSphere();
-  }
-  
-  createTransitionSphere() {
-    // Create a second sphere for blending
+    // Create simple blue sky sphere
     const skyGeo = new THREE.SphereGeometry(2000, 64, 32);
     const skyMat = new THREE.MeshBasicMaterial({
-      color: 0xffffff,  // White instead of blue - will be replaced by texture
+      color: 0x87ceeb, // Sky blue
       fog: false,
-      side: THREE.BackSide,
+      side: THREE.BackSide, // Render inside of sphere
       depthWrite: false,
+      transparent: false,
+    });
+
+    this.skyDome = new THREE.Mesh(skyGeo, skyMat);
+    this.skyDome.name = "sky";
+    this.skyDome.renderOrder = -1000; // Render behind everything
+    this.skyDome.frustumCulled = false; // Always render
+    this.scene.add(this.skyDome);
+
+    // Create beautiful starfield
+    this.createStarfield();
+
+    // Create Milky Way galaxy band
+    this.createMilkyWay();
+
+    // Create sun and moon
+    this.createSunAndMoon();
+  }
+
+  createStarfield() {
+    // Create 8000 stars for a dense, beautiful field
+    const starCount = 8000;
+    const positions = new Float32Array(starCount * 3);
+    const sizes = new Float32Array(starCount);
+    const colors = new Float32Array(starCount * 3);
+    const twinkleOffsets = new Float32Array(starCount);
+    const twinkleSpeeds = new Float32Array(starCount);
+
+    for (let i = 0; i < starCount; i++) {
+      // Distribute stars spherically around the sky
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      const radius = 1800; // Inside sky dome
+
+      positions[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
+      positions[i * 3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
+      positions[i * 3 + 2] = radius * Math.cos(phi);
+
+      // Vary star sizes for depth - some large bright stars, mostly small ones
+      const sizeRoll = Math.random();
+      if (sizeRoll > 0.98) {
+        sizes[i] = 4.0 + Math.random() * 3.0; // Bright stars
+      } else if (sizeRoll > 0.9) {
+        sizes[i] = 2.5 + Math.random() * 1.5; // Medium stars
+      } else {
+        sizes[i] = 1.0 + Math.random() * 1.5; // Small stars
+      }
+
+      // Star colors - mostly white/blue, some warm stars
+      const colorRoll = Math.random();
+      if (colorRoll > 0.95) {
+        // Warm orange/red stars (rare)
+        colors[i * 3] = 1.0;
+        colors[i * 3 + 1] = 0.7 + Math.random() * 0.3;
+        colors[i * 3 + 2] = 0.6 + Math.random() * 0.2;
+      } else if (colorRoll > 0.85) {
+        // Yellow-white stars
+        colors[i * 3] = 1.0;
+        colors[i * 3 + 1] = 0.95 + Math.random() * 0.05;
+        colors[i * 3 + 2] = 0.85 + Math.random() * 0.15;
+      } else {
+        // Blue-white stars (most common)
+        colors[i * 3] = 0.8 + Math.random() * 0.2;
+        colors[i * 3 + 1] = 0.85 + Math.random() * 0.15;
+        colors[i * 3 + 2] = 1.0;
+      }
+
+      // Twinkle parameters for organic animation
+      twinkleOffsets[i] = Math.random() * Math.PI * 2;
+      twinkleSpeeds[i] = 0.5 + Math.random() * 1.5;
+    }
+
+    const starGeometry = new THREE.BufferGeometry();
+    starGeometry.setAttribute(
+      "position",
+      new THREE.BufferAttribute(positions, 3)
+    );
+    starGeometry.setAttribute("size", new THREE.BufferAttribute(sizes, 1));
+    starGeometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+    starGeometry.setAttribute(
+      "twinkleOffset",
+      new THREE.BufferAttribute(twinkleOffsets, 1)
+    );
+    starGeometry.setAttribute(
+      "twinkleSpeed",
+      new THREE.BufferAttribute(twinkleSpeeds, 1)
+    );
+
+    // Custom shader for beautiful twinkling stars
+    const starMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        time: { value: 0 },
+        opacity: { value: 1.0 },
+      },
+      vertexShader: `
+        attribute float size;
+        attribute vec3 color;
+        attribute float twinkleOffset;
+        attribute float twinkleSpeed;
+
+        varying vec3 vColor;
+        varying float vAlpha;
+
+        uniform float time;
+
+        void main() {
+          vColor = color;
+
+          // Organic twinkling effect
+          float twinkle = sin(time * twinkleSpeed + twinkleOffset) * 0.5 + 0.5;
+          twinkle = pow(twinkle, 2.0); // Make twinkle more dramatic
+          vAlpha = 0.4 + twinkle * 0.6; // Stars fade between 40% and 100%
+
+          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+
+          // Size based on distance and twinkle
+          gl_PointSize = size * (1.0 + twinkle * 0.5) * (1000.0 / -mvPosition.z);
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: `
+        uniform float opacity;
+        varying vec3 vColor;
+        varying float vAlpha;
+
+        void main() {
+          // Create soft circular stars
+          vec2 center = gl_PointCoord - vec2(0.5);
+          float dist = length(center);
+
+          if (dist > 0.5) discard;
+
+          // Soft glow falloff
+          float alpha = (1.0 - dist * 2.0) * vAlpha;
+          alpha = pow(alpha, 1.5); // Soft glow
+
+          // Add bright core to larger stars
+          float core = smoothstep(0.5, 0.0, dist);
+          vec3 finalColor = vColor * (1.0 + core * 0.5);
+
+          gl_FragColor = vec4(finalColor, alpha * opacity);
+        }
+      `,
       transparent: true,
-      opacity: 0,
-      visible: false  // Ensure material is also not visible
-    });
-    
-    this.transitionSphere = new THREE.Mesh(skyGeo, skyMat);
-    this.transitionSphere.name = 'transitionSky';
-    this.transitionSphere.renderOrder = -999; // Render just after main sky
-    this.transitionSphere.frustumCulled = false;
-    this.transitionSphere.visible = false;
-    // Don't add to scene until needed for transition
-    // this.scene.add(this.transitionSphere);
-  }
-  
-  createHorizonPlane() {
-    // Create a sphere that surrounds the player
-    const geometry = new THREE.SphereGeometry(
-      10000,  // radius - large enough to surround everything
-      64,    // width segments
-      32     // height segments
-    );
-    const material = new THREE.MeshBasicMaterial({
-      color: 0x87CEEB,  // Sky blue default
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
       fog: false,
-      side: THREE.DoubleSide  // Render both sides
     });
-    
-    this.horizonPlane = new THREE.Mesh(geometry, material);
-    this.horizonPlane.position.set(0, 0, 0);  // Center at origin
-    
-    this.scene.add(this.horizonPlane);
-    
-    // Create second plane for smooth transitions
-    this.nextHorizonPlane = new THREE.Mesh(
-      geometry.clone(),
-      material.clone()
-    );
-    this.nextHorizonPlane.position.set(0, 0, 0); // Same position as main sphere
-    this.nextHorizonPlane.visible = false;
-    this.scene.add(this.nextHorizonPlane);
+
+    this.starfield = new THREE.Points(starGeometry, starMaterial);
+    this.starfield.name = "starfield";
+    this.starfield.renderOrder = -999;
+    this.starfield.frustumCulled = false;
+    this.starfield.visible = false; // Hidden by default, shown at night
+    this.scene.add(this.starfield);
   }
-  
-  updateSkyDome() {
-    // console.log('BackgroundSystem: Creating sky dome...');
-    
-    // Create sky sphere that will hold our background photos
-    const skyGeo = new THREE.SphereGeometry(2000, 64, 32);  // Increased size
-    const skyMat = new THREE.MeshBasicMaterial({
-      color: 0x87CEEB,  // Sky blue
+
+  createMilkyWay() {
+    // Create a subtle Milky Way band for extra beauty
+    const milkyWayGeo = new THREE.PlaneGeometry(3000, 1000);
+
+    // Create a gradient texture for the Milky Way
+    const canvas = document.createElement("canvas");
+    canvas.width = 512;
+    canvas.height = 512;
+    const ctx = canvas.getContext("2d");
+
+    // Create radial gradient from center
+    const gradient = ctx.createRadialGradient(256, 256, 0, 256, 256, 256);
+    gradient.addColorStop(0, "rgba(200, 220, 255, 0.4)");
+    gradient.addColorStop(0.3, "rgba(150, 180, 255, 0.2)");
+    gradient.addColorStop(0.6, "rgba(100, 140, 200, 0.1)");
+    gradient.addColorStop(1, "rgba(50, 80, 150, 0)");
+
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 512, 512);
+
+    const milkyWayTexture = new THREE.CanvasTexture(canvas);
+
+    const milkyWayMat = new THREE.MeshBasicMaterial({
+      map: milkyWayTexture,
+      transparent: true,
+      opacity: 0.6,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+      depthWrite: false,
       fog: false,
-      side: THREE.BackSide,  // Render inside of sphere
-      depthWrite: false,  // Ensure it renders behind everything
-      transparent: false
     });
-    
-    // Remove old sky if exists
-    const oldSky = this.scene.getObjectByName('sky');
-    if (oldSky) {
-      // console.log('Removing old sky');
-      this.scene.remove(oldSky);
-    }
-    
-    // This is now our main background holder
-    this.horizonPlane = new THREE.Mesh(skyGeo, skyMat);
-    this.horizonPlane.name = 'sky';
-    this.horizonPlane.renderOrder = -1000;  // Render first (behind everything)
-    this.horizonPlane.frustumCulled = false;  // Always render
-    // console.log('BackgroundSystem: Adding sky sphere to scene');
-    this.scene.add(this.horizonPlane);
-    // console.log('BackgroundSystem: Sky sphere added. Total scene children:', this.scene.children.length);
-    // console.log('Sky sphere material color:', this.horizonPlane.material.color);
-    
-    // Keep reference as skyDome for compatibility
-    this.skyDome = this.horizonPlane;
+
+    this.milkyWay = new THREE.Mesh(milkyWayGeo, milkyWayMat);
+    this.milkyWay.name = "milkyWay";
+    this.milkyWay.renderOrder = -998;
+    this.milkyWay.rotation.x = Math.PI / 2;
+    this.milkyWay.rotation.z = Math.PI / 4; // Angle the Milky Way
+    this.milkyWay.position.y = 500;
+    this.milkyWay.frustumCulled = false;
+    this.milkyWay.visible = false; // Hidden by default, shown at night
+    this.scene.add(this.milkyWay);
   }
-  
-  async updateLocation(absolutePosition, location) {
-    // Calculate segment (every 0.5 mile for more frequent changes)
-    // Use Math.max to ensure we never get negative segment IDs
-    const segmentId = Math.max(0, Math.floor(absolutePosition / 804.67)); // 0.5 mile in meters
-    
-    // Debug logging
-    const milesTravel = (absolutePosition / 1609.34).toFixed(2);
-    
-    if (segmentId !== this.currentSegment) {
-      console.log(`[BG] Segment change! Miles: ${milesTravel}, New segment: ${segmentId}, Location:`, location);
-      this.currentSegment = segmentId;
-      
-      // SIMPLIFIED: Just load a new background, no complex caching
-      await this.loadNewBackground(segmentId, location);
-    }
-    
-    // Position update is now handled in update() method to keep sphere centered on player
-  }
-  
-  async loadNewBackground(segmentId, location) {
-    try {
-      console.log(`[BG] Loading segment ${segmentId}: ${location.name} (${location.lat.toFixed(2)}, ${location.lng.toFixed(2)})`);
-      
-      // Fetch from API
-      const photos = await this.photoService.fetchPhotosForLocation(
-        location.lat,
-        location.lng,
-        location.name
-      );
-      
-      if (photos && photos.length > 0) {
-        // Pick a photo based on segment ID to get variety
-        const photoIndex = segmentId % photos.length;
-        const photo = photos[photoIndex];
-        console.log(`[BG] Segment ${segmentId}: Using photo ${photoIndex + 1} of ${photos.length}`);
-        
-        // SIMPLE: Just load the new background directly, no transition
-        if (photo.gradient) {
-          this.applyGradientBackground(photo.gradient);
-        } else if (photo.url) {
-          await this.loadPhotoBackground(photo.url);
+
+  createSunAndMoon() {
+    // Create the Sun - bright glowing sphere
+    const sunGeo = new THREE.SphereGeometry(7.5, 32, 32);
+
+    // Sun shader for realistic glow
+    const sunMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        glowColor: { value: new THREE.Color(0xfffaf0) },
+      },
+      vertexShader: `
+        varying vec3 vNormal;
+        varying vec3 vPosition;
+
+        void main() {
+          vNormal = normalize(normalMatrix * normal);
+          vPosition = position;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
         }
-      } else {
-        console.log('[BG] No photos returned, using default gradient');
-        // Fallback gradient
-        this.applyGradientBackground({
-          stops: [
-            { color: '#87CEEB', position: 0 },
-            { color: '#98D8F8', position: 0.5 },
-            { color: '#4682B4', position: 1 }
-          ]
-        });
-      }
-    } catch (error) {
-      console.error('[BG] Error loading background:', error);
-      // Apply fallback gradient on error
-      this.applyGradientBackground({
-        stops: [
-          { color: '#FFB6C1', position: 0 },
-          { color: '#FFA07A', position: 0.5 },
-          { color: '#FF6347', position: 1 }
-        ]
-      });
-    }
-  }
-  
-  applyGradientBackground(gradient) {
-    // Store old texture to dispose after new one is applied
-    const oldTexture = this.horizonPlane.material.map;
-    
-    // Create gradient texture
-    const canvas = document.createElement('canvas');
-    canvas.width = 512;
-    canvas.height = 256;
-    const ctx = canvas.getContext('2d');
-    
-    const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
-    gradient.stops.forEach(stop => {
-      grad.addColorStop(stop.position, stop.color);
-    });
-    
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    
-    // Create texture and apply to horizon
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.needsUpdate = true;
-    
-    // Track the new texture
-    this.activeTextures.add(texture);
-    
-    this.horizonPlane.material.map = texture;
-    this.horizonPlane.material.color.set(0xffffff);
-    this.horizonPlane.material.needsUpdate = true;
-    
-    // Now dispose the old texture if it existed
-    if (oldTexture && oldTexture !== texture) {
-      this.activeTextures.delete(oldTexture);
-      oldTexture.dispose();
-    }
-  }
-  
-  async transitionToNewBackground(photo, duration = 1500) {
-    return new Promise(async (resolve) => {
-      // Cancel any existing transition
-      if (this.transitionAnimationId) {
-        cancelAnimationFrame(this.transitionAnimationId);
-        this.transitionAnimationId = null;
-      }
-      
-      // Add transition sphere to scene only when needed
-      if (!this.transitionSphere.parent) {
-        this.scene.add(this.transitionSphere);
-      }
-      
-      // Load the new background into the transition sphere first
-      if (photo.gradient) {
-        // It's a gradient (from mock data)
-        await this.applyGradientToSphere(this.transitionSphere, photo.gradient);
-      } else if (photo.url) {
-        // It's a photo URL (from real API)
-        await this.loadPhotoToSphere(this.transitionSphere, photo.url);
-      } else {
-        console.error('[BG] Photo has neither gradient nor url:', photo);
-        resolve();
-        return;
-      }
-      
-      // Now fade between the two spheres
-      this.transitionSphere.visible = true;
-      this.transitionSphere.material.opacity = 0;
-      
-      const startTime = Date.now();
-      const fadeIn = () => {
-        const elapsed = Date.now() - startTime;
-        const progress = Math.min(elapsed / duration, 1);
-        
-        // Smooth easing
-        const eased = 1 - Math.pow(1 - progress, 3);
-        this.transitionSphere.material.opacity = eased;
-        
-        if (progress < 1) {
-          this.transitionAnimationId = requestAnimationFrame(fadeIn);
-        } else {
-          // Swap the backgrounds
-          const tempMap = this.horizonPlane.material.map;
-          this.horizonPlane.material.map = this.transitionSphere.material.map;
-          this.horizonPlane.material.color.copy(this.transitionSphere.material.color);
-          this.horizonPlane.material.needsUpdate = true;
-          
-          // Track texture swap
-          if (this.transitionSphere.material.map) {
-            this.activeTextures.add(this.transitionSphere.material.map);
-          }
-          
-          // Clean up
-          this.transitionSphere.visible = false;
-          this.transitionSphere.material.opacity = 0;
-          // Remove from scene after transition
-          if (this.transitionSphere.parent) {
-            this.scene.remove(this.transitionSphere);
-          }
-          if (tempMap) {
-            this.activeTextures.delete(tempMap);
-            tempMap.dispose();
-          }
-          
-          this.transitionAnimationId = null;
-          resolve();
+      `,
+      fragmentShader: `
+        uniform vec3 glowColor;
+        varying vec3 vNormal;
+        varying vec3 vPosition;
+
+        void main() {
+          // Bright core with soft edge glow
+          float intensity = 1.0;
+          vec3 color = glowColor;
+
+          gl_FragColor = vec4(color, 1.0);
         }
-      };
-      
-      fadeIn();
+      `,
+      transparent: false,
+      depthWrite: false,
+      fog: false,
     });
-  }
-  
-  async applyGradientToSphere(sphere, gradient) {
-    const canvas = document.createElement('canvas');
-    canvas.width = 512;
-    canvas.height = 256;
-    const ctx = canvas.getContext('2d');
-    
-    const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
-    gradient.stops.forEach(stop => {
-      grad.addColorStop(stop.position, stop.color);
-    });
-    
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.needsUpdate = true;
-    
-    sphere.material.map = texture;
-    sphere.material.color.set(0xffffff);
-    sphere.material.needsUpdate = true;
-  }
-  
-  async loadPhotoToSphere(sphere, url) {
-    return new Promise((resolve, reject) => {
-      const loader = new THREE.TextureLoader();
-      loader.load(
-        url,
-        (texture) => {
-          texture.minFilter = THREE.LinearFilter;
-          texture.magFilter = THREE.LinearFilter;
-          texture.generateMipmaps = false;
-          
-          sphere.material.map = texture;
-          sphere.material.color.set(0xffffff);
-          sphere.material.needsUpdate = true;
-          
-          resolve(texture);
-        },
-        undefined,
-        (error) => {
-          console.error('Error loading photo:', error);
-          reject(error);
+
+    this.sun = new THREE.Mesh(sunGeo, sunMaterial);
+    this.sun.name = "sun";
+    this.sun.renderOrder = -997; // Behind starfield
+    this.sun.frustumCulled = false;
+
+    // Add outer glow using a slightly larger sphere with additive blending
+    const sunGlowGeo = new THREE.SphereGeometry(12.5, 32, 32);
+    const sunGlowMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        glowColor: { value: new THREE.Color(0xffdd88) },
+        viewVector: { value: new THREE.Vector3() },
+      },
+      vertexShader: `
+        uniform vec3 viewVector;
+        varying float intensity;
+
+        void main() {
+          vec3 vNormal = normalize(normalMatrix * normal);
+          vec3 vNormel = normalize(normalMatrix * viewVector);
+          intensity = pow(0.7 - dot(vNormal, vNormel), 2.0);
+
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
         }
-      );
-    });
-  }
-  
-  async loadPhotoBackground(url) {
-    return new Promise((resolve, reject) => {
-      const loader = new THREE.TextureLoader();
-      loader.load(
-        url,
-        (texture) => {
-          // Simple: just apply the texture
-          texture.minFilter = THREE.LinearFilter;
-          texture.magFilter = THREE.LinearFilter;
-          texture.generateMipmaps = false;
-          
-          // Track the new texture
-          this.activeTextures.add(texture);
-          
-          // Dispose old texture if exists
-          if (this.horizonPlane.material.map) {
-            this.activeTextures.delete(this.horizonPlane.material.map);
-            this.horizonPlane.material.map.dispose();
-          }
-          
-          this.horizonPlane.material.map = texture;
-          this.horizonPlane.material.color.set(0xffffff);
-          this.horizonPlane.material.needsUpdate = true;
-          
-          resolve(texture);
-        },
-        undefined,
-        (error) => {
-          console.error('[BG] Error loading photo:', error);
-          reject(error);
+      `,
+      fragmentShader: `
+        uniform vec3 glowColor;
+        varying float intensity;
+
+        void main() {
+          vec3 glow = glowColor * intensity;
+          gl_FragColor = vec4(glow, 0.8 * intensity);
         }
-      );
+      `,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      fog: false,
     });
+
+    this.sunGlow = new THREE.Mesh(sunGlowGeo, sunGlowMaterial);
+    this.sunGlow.renderOrder = -997;
+    this.sunGlow.frustumCulled = false;
+    this.sun.add(this.sunGlow);
+
+    this.scene.add(this.sun);
+
+    // Initially position sun (will be updated by setSunMoonPosition)
+    this.sun.visible = true;
   }
-  
-  // Smooth transition between backgrounds
-  async transitionToBackground(newBackground, duration = 2000) {
-    if (this.transitioning) {
-      // Cancel previous transition if still running
-      if (this.transitionAnimationId) {
-        cancelAnimationFrame(this.transitionAnimationId);
-        this.transitionAnimationId = null;
-      }
-    }
-    
-    this.transitioning = true;
-    this.transitionProgress = 0;
-    
-    // Set up next plane with new background
-    if (newBackground.type === 'gradient') {
-      this.applyGradientToPlane(this.nextHorizonPlane, newBackground.gradient);
+
+  // Update sun position based on continuous orbit
+  setSunMoonPosition(sunPosition, timeOfDay, moonData) {
+    if (!this.sun) return;
+
+    // Update sun position directly (already calculated in circular orbit)
+    this.sunRelativePosition = new THREE.Vector3(
+      sunPosition[0],
+      sunPosition[1],
+      sunPosition[2]
+    );
+
+    // Show/hide sun based on whether it's above horizon
+    if (moonData) {
+      this.sun.visible = moonData.sunAboveHorizon;
     } else {
-      await this.loadPhotoToPlane(this.nextHorizonPlane, newBackground.url);
+      // Fallback: sun visible during day, hidden at night
+      this.sun.visible = timeOfDay !== "night";
     }
-    
-    // Fade transition
-    this.nextHorizonPlane.visible = true;
-    this.nextHorizonPlane.material.opacity = 0;
-    this.nextHorizonPlane.material.transparent = true;
-    
-    const startTime = Date.now();
-    const animate = () => {
-      const elapsed = Date.now() - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-      
-      this.nextHorizonPlane.material.opacity = progress;
-      this.horizonPlane.material.opacity = 1 - progress;
-      
-      if (progress < 1) {
-        this.transitionAnimationId = requestAnimationFrame(animate);
-      } else {
-        // Swap planes
-        const temp = this.horizonPlane;
-        this.horizonPlane = this.nextHorizonPlane;
-        this.nextHorizonPlane = temp;
-        
-        this.nextHorizonPlane.visible = false;
-        this.horizonPlane.material.opacity = 1;
-        this.horizonPlane.material.transparent = false;
-        
-        this.transitioning = false;
-        this.transitionAnimationId = null;
-      }
-    };
-    
-    animate();
   }
-  
+
+  setSkyColor(color) {
+    if (this.skyDome) {
+      this.skyDome.material.color.setHex(color);
+    }
+  }
+
+  // Show/hide starfield (for night time)
+  setStarfieldVisible(visible) {
+    if (this.starfield) {
+      this.starfield.visible = visible;
+    }
+    if (this.milkyWay) {
+      this.milkyWay.visible = visible;
+    }
+  }
+
+  updateLocation(absolutePosition, location) {
+    // No-op: static blue sky
+  }
+
   update(deltaTime, playerPosition) {
-    // Keep sky dome (which is our background) ALWAYS centered on player
-    // This ensures the player is always at the center of the sphere and can't reach the edges
-    if (this.horizonPlane) {
-      // Sphere must follow player position exactly to keep them centered
-      this.horizonPlane.position.x = playerPosition.x;
-      this.horizonPlane.position.z = playerPosition.z;
-      this.horizonPlane.position.y = playerPosition.y; // Follow Y position too
+    // Keep sky dome centered on player
+    if (this.skyDome) {
+      this.skyDome.position.copy(playerPosition);
     }
-    
-    // Keep transition sphere in sync
-    if (this.transitionSphere) {
-      this.transitionSphere.position.copy(this.horizonPlane.position);
+
+    // Keep starfield centered on player
+    if (this.starfield) {
+      this.starfield.position.copy(playerPosition);
+
+      // Update time for twinkling animation
+      this.time += deltaTime * 0.5; // Slow, gentle twinkling
+      this.starfield.material.uniforms.time.value = this.time;
     }
-    
-    // Periodic cache cleanup (every 100 updates)
-    this.cacheCleanupCounter++;
-    if (this.cacheCleanupCounter > 100) {
-      this.cacheCleanupCounter = 0;
-      this.cleanupCache();
+
+    // Keep Milky Way centered and slowly rotating for subtle motion
+    if (this.milkyWay) {
+      this.milkyWay.position.x = playerPosition.x;
+      this.milkyWay.position.z = playerPosition.z;
+      // Very slow rotation for subtle beauty
+      this.milkyWay.rotation.z += deltaTime * 0.02;
     }
-  }
-  
-  cleanupCache() {
-    // Limit cache size
-    if (this.backgroundCache.size > this.maxCacheSize) {
-      // Remove oldest entries
-      const entriesToRemove = this.backgroundCache.size - this.maxCacheSize;
-      const keys = Array.from(this.backgroundCache.keys());
-      for (let i = 0; i < entriesToRemove; i++) {
-        const key = keys[i];
-        const value = this.backgroundCache.get(key);
-        if (value && value.texture) {
-          value.texture.dispose();
-        }
-        this.backgroundCache.delete(key);
+
+    // Keep sun and moon centered on player (fixed in sky like sky dome)
+    if (this.sun && this.sunRelativePosition) {
+      // Position relative to player, fixed direction in sky
+      this.sun.position.copy(playerPosition).add(this.sunRelativePosition);
+
+      // Sun position updated (debug disabled)
+
+      // Update glow view vector
+      if (this.sunGlow) {
+        this.sunGlow.material.uniforms.viewVector.value.subVectors(
+          this.camera.position,
+          this.sun.position
+        );
       }
     }
   }
-  
+
   dispose() {
-    // Cancel any ongoing transition animation
-    if (this.transitionAnimationId) {
-      cancelAnimationFrame(this.transitionAnimationId);
-      this.transitionAnimationId = null;
-    }
-    
-    // Dispose of horizon plane
-    if (this.horizonPlane) {
-      if (this.horizonPlane.material.map) {
-        this.horizonPlane.material.map.dispose();
-      }
-      this.horizonPlane.geometry.dispose();
-      this.horizonPlane.material.dispose();
-      this.scene.remove(this.horizonPlane);
-    }
-    
-    // Dispose of next horizon plane
-    if (this.nextHorizonPlane) {
-      if (this.nextHorizonPlane.material.map) {
-        this.nextHorizonPlane.material.map.dispose();
-      }
-      this.nextHorizonPlane.geometry.dispose();
-      this.nextHorizonPlane.material.dispose();
-      this.scene.remove(this.nextHorizonPlane);
-    }
-    
-    // Dispose of sky dome (if different from horizonPlane)
-    if (this.skyDome && this.skyDome !== this.horizonPlane) {
-      if (this.skyDome.material.map) {
-        this.skyDome.material.map.dispose();
-      }
+    if (this.skyDome) {
       this.skyDome.geometry.dispose();
       this.skyDome.material.dispose();
       this.scene.remove(this.skyDome);
     }
-    
-    // Clear cache and dispose of any cached textures
-    this.backgroundCache.forEach((value) => {
-      if (value.texture && typeof value.texture.dispose === 'function') {
-        value.texture.dispose();
-      }
-    });
-    this.backgroundCache.clear();
-    
-    // Dispose all active textures
-    this.activeTextures.forEach(texture => {
-      if (texture && typeof texture.dispose === 'function') {
-        texture.dispose();
-      }
-    });
-    this.activeTextures.clear();
-    
-    // Dispose of services
-    if (this.photoService && typeof this.photoService.dispose === 'function') {
-      this.photoService.dispose();
+
+    if (this.starfield) {
+      this.starfield.geometry.dispose();
+      this.starfield.material.dispose();
+      this.scene.remove(this.starfield);
     }
-    if (this.cacheManager && typeof this.cacheManager.dispose === 'function') {
-      this.cacheManager.dispose();
+
+    if (this.milkyWay) {
+      this.milkyWay.geometry.dispose();
+      this.milkyWay.material.map.dispose();
+      this.milkyWay.material.dispose();
+      this.scene.remove(this.milkyWay);
     }
-    
-    // Clear references
+
+    if (this.sun) {
+      this.sun.geometry.dispose();
+      this.sun.material.dispose();
+      if (this.sunGlow) {
+        this.sunGlow.geometry.dispose();
+        this.sunGlow.material.dispose();
+      }
+      this.scene.remove(this.sun);
+    }
+
     this.scene = null;
     this.camera = null;
-    this.photoService = null;
-    this.cacheManager = null;
   }
 }
